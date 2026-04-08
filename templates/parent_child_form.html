@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+
+{% block title %}Focus Astrology | Parent-Child Guidance{% endblock %}
+
+{% block extra_head %}
+<style>
+    .dual-form-shell { display:grid; gap:28px; }
+    .intro-card, .person-card { padding:30px 28px; border-radius:var(--radius); border:1px solid var(--border); background:rgba(30,50,86,.30); }
+    .person-grid, .form-grid { display:grid; gap:18px; }
+    .person-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    .form-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    .field-full { grid-column:1 / -1; }
+    .autocomplete-shell { position:relative; }
+    .autocomplete-status { margin-top:8px; font-size:0.82rem; color:var(--text-soft); }
+    .autocomplete-status.warning { color:#f6d27a; }
+    .suggestion-list { position:absolute; top:calc(100% + 8px); left:0; right:0; z-index:20; margin:0; padding:8px; list-style:none; border-radius:16px; border:1px solid rgba(201,168,76,0.18); background:rgba(12,12,16,0.96); box-shadow:0 18px 48px rgba(0,0,0,0.35); display:none; }
+    .suggestion-list.active { display:block; }
+    .suggestion-item { width:100%; padding:12px 14px; border:0; border-radius:12px; background:transparent; color:var(--text); text-align:left; cursor:pointer; }
+    .suggestion-item:hover, .suggestion-item.active, .suggestion-item:focus { background:rgba(201,168,76,0.1); outline:none; }
+    .suggestion-main { display:block; font-weight:600; }
+    .suggestion-sub { display:block; margin-top:4px; font-size:0.82rem; color:var(--text-soft); }
+    label { display:block; margin-bottom:10px; font-family:"Cinzel", serif; font-size:0.72rem; letter-spacing:.18em; text-transform:uppercase; color:rgba(223,192,112,.74); }
+    input { width:100%; min-height:54px; padding:0 16px; border-radius:0; border:1px solid rgba(223,192,112,.18); background:rgba(15,30,52,.34); color:var(--text); font:inherit; }
+    input:focus { outline:none; border-color:rgba(240,192,96,0.62); box-shadow:0 0 0 3px rgba(201,168,76,0.16); background-color:rgba(255,255,255,0.05); }
+    @media (max-width: 960px) { .person-grid, .form-grid { grid-template-columns:1fr; } .field-full { grid-column:auto; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="dual-form-shell">
+            <div class="intro-card">
+                <div class="eyebrow">Parent-Child Report</div>
+                <h1 class="hero-title" style="font-size:2.6rem;">Parent-Child Guidance & Compatibility</h1>
+                <p class="hero-text">A family reading focused on the child’s nature, emotional dynamics, school tendencies, and the parenting approach that supports growth best.</p>
+            </div>
+
+            <form action="/calculate" method="post" class="person-grid">
+                <input type="hidden" name="report_type" value="parent_child">
+                <section class="person-card">
+                    <div class="eyebrow">Parent</div>
+                    <h2 class="section-title">Parent birth details</h2>
+                    <div class="form-grid" style="margin-top:18px;">
+                        <div class="field-full">
+                            <label for="parent_full_name">Parent name</label>
+                            <input id="parent_full_name" name="parent_full_name" type="text" placeholder="Parent name" required>
+                        </div>
+                        <div>
+                            <label for="parent_birth_date">Birth date</label>
+                            <input id="parent_birth_date" name="parent_birth_date" type="date" required>
+                        </div>
+                        <div>
+                            <label for="parent_birth_time">Birth time</label>
+                            <input id="parent_birth_time" name="parent_birth_time" type="time" required>
+                        </div>
+                        <div class="field-full">
+                            <label for="parent_birth_city">Birth place</label>
+                            <div class="autocomplete-shell">
+                                <input id="parent_birth_city" name="parent_birth_city" type="text" autocomplete="off" aria-expanded="false" aria-controls="parent-birthplace-suggestions" aria-autocomplete="list" placeholder="Start typing: Besiktas, Istanbul, Turkey" required>
+                                <ul id="parent-birthplace-suggestions" class="suggestion-list" role="listbox" aria-label="Parent birth place suggestions"></ul>
+                            </div>
+                            <input id="parent_country" name="parent_country" type="hidden">
+                            <input id="parent_resolved_birth_place" name="parent_resolved_birth_place" type="hidden">
+                            <input id="parent_resolved_latitude" name="parent_resolved_latitude" type="hidden">
+                            <input id="parent_resolved_longitude" name="parent_resolved_longitude" type="hidden">
+                            <input id="parent_resolved_timezone" name="parent_resolved_timezone" type="hidden">
+                            <input id="parent_resolved_geocode_provider" name="parent_resolved_geocode_provider" type="hidden">
+                            <input id="parent_resolved_geocode_confidence" name="parent_resolved_geocode_confidence" type="hidden">
+                            <div id="parent-birthplace-status" class="autocomplete-status">Select the closest match for the most reliable house and timing accuracy.</div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="person-card">
+                    <div class="eyebrow">Child</div>
+                    <h2 class="section-title">Child birth details</h2>
+                    <div class="form-grid" style="margin-top:18px;">
+                        <div class="field-full">
+                            <label for="child_full_name">Child name</label>
+                            <input id="child_full_name" name="child_full_name" type="text" placeholder="Child name" required>
+                        </div>
+                        <div>
+                            <label for="child_birth_date">Birth date</label>
+                            <input id="child_birth_date" name="child_birth_date" type="date" required>
+                        </div>
+                        <div>
+                            <label for="child_birth_time">Birth time</label>
+                            <input id="child_birth_time" name="child_birth_time" type="time" required>
+                        </div>
+                        <div class="field-full">
+                            <label for="child_birth_city">Birth place</label>
+                            <div class="autocomplete-shell">
+                                <input id="child_birth_city" name="child_birth_city" type="text" autocomplete="off" aria-expanded="false" aria-controls="child-birthplace-suggestions" aria-autocomplete="list" placeholder="Start typing: Besiktas, Istanbul, Turkey" required>
+                                <ul id="child-birthplace-suggestions" class="suggestion-list" role="listbox" aria-label="Child birth place suggestions"></ul>
+                            </div>
+                            <input id="child_country" name="child_country" type="hidden">
+                            <input id="child_resolved_birth_place" name="child_resolved_birth_place" type="hidden">
+                            <input id="child_resolved_latitude" name="child_resolved_latitude" type="hidden">
+                            <input id="child_resolved_longitude" name="child_resolved_longitude" type="hidden">
+                            <input id="child_resolved_timezone" name="child_resolved_timezone" type="hidden">
+                            <input id="child_resolved_geocode_provider" name="child_resolved_geocode_provider" type="hidden">
+                            <input id="child_resolved_geocode_confidence" name="child_resolved_geocode_confidence" type="hidden">
+                            <div id="child-birthplace-status" class="autocomplete-status">Select the closest match for the most reliable house and timing accuracy.</div>
+                        </div>
+                    </div>
+                </section>
+
+                <div class="field-full" style="display:flex; gap:12px; flex-wrap:wrap;">
+                    <button class="btn btn-primary" type="submit">Generate Parent-Child Report</button>
+                    <a class="btn btn-secondary" href="/reports">Back to reports</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function attachBirthplaceAutocomplete(prefix) {
+        const input = document.getElementById(`${prefix}_birth_city`);
+        const list = document.getElementById(`${prefix}-birthplace-suggestions`);
+        const status = document.getElementById(`${prefix}-birthplace-status`);
+        const resolvedFields = {
+            resolved_birth_place: document.getElementById(`${prefix}_resolved_birth_place`),
+            resolved_latitude: document.getElementById(`${prefix}_resolved_latitude`),
+            resolved_longitude: document.getElementById(`${prefix}_resolved_longitude`),
+            resolved_timezone: document.getElementById(`${prefix}_resolved_timezone`),
+            resolved_geocode_provider: document.getElementById(`${prefix}_resolved_geocode_provider`),
+            resolved_geocode_confidence: document.getElementById(`${prefix}_resolved_geocode_confidence`),
+            country: document.getElementById(`${prefix}_country`),
+        };
+        if (!input || !list || !status) return;
+        let activeRequest = 0;
+        let debounceTimer = null;
+        let suggestionSelected = false;
+        let highlightedIndex = -1;
+        let suggestionItems = [];
+
+        function clearResolvedFields() {
+            Object.values(resolvedFields).forEach((field) => { if (field) field.value = ""; });
+            suggestionSelected = false;
+        }
+        function setStatus(message, tone = "") {
+            status.textContent = message;
+            status.classList.toggle("warning", tone === "warning");
+        }
+        function closeSuggestions() {
+            list.innerHTML = "";
+            list.classList.remove("active");
+            input.setAttribute("aria-expanded", "false");
+            highlightedIndex = -1;
+            suggestionItems = [];
+        }
+        function setHighlightedIndex(nextIndex) {
+            highlightedIndex = nextIndex;
+            suggestionItems.forEach((button, index) => {
+                const active = index === highlightedIndex;
+                button.classList.toggle("active", active);
+                button.setAttribute("aria-selected", active ? "true" : "false");
+            });
+        }
+        function applySuggestion(item) {
+            input.value = item.display_name;
+            resolvedFields.resolved_birth_place.value = item.normalized_place || "";
+            resolvedFields.resolved_latitude.value = item.latitude ?? "";
+            resolvedFields.resolved_longitude.value = item.longitude ?? "";
+            resolvedFields.resolved_timezone.value = item.timezone || "";
+            resolvedFields.resolved_geocode_provider.value = item.provider || "";
+            resolvedFields.resolved_geocode_confidence.value = item.confidence ?? "";
+            const parts = String(item.display_name || "").split(",").map((part) => part.trim()).filter(Boolean);
+            resolvedFields.country.value = parts[parts.length - 1] || "";
+            suggestionSelected = true;
+            closeSuggestions();
+            setStatus(item.normalized_place || item.display_name);
+        }
+        function renderSuggestions(items) {
+            list.innerHTML = "";
+            if (!items.length) { closeSuggestions(); return; }
+            suggestionItems = [];
+            items.forEach((item) => {
+                const li = document.createElement("li");
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "suggestion-item";
+                button.innerHTML = `<span class="suggestion-main">${item.display_name}</span><span class="suggestion-sub">${item.normalized_place}</span>`;
+                button.addEventListener("pointerdown", (event) => { event.preventDefault(); applySuggestion(item); });
+                button.addEventListener("mouseenter", () => { setHighlightedIndex(suggestionItems.indexOf(button)); });
+                li.appendChild(button);
+                list.appendChild(li);
+                suggestionItems.push(button);
+            });
+            list.classList.add("active");
+            input.setAttribute("aria-expanded", "true");
+        }
+        async function fetchSuggestions(query) {
+            activeRequest += 1;
+            const requestId = activeRequest;
+            try {
+                const response = await fetch(`/api/v1/birthplace-suggestions?q=${encodeURIComponent(query)}`, { headers: { "Accept": "application/json" } });
+                const results = response.ok ? await response.json() : [];
+                if (requestId !== activeRequest) return;
+                renderSuggestions(Array.isArray(results) ? results : []);
+                if (!results.length) setStatus("Please refine the place name and select the closest match.");
+            } catch (_error) {
+                if (requestId !== activeRequest) return;
+                closeSuggestions();
+                setStatus("Suggestions are temporarily unavailable.");
+            }
+        }
+        input.addEventListener("input", () => {
+            clearResolvedFields();
+            closeSuggestions();
+            const query = input.value.trim();
+            if (debounceTimer) clearTimeout(debounceTimer);
+            if (query.length < 2) { setStatus("Select the closest match for the most reliable house and timing accuracy."); return; }
+            setStatus("Searching birth place suggestions...");
+            debounceTimer = setTimeout(() => fetchSuggestions(query), 220);
+        });
+        document.addEventListener("click", (event) => {
+            if (!list.contains(event.target) && event.target !== input) closeSuggestions();
+        });
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        attachBirthplaceAutocomplete("parent");
+        attachBirthplaceAutocomplete("child");
+    });
+</script>
+{% endblock %}

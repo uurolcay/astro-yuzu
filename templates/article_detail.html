@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}{{ article.title }} | Focus Astrology{% endblock %}
+
+{% block extra_head %}
+<meta name="description" content="{{ article.excerpt }}">
+<style>
+    .article-detail-shell { display:grid; gap:24px; }
+    .article-body-card, .related-card { background:rgba(30,50,86,.30); border:1px solid var(--border); }
+    .article-body { font-size:1.12rem; line-height:1.95; color:var(--text-soft); }
+    .article-body p { margin:0 0 18px; }
+    .related-card { padding:24px; }
+    .related-card .card-title { font-family:"Cormorant Garamond", serif; font-size:1.8rem; font-style:italic; font-weight:300; line-height:1.3; }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container" style="max-width:900px;">
+        <div class="glass-card card-pad article-detail-shell">
+            <div class="chip-row">
+                <a class="chip" href="/articles/category/{{ article.category.slug }}">{{ t("article_categories." ~ article.category.slug) }}</a>
+                {% if article.published_at %}<span class="chip">{{ article.published_at }}</span>{% endif %}
+                {% if article.reading_time %}<span class="chip">{{ article.reading_time }} {{ t("articles.read_minutes") }}</span>{% endif %}
+            </div>
+            <h1 class="hero-title" style="margin-top:20px;">{{ article.title }}</h1>
+            <p class="hero-text">{{ article.excerpt }}</p>
+            <div class="muted" style="margin-top:12px;">{{ t("articles.by_author", author=article.author_name) }}</div>
+        </div>
+    </div>
+</section>
+
+<section class="page-section" style="padding-top:0;">
+    <div class="container" style="max-width:900px;">
+        <div class="glass-card card-pad article-body-card">
+            <div class="article-body">
+            {% for paragraph in article.body_paragraphs %}
+            <p>{{ paragraph }}</p>
+            {% endfor %}
+            </div>
+        </div>
+    </div>
+</section>
+
+{% if related_articles %}
+<section class="page-section" style="padding-top:0;">
+    <div class="container" style="max-width:900px;">
+        <h2 class="section-title" style="margin-bottom:18px;">{{ t("articles.related_articles") }}</h2>
+        <div class="grid-3">
+            {% for item in related_articles %}
+            <article class="related-card">
+                <div class="metric-label">{{ t("article_categories." ~ item.category.slug) }}</div>
+                <h3 class="card-title" style="margin-top:0;"><a href="/articles/{{ item.slug }}">{{ item.title }}</a></h3>
+                <p class="muted">{{ item.excerpt }}</p>
+            </article>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}
+{% endblock %}

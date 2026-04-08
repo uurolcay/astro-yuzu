@@ -1,0 +1,8 @@
+Payment received successfully
+
+Hello {{ user_name }},
+
+We received your payment for the {{ plan_label }} plan.
+Invoice: {{ invoice_id }}
+
+Account: {{ account_url }}

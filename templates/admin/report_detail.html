@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Jyotish | Admin Report Detail{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <h1 class="hero-title" style="font-size:2.2rem;">{{ report.title or "Vedic Report" }}</h1>
+            <div class="grid-3" style="margin-top:20px;">
+                <div class="metric-card"><div class="metric-label">User</div><div class="metric-value">{{ report.user_email }}</div></div>
+                <div class="metric-card"><div class="metric-label">Type</div><div class="metric-value">{{ report.report_type|title }}</div></div>
+                <div class="metric-card"><div class="metric-label">Created</div><div class="metric-value">{{ report.created_at }}</div></div>
+            </div>
+            <div class="grid-2" style="margin-top:24px;">
+                <div class="metric-card">
+                    <div class="metric-label">Payload Summary</div>
+                    <pre style="white-space:pre-wrap;">{{ payload_summary.summary if payload_summary.summary is defined else payload_summary.raw }}</pre>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Interpretation Summary</div>
+                    <pre style="white-space:pre-wrap;">{{ interpretation_summary.summary if interpretation_summary.summary is defined else interpretation_summary.raw }}</pre>
+                </div>
+            </div>
+            <div class="metric-card" style="margin-top:24px;">
+                <div class="metric-label">Raw Payload</div>
+                <pre style="white-space:pre-wrap; max-height:420px; overflow:auto;">{{ payload_summary.raw }}</pre>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Jyotish | Admin{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <h1 class="hero-title" style="font-size:2.5rem;">Admin Overview</h1>
+            <div class="chip-row" style="margin-top:16px;">
+                <a class="chip" href="/admin/summary">Summary</a>
+                <a class="chip" href="/admin/users">Users</a>
+                <a class="chip" href="/admin/reports">Reports</a>
+                <a class="chip" href="/admin/billing">Billing</a>
+                <a class="chip" href="/admin/emails">Emails</a>
+                <a class="chip" href="/admin/analytics">Analytics</a>
+                <a class="chip" href="/admin/revenue">Revenue</a>
+                <a class="chip" href="/admin/insights">Insights</a>
+                <a class="chip" href="/admin/segments">Segments</a>
+                <a class="chip" href="/admin/birthplace-analytics">Birthplace Analytics</a>
+            </div>
+            <div class="grid-4" style="margin-top:24px;">
+                <div class="metric-card"><div class="metric-label">Total Users</div><div class="metric-value">{{ summary.total_users }}</div></div>
+                <div class="metric-card"><div class="metric-label">Total Reports</div><div class="metric-value">{{ summary.total_reports }}</div></div>
+                <div class="metric-card"><div class="metric-label">Users Last 7d</div><div class="metric-value">{{ summary.users_last_7_days }}</div></div>
+                <div class="metric-card"><div class="metric-label">Reports Last 7d</div><div class="metric-value">{{ summary.reports_last_7_days }}</div></div>
+            </div>
+            <div class="grid-2" style="margin-top:24px;">
+                <div class="metric-card"><div class="metric-label">Reports Last 30d</div><div class="metric-value">{{ summary.reports_last_30_days }}</div></div>
+                <div class="metric-card"><div class="metric-label">Plan Distribution</div><div class="metric-value">{{ summary.plan_distribution }}</div></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="page-section">
+    <div class="container">
+        <div class="grid-2">
+            <div class="glass-card card-pad">
+                <h2 class="section-title">Recent Users</h2>
+                {% for user in recent_users %}
+                <div class="metric-card" style="margin-top:14px;">
+                    <div class="metric-value"><a href="/admin/users/{{ user.id }}">{{ user.email }}</a></div>
+                    <div class="muted">{{ user.plan_code|title }} • {{ user.created_at }}</div>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="glass-card card-pad">
+                <h2 class="section-title">Recent Reports</h2>
+                {% for report in recent_reports %}
+                <div class="metric-card" style="margin-top:14px;">
+                    <div class="metric-value"><a href="/admin/reports/{{ report.id }}">{{ report.title or "Vedic Report" }}</a></div>
+                    <div class="muted">{{ report.report_type|title }} • {{ report.created_at }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="page-section">
+    <div class="container">
+        <div class="grid-2">
+            <div class="glass-card card-pad">
+                <h2 class="section-title">Recent Email Failures</h2>
+                {% if recent_email_failures %}
+                {% for log in recent_email_failures %}
+                <div class="metric-card" style="margin-top:14px;">
+                    <div class="metric-value">{{ log.email_type }}</div>
+                    <div class="muted">{{ log.recipient_email }} • {{ log.created_at }}</div>
+                </div>
+                {% endfor %}
+                {% else %}
+                <p class="muted">No recent failures.</p>
+                {% endif %}
+            </div>
+            <div class="glass-card card-pad">
+                <h2 class="section-title">Billing Notifications</h2>
+                {% if recent_billing_notifications %}
+                {% for log in recent_billing_notifications %}
+                <div class="metric-card" style="margin-top:14px;">
+                    <div class="metric-value">{{ log.related_event_type or "-" }}</div>
+                    <div class="muted">{{ log.recipient_email }} • {{ log.status }} • {{ log.created_at }}</div>
+                </div>
+                {% endfor %}
+                {% else %}
+                <p class="muted">No recent billing notifications.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

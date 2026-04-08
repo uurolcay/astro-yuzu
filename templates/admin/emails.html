@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Jyotish | Admin Emails{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <h1 class="hero-title" style="font-size:2.3rem;">Email Logs</h1>
+            <form method="get" style="display:grid; grid-template-columns:1fr 1fr 2fr auto; gap:12px; margin-top:20px;">
+                <input type="text" name="status" placeholder="Status" value="{{ filters.status }}">
+                <input type="text" name="email_type" placeholder="Email type" value="{{ filters.email_type }}">
+                <input type="text" name="recipient" placeholder="Recipient" value="{{ filters.recipient }}">
+                <button class="btn btn-secondary" type="submit">Filter</button>
+            </form>
+            <div style="display:grid; gap:14px; margin-top:24px;">
+                {% for log in email_logs %}
+                <div class="metric-card">
+                    <div class="row-between">
+                        <div>
+                            <div class="metric-value">{{ log.email_type }} • {{ log.status }}</div>
+                            <div class="muted">{{ log.recipient_email }} • {{ log.related_event_type or "-" }} • {{ log.related_event_key or "-" }}</div>
+                            {% if log.error_message %}<div class="muted">{{ log.error_message }}</div>{% endif %}
+                        </div>
+                        <div class="muted">{{ log.created_at }}</div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

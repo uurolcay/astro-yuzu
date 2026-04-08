@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Jyotish | Admin Billing{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <h1 class="hero-title" style="font-size:2.3rem;">Billing</h1>
+            <div class="metric-card" style="margin-top:20px;">
+                <div class="metric-label">Plan Distribution</div>
+                <div class="metric-value">{{ plan_distribution }}</div>
+            </div>
+            <div class="grid-2" style="margin-top:24px;">
+                <div class="glass-card soft card-pad">
+                    <h2 class="section-title">Paid Users</h2>
+                    {% for user in paid_users %}
+                    <div class="metric-card" style="margin-top:14px;">
+                        <div class="metric-value"><a href="/admin/users/{{ user.id }}">{{ user.email }}</a></div>
+                        <div class="muted">{{ user.plan_code|title }} • {{ user.subscription_status }} • {{ user.plan_started_at or '-' }}</div>
+                    </div>
+                    {% else %}
+                    <p class="muted">No paid users found.</p>
+                    {% endfor %}
+                </div>
+                <div class="glass-card soft card-pad">
+                    <h2 class="section-title">Billing Email Logs</h2>
+                    {% for log in billing_logs %}
+                    <div class="metric-card" style="margin-top:14px;">
+                        <div class="metric-value">{{ log.related_event_type or log.email_type }}</div>
+                        <div class="muted">{{ log.recipient_email }} • {{ log.status }} • {{ log.created_at }}</div>
+                    </div>
+                    {% else %}
+                    <p class="muted">No billing logs found.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

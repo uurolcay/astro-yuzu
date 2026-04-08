@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Focus Astrology | Admin Reports{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <h1 class="hero-title" style="font-size:2.3rem;">Reports</h1>
+            <form method="get" style="display:grid; grid-template-columns:1fr 2fr auto; gap:12px; margin-top:20px;">
+                <input type="text" name="report_type" placeholder="Report type" value="{{ filters.report_type }}">
+                <input type="text" name="user_email" placeholder="User email" value="{{ filters.user_email }}">
+                <button class="btn btn-secondary" type="submit">Filter</button>
+            </form>
+            <div style="display:grid; gap:14px; margin-top:24px;">
+                {% for report in reports %}
+                <div class="metric-card">
+                    <div class="row-between">
+                        <div>
+                            <div class="metric-value"><a href="/admin/reports/{{ report.id }}">#{{ report.id }} | {{ report.title or "Vedic Report" }}</a></div>
+                            <div class="muted">{{ report.user_email }} | {{ report.profile_name }} | {{ report.report_type|title }} | {{ report.full_name or "-" }}</div>
+                            <div class="chip-row" style="margin-top:10px;">
+                                <span class="chip">{{ report.access_label }}</span>
+                                {% if report.can_view_full_report %}
+                                <span class="chip">Full Access</span>
+                                {% endif %}
+                                {% if report.can_download_pdf %}
+                                <span class="chip">PDF Enabled</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="muted">{{ report.created_at }}</div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

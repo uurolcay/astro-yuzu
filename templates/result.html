@@ -1,0 +1,2033 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t("result.page_title") }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    .row-between { display:flex; justify-content:space-between; gap:16px; align-items:center; flex-wrap:wrap; }
+    .decision-banner { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:16px; margin-top:20px; }
+    .hero-shell { display:grid; gap:20px; }
+    .hero-label { display:inline-flex; align-items:center; gap:8px; width:max-content; padding:7px 12px; border-radius:999px; background:rgba(201,168,76,0.10); border:1px solid rgba(201,168,76,0.22); color:var(--gold-light); font-size:0.74rem; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; }
+    .hero-summary { max-width:860px; color:var(--text-soft); font-size:1.02rem; line-height:1.9; margin:0; }
+    .hero-grid { display:grid; grid-template-columns:1.15fr 0.85fr; gap:18px; align-items:start; }
+    .hero-focus-card { padding:20px; border-radius:24px; background:linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)); border:1px solid rgba(201,168,76,0.16); box-shadow:0 14px 34px rgba(0,0,0,0.18); }
+    .hero-microcopy { margin:0; color:var(--text-soft); line-height:1.75; }
+    .hero-kpis { display:grid; gap:12px; }
+    .timing-date { display:inline-block; margin-bottom:10px; color:var(--gold-light); font-size:0.8rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; }
+    .interpret-layout { display:grid; grid-template-columns:1.35fr 0.65fr; gap:20px; align-items:start; }
+    .meta-stack { display:grid; gap:14px; }
+    .ai-output { min-height:280px; }
+    .decision-list { margin:14px 0 0; padding-left:18px; }
+    .decision-list li { margin-bottom:10px; line-height:1.7; }
+    .tab-buttons { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px; }
+    .tab-button { min-height:42px; padding:0 14px; border-radius:999px; border:1px solid rgba(201,168,76,0.28); background:transparent; color:var(--text-soft); font-weight:700; cursor:pointer; }
+    .tab-button.active { color:#1a1407; background:linear-gradient(135deg, var(--gold), var(--gold-light)); border-color:transparent; }
+    .tab-panel { display:none; }
+    .tab-panel.active { display:block; }
+    .empty { color:var(--text-soft); font-style:italic; }
+    .hidden-payload { display:none; }
+    .report-root { display:grid; gap:22px; }
+    .report-section { padding:24px 0 0; border-top:1px solid rgba(201,168,76,0.12); }
+    .report-section:first-child { border-top:none; padding-top:0; }
+    .report-kicker { display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px; font-size:0.72rem; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; margin-bottom:12px; }
+    .report-title { margin:0 0 14px; font-family:"Cinzel", serif; font-size:1.35rem; color:var(--gold-light); }
+    .report-body { display:grid; gap:14px; line-height:1.9; }
+    .report-body p { margin:0; color:var(--text); }
+    .report-body ul { margin:0; padding-left:20px; }
+    .report-body li { margin-bottom:9px; color:var(--text); }
+    .report-pill-row { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:4px; }
+    .report-pill { display:inline-flex; align-items:center; padding:7px 12px; border-radius:999px; border:1px solid rgba(201,168,76,0.18); background:rgba(255,255,255,0.03); color:var(--text-soft); font-size:0.8rem; font-weight:700; }
+    .report-toggle { margin-top:16px; border:none; background:transparent; color:var(--gold-light); font:inherit; font-weight:700; cursor:pointer; padding:0; }
+    .report-fade { position:relative; overflow:hidden; }
+    .report-fade::after { content:""; position:absolute; left:0; right:0; bottom:0; height:46px; background:linear-gradient(180deg, rgba(10,14,26,0), rgba(10,14,26,0.96)); pointer-events:none; }
+    .loading-shell { display:grid; gap:14px; }
+    .loading-bar { height:18px; border-radius:999px; background:linear-gradient(90deg, rgba(255,255,255,0.04), rgba(201,168,76,0.16), rgba(255,255,255,0.04)); background-size:200% 100%; animation:loadingShift 1.6s infinite linear; }
+    .loading-bar:nth-child(2) { width:86%; }
+    .loading-bar:nth-child(3) { width:92%; }
+    .loading-bar:nth-child(4) { width:74%; }
+    @keyframes loadingShift { from { background-position:200% 0; } to { background-position:-200% 0; } }
+    .tone-risk .report-kicker, .tone-risk .report-pill { background:rgba(217,123,123,0.08); border-color:rgba(217,123,123,0.22); color:#efb1b1; }
+    .tone-opportunity .report-kicker, .tone-opportunity .report-pill { background:rgba(141,200,145,0.08); border-color:rgba(141,200,145,0.22); color:#b9e0bc; }
+    .tone-timing .report-kicker, .tone-timing .report-pill { background:rgba(201,168,76,0.10); border-color:rgba(201,168,76,0.24); color:var(--gold-light); }
+    .tone-guidance .report-kicker, .tone-guidance .report-pill { background:rgba(201,168,76,0.12); border-color:rgba(201,168,76,0.26); color:#f6d27a; }
+    .tone-neutral .report-kicker, .tone-neutral .report-pill { background:rgba(255,255,255,0.04); border-color:rgba(201,168,76,0.15); color:var(--text-soft); }
+    .anchor-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:18px; margin-top:20px; }
+    .anchor-card { display:grid; gap:12px; }
+    .anchor-rank { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:999px; background:rgba(201,168,76,0.12); border:1px solid rgba(201,168,76,0.28); color:var(--gold-light); font-size:0.8rem; font-weight:700; }
+    .anchor-summary { color:var(--text-soft); line-height:1.75; margin:0; }
+    .anchor-feedback { margin-top:10px; padding-top:12px; border-top:1px solid rgba(201,168,76,0.12); display:grid; gap:10px; }
+    .feedback-labels { display:flex; gap:8px; flex-wrap:wrap; }
+    .feedback-choice { min-height:36px; padding:0 12px; border-radius:999px; border:1px solid rgba(201,168,76,0.22); background:transparent; color:var(--text-soft); font-weight:700; cursor:pointer; }
+    .feedback-choice.active { background:linear-gradient(135deg, rgba(201,168,76,0.18), rgba(246,210,122,0.16)); color:var(--gold-light); border-color:rgba(246,210,122,0.42); }
+    .feedback-inline { display:grid; grid-template-columns:120px minmax(0, 1fr) auto; gap:10px; align-items:center; }
+    .feedback-inline select, .feedback-inline textarea { width:100%; border-radius:14px; border:1px solid rgba(201,168,76,0.18); background:rgba(255,255,255,0.03); color:var(--text); padding:10px 12px; font:inherit; }
+    .feedback-inline textarea { min-height:78px; resize:vertical; }
+    .feedback-status { min-height:20px; color:var(--text-soft); font-size:0.92rem; }
+    .feedback-status.success { color:#b9e0bc; }
+    .feedback-status.error { color:#efb1b1; }
+    .feedback-note { color:var(--text-soft); margin:0; }
+    .recommendation-stack { display:grid; gap:14px; margin-top:20px; }
+    .window-list { display:grid; gap:10px; margin-top:14px; }
+    .recommendation-feedback { margin-top:14px; padding-top:12px; border-top:1px solid rgba(201,168,76,0.12); display:grid; gap:10px; }
+    .feedback-toggles { display:flex; gap:14px; flex-wrap:wrap; color:var(--text-soft); font-size:0.92rem; }
+    .feedback-toggles label { display:inline-flex; gap:8px; align-items:center; cursor:pointer; }
+    .section-lead { margin:6px 0 0; color:var(--text-soft); line-height:1.8; max-width:760px; }
+    .advisory-card { display:grid; gap:12px; padding:18px; border-radius:22px; background:linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02)); border:1px solid rgba(201,168,76,0.14); box-shadow:0 12px 28px rgba(0,0,0,0.12); }
+    .advisory-header { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; flex-wrap:wrap; }
+    .advisory-copy { margin:0; color:var(--text-soft); line-height:1.8; }
+    .advisory-meta { display:flex; flex-wrap:wrap; gap:8px; }
+    .time-chip { display:inline-flex; align-items:center; padding:8px 12px; border-radius:999px; background:rgba(246,210,122,0.10); border:1px solid rgba(246,210,122,0.22); color:var(--gold-light); font-size:0.8rem; font-weight:700; }
+    .priority-dot { display:inline-flex; align-items:center; gap:6px; color:var(--text-soft); font-size:0.82rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; }
+    .priority-dot::before { content:""; width:8px; height:8px; border-radius:999px; background:var(--gold-light); box-shadow:0 0 0 3px rgba(246,210,122,0.12); }
+    .anchor-story { display:grid; gap:10px; }
+    .anchor-why { margin:0; padding:12px 14px; border-radius:16px; background:rgba(255,255,255,0.03); color:var(--text); line-height:1.75; }
+    .opportunity-risk-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:18px; }
+    .window-card { display:grid; gap:10px; min-height:100%; }
+    .window-item { padding:12px 14px; border-radius:16px; background:rgba(255,255,255,0.025); border:1px solid rgba(201,168,76,0.10); color:var(--text-soft); line-height:1.7; }
+    .window-item strong { color:var(--text); }
+    .premium-value-card { display:grid; gap:18px; padding:22px; border-radius:24px; background:linear-gradient(135deg, rgba(201,168,76,0.16), rgba(255,255,255,0.04)); border:1px solid rgba(201,168,76,0.22); box-shadow:0 18px 40px rgba(0,0,0,0.16); }
+    .premium-value-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:12px; }
+    .premium-bullet { padding:14px 16px; border-radius:18px; background:rgba(10,14,26,0.34); border:1px solid rgba(255,255,255,0.06); color:var(--text-soft); line-height:1.7; }
+    .premium-bullet strong { display:block; margin-bottom:4px; color:var(--text); }
+    .premium-actions { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+    .premium-note { margin:0; color:var(--text-soft); line-height:1.8; }
+    .premium-status { display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:999px; border:1px solid rgba(201,168,76,0.24); color:var(--gold-light); background:rgba(201,168,76,0.10); font-size:0.8rem; font-weight:700; letter-spacing:0.03em; text-transform:uppercase; }
+    .hero-actions { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-top:18px; }
+    .hero-trust-note { margin:0; color:var(--text-soft); line-height:1.8; max-width:680px; }
+    .decision-reassurance { margin-top:16px; padding-top:14px; border-top:1px solid rgba(201,168,76,0.10); display:grid; gap:6px; }
+    .decision-reassurance-title { margin:0; font-size:0.94rem; font-weight:700; color:var(--text); }
+    .decision-reassurance-copy { margin:0; color:var(--text-soft); line-height:1.7; font-size:0.95rem; }
+    .hero-value-signal { display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:16px; background:rgba(255,255,255,0.03); border:1px solid rgba(201,168,76,0.16); color:var(--text); font-size:0.92rem; line-height:1.6; }
+    .hero-value-signal strong { color:var(--gold-light); }
+    .conversion-band { display:grid; gap:14px; padding:18px 20px; border-radius:22px; background:linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)); border:1px solid rgba(201,168,76,0.16); }
+    .conversion-band.compact { margin-top:22px; }
+    .conversion-band h3 { margin:0; font-family:"Cinzel", serif; font-size:1.05rem; color:var(--gold-light); }
+    .conversion-band p { margin:0; color:var(--text-soft); line-height:1.8; }
+    .conversion-actions { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+    .email-capture-form { display:grid; gap:10px; margin-top:14px; }
+    .email-capture-row { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:10px; align-items:center; }
+    .email-capture-input { width:100%; border-radius:999px; border:1px solid rgba(201,168,76,0.18); background:rgba(255,255,255,0.03); color:var(--text); padding:14px 16px; font:inherit; }
+    .email-capture-input::placeholder { color:rgba(245,242,232,0.5); }
+    .email-capture-status { min-height:20px; color:var(--text-soft); font-size:0.92rem; }
+    .email-capture-status.success { color:#b9e0bc; }
+    .email-capture-status.error { color:#efb1b1; }
+    .beta-feedback-block { display:grid; gap:12px; padding:18px 20px; border-top:1px solid rgba(201,168,76,0.12); }
+    .beta-feedback-title { margin:0; font-size:1rem; color:var(--text); font-weight:700; }
+    .beta-feedback-intro { margin:0; color:var(--text-soft); line-height:1.7; font-size:0.95rem; }
+    .beta-feedback-form { display:grid; gap:12px; }
+    .beta-feedback-actions { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+    .beta-feedback-comment { width:100%; min-height:88px; border-radius:16px; border:1px solid rgba(201,168,76,0.18); background:rgba(255,255,255,0.03); color:var(--text); padding:12px 14px; font:inherit; resize:vertical; }
+    .beta-feedback-choice { min-height:38px; }
+    .beta-feedback-check { display:inline-flex; gap:10px; align-items:center; color:var(--text-soft); font-size:0.94rem; cursor:pointer; }
+    .related-insights-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:18px; margin-top:22px; }
+    .related-insight-card { display:grid; gap:12px; padding:18px; border-radius:22px; background:linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02)); border:1px solid rgba(201,168,76,0.14); box-shadow:0 12px 28px rgba(0,0,0,0.12); }
+    .related-insight-card h3 { margin:0; font-family:"Cinzel", serif; font-size:1.08rem; line-height:1.4; }
+    .locked-shell { position:relative; overflow:hidden; }
+    .locked-shell::after { content:""; position:absolute; inset:auto 0 0 0; height:72px; background:linear-gradient(180deg, rgba(10,14,26,0), rgba(10,14,26,0.96)); pointer-events:none; }
+    .locked-teaser-card { display:grid; gap:10px; padding:18px; border-radius:20px; background:linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015)); border:1px dashed rgba(201,168,76,0.24); }
+    .locked-copy { color:var(--text-soft); margin:0; line-height:1.8; }
+    .blur-line { height:14px; border-radius:999px; background:linear-gradient(90deg, rgba(255,255,255,0.07), rgba(201,168,76,0.18), rgba(255,255,255,0.07)); opacity:0.92; }
+    .blur-line.short { width:72%; }
+    .unlock-success { padding:16px 18px; border-radius:18px; border:1px solid rgba(141,200,145,0.28); background:rgba(141,200,145,0.08); color:#cce7cf; }
+    .locked-ai-card { min-height:280px; display:grid; gap:14px; align-content:start; }
+    @media (max-width: 960px) {
+        .interpret-layout, .decision-banner, .anchor-grid, .hero-grid, .opportunity-risk-grid, .premium-value-grid { grid-template-columns:1fr; }
+        .feedback-inline { grid-template-columns:1fr; }
+        .email-capture-row { grid-template-columns:1fr; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set sign_names = ["Koc", "Boga", "Ikizler", "Yengec", "Aslan", "Basak", "Terazi", "Akrep", "Yay", "Oglak", "Kova", "Balik"] %}
+{% set ic = interpretation_context if interpretation_context is defined and interpretation_context else {} %}
+{% set primary_focus = ic.get("primary_focus", "Ana yasam odagi") %}
+{% set secondary_focus = ic.get("secondary_focus", "Ikincil odak") %}
+{% set confidence_level = ic.get("confidence_level", "moderate") %}
+{% set decision_posture = ic.get("decision_posture", "prepare") %}
+{% set tone_mode = ic.get("tone_mode", "balanced_advisory") %}
+{% set timing_strategy = ic.get("timing_strategy", "mixed") %}
+{% set dominant_narratives = ic.get("dominant_narratives", []) %}
+{% set dominant_life_areas = ic.get("dominant_life_areas", []) %}
+{% set dominant_narrative = dominant_narratives[0] if dominant_narratives|length > 0 else "mevcut yasam dongusu" %}
+{% set dominant_life_area = dominant_life_areas[0] if dominant_life_areas|length > 0 else primary_focus %}
+{% set signal_layer = ic.get("signal_layer", {}) %}
+{% set top_anchors = signal_layer.get("top_anchors", []) %}
+{% set recommendation_layer = ic.get("recommendation_layer", signal_layer.get("recommendation_layer", {})) %}
+{% set top_timing_windows = ic.get("top_timing_windows", {}) %}
+{% set peak_window = top_timing_windows.get("peak") %}
+{% set opportunity_window = top_timing_windows.get("opportunity") %}
+{% set pressure_window = top_timing_windows.get("pressure") %}
+{% set report_type_value = report_type if report_type is defined and report_type else "premium" %}
+{% set report_cfg = report_type_config if report_type_config is defined and report_type_config else {"include_pdf": True} %}
+{% set generated_report_id = payload_json.get("generated_report_id") if payload_json is defined and payload_json else None %}
+{% set primary_recommendation = recommendation_layer.top_recommendations[0] if recommendation_layer and recommendation_layer.top_recommendations else None %}
+{% set primary_anchor = top_anchors[0] if top_anchors else None %}
+{% set revisit = revisit_context if revisit_context is defined and revisit_context else {} %}
+{% set saved_anchor_ranks = revisit.get("saved_anchor_ranks", []) %}
+{% set saved_recommendation_indices = revisit.get("saved_recommendation_indices", []) %}
+{% set access = report_access if report_access is defined and report_access else {"is_preview": true, "show_unlock_cta": false, "can_view_full_report": false, "can_download_pdf": false, "show_login_hint": false, "unlock_success": false, "access_label": "Preview"} %}
+{% set visible_recommendations = visible_top_recommendations if visible_top_recommendations is defined else (recommendation_layer.top_recommendations if recommendation_layer and recommendation_layer.top_recommendations else []) %}
+{% set visible_anchors = visible_top_anchors if visible_top_anchors is defined else top_anchors %}
+{% set visible_opportunity_windows = visible_opportunity_windows if visible_opportunity_windows is defined else [] %}
+{% set visible_risk_windows = visible_risk_windows if visible_risk_windows is defined else [] %}
+{% set checkout_notice = checkout_notice if checkout_notice is defined else None %}
+{% set related_articles = related_articles if related_articles is defined else [] %}
+{% set is_parent_child_report = report_type_value == "parent_child" %}
+{% set ui_lang = language if language is defined and language in ["tr", "en"] else (lang if lang is defined and lang in ["tr", "en"] else "en") %}
+{% set child_profile_report = ic.get("child_profile", {}) %}
+{% set relationship_dynamics_report = ic.get("relationship_dynamics", {}) %}
+{% set school_guidance_report = ic.get("school_guidance", {}) %}
+{% set parenting_guidance_report = ic.get("parenting_guidance", {}) %}
+{% set watch_areas_report = ic.get("watch_areas", []) %}
+{% set growth_guidance_report = ic.get("growth_guidance", {}) %}
+{% set timing_notes_report = ic.get("timing_notes", []) %}
+{# Alternate CTA variants for future testing:
+   "Get Your Complete Report"
+   "See Your Full Insights"
+#}
+{% set unlock_primary_label = t("result.unlock_full_child_report", ui_lang) if is_parent_child_report else t("result.unlock_full_reading", ui_lang) %}
+{% set unlock_secondary_label = unlock_primary_label %}
+{% set unlock_tertiary_label = unlock_primary_label %}
+{% set unlock_quaternary_label = unlock_primary_label %}
+
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <div class="hero-shell">
+                {% if revisit.get("is_revisit") %}
+                <div class="chip-row">
+                    <span class="chip">From your previous reading</span>
+                    {% if revisit.get("days_since_view") is not none %}
+                    <span class="chip">Viewed {{ revisit.get("days_since_view") }} days ago</span>
+                    {% endif %}
+                    {% if revisit.get("recommendation_feedback_count") %}
+                    <span class="chip">You already saved some guidance</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+                <div class="hero-label">{{ t("result.hero_parent_child_label", ui_lang) if is_parent_child_report else t("result.hero_personal_label", ui_lang) }}</div>
+                <p class="muted">{{ full_name }} • {{ birth_date }} • {{ birth_time }} • {{ birth_city }}</p>
+                <p class="muted" style="margin-top:8px;">
+                    <strong data-result-text="resolved_birthplace_label">{{ t("result.resolved_birthplace_label", ui_lang) }}</strong>
+                    <span>{{ normalized_birth_place if normalized_birth_place is defined and normalized_birth_place else birth_city }}</span>
+                    {% if timezone %}
+                    <span> • {{ timezone }}</span>
+                    {% endif %}
+                </p>
+                {% if birthplace_accuracy_notice %}
+                <p class="muted" style="margin-top:8px;">{{ birthplace_accuracy_notice }}</p>
+                {% endif %}
+                <div class="hero-grid">
+                    <div class="hero-focus-card">
+                        <div class="chip-row" style="margin-bottom:14px;">
+                            <span class="chip">Report Type: {{ report_type_value|title }}</span>
+                            <span class="chip">{{ access.access_label }}</span>
+                            {% if primary_recommendation and primary_recommendation.time_window %}
+                            <span class="chip">{{ t("result.time_sensitive_guidance", ui_lang) }}</span>
+                            {% endif %}
+                        </div>
+                        {% if access_notice %}
+                        <p class="muted" style="margin:0 0 12px;">{{ access_notice }}</p>
+                        {% endif %}
+                        <h1 class="hero-title" data-result-text="hero_title">
+                            {% if is_parent_child_report %}
+                                {{ t("result.hero_parent_child_title", ui_lang) }}
+                            {% elif primary_recommendation %}
+                                {{ primary_recommendation.title }}
+                            {% elif primary_anchor %}
+                                {{ primary_anchor.title }}
+                            {% else %}
+                                Bu donemin ana temasi
+                            {% endif %}
+                        </h1>
+                        <p class="hero-summary">
+                            {% if is_parent_child_report %}
+                                {{ t("result.hero_parent_child_summary", ui_lang) }}
+                                {% if child_profile_report.temperament %} {{ child_profile_report.temperament }}{% endif %}
+                                {% if relationship_dynamics_report.emotional_compatibility %} {{ relationship_dynamics_report.emotional_compatibility }}{% endif %}
+                            {% elif primary_recommendation %}
+                                This period asks for a more deliberate approach. {{ primary_recommendation.reasoning }}
+                            {% elif primary_anchor %}
+                                {{ primary_anchor.summary }} {% if primary_anchor.why_it_matters %}{{ primary_anchor.why_it_matters }}{% endif %}
+                            {% else %}
+                                <span data-dynamic="hero_focus">{{ primary_focus }}</span>.
+                                <span data-result-text="hero_text_prefix">Yorumun ana omurgasi</span>
+                                <span data-dynamic="hero_area">{{ dominant_life_area }}</span>
+                                <span data-result-text="hero_text_middle">alaninda yogunlasiyor ve</span>
+                                <span data-dynamic="hero_narrative">{{ dominant_narrative }}</span>
+                                <span data-result-text="hero_text_suffix">uzerinden okunuyor.</span>
+                            {% endif %}
+                        </p>
+                        <p class="hero-microcopy">
+                            {% if is_parent_child_report %}
+                                {{ t("result.hero_parent_child_microcopy", ui_lang) }}
+                            {% elif primary_anchor %}
+                                {{ primary_anchor.title }} currently sets the tone for your decisions, energy, and timing.
+                            {% else %}
+                                Based on your chart timing, the strongest emphasis is currently around <span data-dynamic="hero_area">{{ dominant_life_area }}</span>.
+                            {% endif %}
+                        </p>
+                        <div class="hero-value-signal">
+                            <strong>{{ t("result.child_guidance", ui_lang) if is_parent_child_report else t("result.chart_guidance", ui_lang) }}</strong>
+                            <span>{{ t("result.child_guidance_copy", ui_lang) if is_parent_child_report else t("result.chart_guidance_copy", ui_lang) }}</span>
+                        </div>
+                        {% if access.is_preview %}
+                        <div class="decision-reassurance">
+                            <p class="decision-reassurance-title">{{ t("result.child_decision_title", ui_lang) if is_parent_child_report else t("result.personal_decision_title", ui_lang) }}</p>
+                            {% if is_parent_child_report %}
+                            <p class="decision-reassurance-copy">{{ t("result.child_decision_line_1", ui_lang) }}</p>
+                            <p class="decision-reassurance-copy">{{ t("result.child_decision_line_2", ui_lang) }}</p>
+                            {% else %}
+                            <p class="decision-reassurance-copy">{{ t("result.personal_decision_line_1", ui_lang) }}</p>
+                            <p class="decision-reassurance-copy">{{ t("result.personal_decision_line_2", ui_lang) }}</p>
+                            {% endif %}
+                            <p class="decision-reassurance-copy">{{ t("result.revisit_anytime", ui_lang) }}</p>
+                        </div>
+                        {% endif %}
+                        <div class="hero-actions">
+                            {% if access.is_preview %}
+                                {% if access.can_unlock_here and generated_report_id and access.show_unlock_cta %}
+                                <button class="btn btn-primary" id="unlock-report-btn" type="button" data-checkout-mode="{{ access.checkout_mode }}" data-unlock-report-btn>{{ unlock_primary_label }}</button>
+                                {% elif access.show_login_hint %}
+                                <a class="btn btn-primary" href="/login">{{ unlock_primary_label }}</a>
+                                {% endif %}
+                                <span class="premium-note">{{ t("result.instant_access_child", ui_lang) if is_parent_child_report else t("result.instant_access_personal", ui_lang) }}</span>
+                            {% endif %}
+                        </div>
+                        {% if access.is_preview %}
+                        <form class="email-capture-form" data-email-capture-form data-source="result_page">
+                            <div class="email-capture-row">
+                                <input class="email-capture-input" type="email" name="email" placeholder="{{ t("result.email_placeholder", ui_lang) }}" autocomplete="email">
+                                <button class="btn btn-secondary" type="submit">{{ t("result.email_button", ui_lang) }}</button>
+                            </div>
+                            <div class="premium-note">{{ t("result.email_note_child", ui_lang) if is_parent_child_report else t("result.email_note_personal", ui_lang) }}</div>
+                            <div class="email-capture-status" aria-live="polite"></div>
+                        </form>
+                        {% endif %}
+                        <p class="hero-trust-note">{{ t("result.trust_child", ui_lang) if is_parent_child_report else t("result.trust_personal", ui_lang) }}</p>
+                    </div>
+                    <div class="hero-kpis">
+                        <div class="metric-card">
+                            <div class="metric-label" data-result-text="decision_posture">Karar durusu</div>
+                            <div class="metric-value" data-dynamic="decision_posture_label"></div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label" data-result-text="top_timing">En onemli zamanlama</div>
+                            <div class="metric-value" data-dynamic="peak_range">
+                                {% if peak_window and peak_window.start is defined and peak_window.end is defined %}{{ peak_window.start }} - {{ peak_window.end }}{% else %}Yaklasan yogun donem{% endif %}
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label" data-result-text="confidence_level">Guven seviyesi</div>
+                            <div class="metric-value" data-dynamic="confidence_label"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid-4" style="margin-top:8px;">
+                    <div class="metric-card">
+                        <div class="metric-label" data-result-text="primary_focus">Ana odak</div>
+                        <div class="metric-value" data-dynamic="primary_focus">{{ primary_focus }}</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label" data-result-text="secondary_focus">Ikincil odak</div>
+                        <div class="metric-value" data-dynamic="secondary_focus">{{ secondary_focus }}</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label" data-result-text="tone_mode">Ton modu</div>
+                        <div class="metric-value" data-dynamic="tone_mode_label"></div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label" data-result-text="timing_strategy">Zamanlama stratejisi</div>
+                        <div class="metric-value" data-dynamic="timing_strategy_label"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% if access.unlock_success %}
+<section class="page-section" style="padding-top:0;">
+    <div class="container">
+        <div class="unlock-success">
+            Your full reading is now unlocked. You can continue with the complete interpretation and downloadable PDF.
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{% if checkout_notice %}
+<section class="page-section" style="padding-top:0;">
+    <div class="container">
+        <div class="glass-card soft card-pad">
+            <p class="premium-note">{{ checkout_notice }}</p>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{% if access.is_preview %}
+<section class="page-section" style="padding-top:0;">
+    <div class="container">
+        <div class="premium-value-card">
+            <div class="row-between">
+                <div>
+                    <div class="premium-status">{{ access.access_label }}</div>
+                    <h2 class="section-title" style="margin-top:12px;">{{ t("result.value_title_child", ui_lang) if is_parent_child_report else t("result.value_title_personal", ui_lang) }}</h2>
+                    <p class="premium-note">{{ t("result.value_intro_child", ui_lang) if is_parent_child_report else t("result.value_intro_personal", ui_lang) }}</p>
+                </div>
+            </div>
+            <div class="premium-value-grid">
+                {% if is_parent_child_report %}
+                <div class="premium-bullet"><strong>{{ t("result.value_child_1_title", ui_lang) }}</strong>{{ t("result.value_child_1_text", ui_lang) }}</div>
+                <div class="premium-bullet"><strong>{{ t("result.value_child_2_title", ui_lang) }}</strong>{{ t("result.value_child_2_text", ui_lang) }}</div>
+                <div class="premium-bullet"><strong>{{ t("result.value_child_3_title", ui_lang) }}</strong>{{ t("result.value_child_3_text", ui_lang) }}</div>
+                <div class="premium-bullet"><strong>{{ t("result.value_child_4_title", ui_lang) }}</strong>{{ t("result.value_child_4_text", ui_lang) }}</div>
+                <div class="premium-bullet"><strong>{{ t("result.value_child_5_title", ui_lang) }}</strong>{{ t("result.value_child_5_text", ui_lang) }}</div>
+                {% else %}
+                <div class="premium-bullet"><strong>{{ t("result.value_personal_1_title", ui_lang) }}</strong>{{ t("result.value_personal_1_text", ui_lang) }}</div>
+                <div class="premium-bullet"><strong>{{ t("result.value_personal_2_title", ui_lang) }}</strong>{{ t("result.value_personal_2_text", ui_lang) }}</div>
+                <div class="premium-bullet"><strong>{{ t("result.value_personal_3_title", ui_lang) }}</strong>{{ t("result.value_personal_3_text", ui_lang) }}</div>
+                <div class="premium-bullet"><strong>{{ t("result.value_personal_4_title", ui_lang) }}</strong>{{ t("result.value_personal_4_text", ui_lang) }}</div>
+                {% endif %}
+            </div>
+            <div class="premium-actions">
+                {% if access.can_unlock_here and generated_report_id and access.show_unlock_cta %}
+                <button class="btn btn-primary" type="button" data-checkout-mode="{{ access.checkout_mode }}" data-unlock-report-btn>{{ unlock_secondary_label }}</button>
+                {% elif access.show_login_hint %}
+                <a class="btn btn-primary" href="/login">{{ unlock_primary_label }}</a>
+                {% endif %}
+                <button class="btn btn-secondary" id="top-pdf-preview-btn" type="button" data-result-text="pdf_preview">PDF Onizleme</button>
+                <p class="premium-note">{{ t("result.pdf_note_child", ui_lang) if is_parent_child_report else t("result.pdf_note_personal", ui_lang) }}</p>
+            </div>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{% if is_parent_child_report %}
+<section class="page-section" style="padding-top:0;">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <div class="row-between">
+                <div>
+                    <h2 class="section-title">{{ t("result.parent_child_section_title", ui_lang) }}</h2>
+                    <p class="section-lead">
+                        {% if access.is_preview %}
+                        {{ t("result.parent_child_preview_lead", ui_lang) }}
+                        {% else %}
+                        {{ t("result.parent_child_full_lead", ui_lang) }}
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+            {% if access.can_view_full_report %}
+            <div class="grid-2" style="margin-top:20px;">
+                <div class="advisory-card">
+                    <h3 class="card-title">{{ t("result.child_core_nature", ui_lang) }}</h3>
+                    <p class="advisory-copy">{{ child_profile_report.temperament }}</p>
+                    <p class="feedback-note"><strong>{{ t("result.emotional_needs", ui_lang) }}</strong> {{ child_profile_report.emotional_needs }}</p>
+                    {% if child_profile_report.natural_strengths %}
+                    <p class="feedback-note"><strong>{{ t("result.natural_strengths", ui_lang) }}</strong> {{ child_profile_report.natural_strengths|join("; ") }}</p>
+                    {% endif %}
+                    {% if child_profile_report.sensitivity_areas %}
+                    <p class="feedback-note"><strong>{{ t("result.sensitivity_areas", ui_lang) }}</strong> {{ child_profile_report.sensitivity_areas|join("; ") }}</p>
+                    {% endif %}
+                </div>
+                <div class="advisory-card">
+                    <h3 class="card-title">{{ t("result.parent_child_dynamic", ui_lang) }}</h3>
+                    <p class="advisory-copy">{{ relationship_dynamics_report.emotional_compatibility }}</p>
+                    <p class="feedback-note"><strong>{{ t("result.communication", ui_lang) }}</strong> {{ relationship_dynamics_report.communication_style_difference }}</p>
+                    {% if relationship_dynamics_report.easy_flow %}
+                    <p class="feedback-note"><strong>{{ t("result.where_flows", ui_lang) }}</strong> {{ relationship_dynamics_report.easy_flow|join("; ") }}</p>
+                    {% endif %}
+                    {% if relationship_dynamics_report.friction_points %}
+                    <p class="feedback-note"><strong>{{ t("result.where_friction", ui_lang) }}</strong> {{ relationship_dynamics_report.friction_points|join("; ") }}</p>
+                    {% endif %}
+                </div>
+                <div class="advisory-card">
+                    <h3 class="card-title">{{ t("result.learning_school", ui_lang) }}</h3>
+                    <p class="advisory-copy">{{ school_guidance_report.learning_style }}</p>
+                    <p class="feedback-note"><strong>{{ t("result.attention_confidence", ui_lang) }}</strong> {{ school_guidance_report.attention_tendency }} {{ school_guidance_report.expression_pattern }}</p>
+                    {% if school_guidance_report.school_challenges %}
+                    <p class="feedback-note"><strong>{{ t("result.school_challenges", ui_lang) }}</strong> {{ school_guidance_report.school_challenges|join("; ") }}</p>
+                    {% endif %}
+                </div>
+                <div class="advisory-card">
+                    <h3 class="card-title">{{ t("result.parenting_guidance", ui_lang) }}</h3>
+                    <p class="advisory-copy">{{ parenting_guidance_report.best_support }}</p>
+                    <p class="feedback-note"><strong>{{ t("result.what_works_best", ui_lang) }}</strong> {{ parenting_guidance_report.communication_guidance }}</p>
+                    {% if parenting_guidance_report.avoid_patterns %}
+                    <p class="feedback-note"><strong>{{ t("result.what_to_avoid", ui_lang) }}</strong> {{ parenting_guidance_report.avoid_patterns|join("; ") }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="grid-2" style="margin-top:20px;">
+                <div class="advisory-card">
+                    <h3 class="card-title">{{ t("result.watch_areas", ui_lang) }}</h3>
+                    <ul class="decision-list">
+                        {% for item in watch_areas_report %}
+                        <li>{{ item }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div class="advisory-card">
+                    <h3 class="card-title">{{ t("result.growth_path", ui_lang) }}</h3>
+                    <p class="advisory-copy">{{ growth_guidance_report.thrive_support }}</p>
+                    <p class="feedback-note"><strong>{{ t("result.relationship_growth", ui_lang) }}</strong> {{ growth_guidance_report.relationship_strengthening }}</p>
+                    {% if timing_notes_report %}
+                    <p class="feedback-note"><strong>{{ t("result.timing_note", ui_lang) }}</strong> {{ timing_notes_report[0].title }} - {{ timing_notes_report[0].note }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <div class="grid-2" style="margin-top:20px;">
+                <div class="advisory-card">
+                    <h3 class="card-title">{{ t("result.child_core_nature", ui_lang) }}</h3>
+                    <p class="advisory-copy">{{ child_profile_report.temperament or t("result.fallback_child_temperament", ui_lang) }}</p>
+                    <p class="feedback-note"><strong>{{ t("result.emotional_needs", ui_lang) }}</strong> {{ child_profile_report.emotional_needs or t("result.fallback_child_needs", ui_lang) }}</p>
+                </div>
+                <div class="advisory-card">
+                    <h3 class="card-title">{{ t("result.parent_child_dynamic", ui_lang) }}</h3>
+                    <p class="advisory-copy">{{ relationship_dynamics_report.emotional_compatibility or t("result.fallback_child_dynamic", ui_lang) }}</p>
+                    <p class="feedback-note"><strong>{{ t("result.communication", ui_lang) }}</strong> {{ relationship_dynamics_report.communication_style_difference or t("result.fallback_child_communication", ui_lang) }}</p>
+                </div>
+                <div class="advisory-card">
+                    <h3 class="card-title">{{ t("result.recommended_approach", ui_lang) }}</h3>
+                    <p class="advisory-copy">{{ parenting_guidance_report.best_support or t("result.fallback_child_support", ui_lang) }}</p>
+                    <p class="feedback-note"><strong>{{ t("result.first_guidance_point", ui_lang) }}</strong> {{ parenting_guidance_report.communication_guidance or t("result.fallback_child_first_guidance", ui_lang) }}</p>
+                </div>
+                <div class="locked-teaser-card">
+                    <div class="premium-status">{{ t("result.deeper_support_locked", ui_lang) }}</div>
+                    <p class="locked-copy">{{ t("result.deeper_support_copy", ui_lang) }}</p>
+                    <div class="locked-shell">
+                        <div class="blur-line"></div>
+                        <div class="blur-line short"></div>
+                        <div class="blur-line"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="conversion-band compact">
+                <h3>{{ t("result.child_loss_title", ui_lang) }}</h3>
+                <p>{{ t("result.child_loss_copy", ui_lang) }}</p>
+                <div class="conversion-actions">
+                    {% if access.can_unlock_here and generated_report_id and access.show_unlock_cta %}
+                    <button class="btn btn-primary" type="button" data-checkout-mode="{{ access.checkout_mode }}" data-unlock-report-btn>{{ unlock_tertiary_label }}</button>
+                    {% elif access.show_login_hint %}
+                    <a class="btn btn-primary" href="/login">{{ unlock_primary_label }}</a>
+                    {% endif %}
+                    <span class="premium-note">{{ t("result.trust_child", ui_lang) }}</span>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{% if revisit.get("has_followup_banner") %}
+<section class="page-section" style="padding-top:0;">
+    <div class="container">
+        <div class="glass-card soft card-pad">
+            <div class="row-between">
+                <div>
+                    <h3 class="card-title" style="margin:0;">Some guidance from this report may be ready to revisit</h3>
+                    <p class="feedback-note" style="margin-top:8px;">
+                        {% if revisit.get("followup_titles") %}
+                            Revisit: {{ revisit.get("followup_titles")|join(", ") }}.
+                        {% else %}
+                            A few time-bound recommendations from this reading may be worth reviewing now.
+                        {% endif %}
+                    </p>
+                </div>
+                <a class="btn btn-secondary" href="/reports">My Reports</a>
+            </div>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{% if recommendation_layer and recommendation_layer.top_recommendations and (not is_parent_child_report or access.can_view_full_report) %}
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <div class="row-between">
+                <div>
+                    <h2 class="section-title">Recommended Focus Now</h2>
+                    <p class="section-lead">Start here first. These are the clearest actions and timing cues suggested by your current chart emphasis.</p>
+                </div>
+            </div>
+            <div class="recommendation-stack">
+                {% for item in visible_recommendations %}
+                <div class="advisory-card">
+                    <div class="advisory-header">
+                        <div>
+                            <div class="advisory-meta">
+                                <span class="time-chip">{{ item.time_window }}</span>
+                                <span class="priority-dot">{{ item.priority|title }} priority</span>
+                            </div>
+                            <h3 class="card-title">{{ item.title }}</h3>
+                        </div>
+                        <div class="report-pill-row">
+                            <span class="report-pill">
+                                {% if item.type == "avoidance" %}
+                                    Avoid for now
+                                {% elif item.type == "timing" %}
+                                    Timing matters
+                                {% elif item.type == "focus" %}
+                                    Focus area
+                                {% else %}
+                                    Recommended action
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+                    <p class="advisory-copy">{{ item.reasoning }}</p>
+                    {% if item.linked_anchors %}
+                    <p class="feedback-note">Why now: this guidance is closely tied to <strong>{{ item.linked_anchors[0].title }}</strong>.</p>
+                    {% endif %}
+                    {% if loop.index in saved_recommendation_indices %}
+                    <p class="feedback-note">Saved. You already marked this recommendation as useful for revisit.</p>
+                    {% endif %}
+                    {% if generated_report_id %}
+                    <form class="recommendation-feedback" data-recommendation-feedback-form data-report-id="{{ generated_report_id }}" data-recommendation-index="{{ loop.index }}" {% if loop.index in saved_recommendation_indices %}data-feedback-saved="true"{% endif %}>
+                        <div>
+                            <div class="metric-label">Was this helpful?</div>
+                            <div class="feedback-labels">
+                                <button type="button" class="feedback-choice" data-recommendation-label="very_useful">Very useful</button>
+                                <button type="button" class="feedback-choice" data-recommendation-label="makes_sense">Makes sense</button>
+                                <button type="button" class="feedback-choice" data-recommendation-label="not_useful">Not useful</button>
+                                <button type="button" class="feedback-choice" data-recommendation-label="not_relevant">Not relevant</button>
+                            </div>
+                        </div>
+                        <input type="hidden" name="user_feedback_label" value="">
+                        <div class="feedback-toggles">
+                            <label><input type="checkbox" name="acted_on" value="1"> I will act on this</label>
+                            <label><input type="checkbox" name="already_acted" value="1"> I already did this</label>
+                            <label><input type="checkbox" name="saved_for_later" value="1"> Save for later</label>
+                        </div>
+                        <div class="feedback-inline">
+                            <select name="user_rating">
+                                <option value="">Usefulness</option>
+                                <option value="5">5</option>
+                                <option value="4">4</option>
+                                <option value="3">3</option>
+                                <option value="2">2</option>
+                                <option value="1">1</option>
+                            </select>
+                            <textarea name="free_text_comment" maxlength="400" placeholder="Optional note"></textarea>
+                            <button type="submit" class="btn btn-secondary">Save</button>
+                        </div>
+                        <div class="feedback-status" aria-live="polite"></div>
+                    </form>
+                    {% endif %}
+                </div>
+                {% endfor %}
+                {% if access.is_preview and has_locked_recommendations %}
+                <div class="locked-teaser-card">
+                    <div class="premium-status">Full continuation</div>
+                    <p class="locked-copy">Unlock the full interpretation to continue into the recommendation layer that clarifies what to act on now, what to pace carefully, and why timing matters.</p>
+                    <div class="locked-shell">
+                        <div class="blur-line"></div>
+                        <div class="blur-line short"></div>
+                        <div class="blur-line"></div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            {% if access.can_view_full_report %}
+            <div class="grid-2" style="margin-top:22px;">
+                <div class="metric-card">
+                    <div class="metric-label">Opportunity windows</div>
+                    <div class="window-list">
+                        {% if visible_opportunity_windows %}
+                        {% for item in visible_opportunity_windows %}
+                        <div class="muted">{{ item.title }} • {{ item.time_window }}</div>
+                        {% endfor %}
+                        {% else %}
+                        <div class="muted">No dedicated opportunity window stands out beyond the main focus recommendations.</div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Risk windows</div>
+                    <div class="window-list">
+                        {% if visible_risk_windows %}
+                        {% for item in visible_risk_windows %}
+                        <div class="muted">{{ item.title }} • {{ item.time_window }}</div>
+                        {% endfor %}
+                        {% else %}
+                        <div class="muted">No concentrated risk window is stronger than the main recommendation set.</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% elif access.is_preview %}
+            <div class="grid-2" style="margin-top:22px;">
+                <div class="locked-teaser-card">
+                    <div class="metric-label">Opportunity windows</div>
+                    <p class="locked-copy">Unlock to see where momentum is opening and which windows are worth acting on.</p>
+                    <div class="locked-shell">
+                        <div class="blur-line"></div>
+                        <div class="blur-line short"></div>
+                    </div>
+                </div>
+                <div class="locked-teaser-card">
+                    <div class="metric-label">Risk windows</div>
+                    <p class="locked-copy">Unlock to reveal the periods that deserve more pacing, protection, or restraint.</p>
+                    <div class="locked-shell">
+                        <div class="blur-line"></div>
+                        <div class="blur-line short"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="conversion-band compact">
+                <h3>{{ t("result.continue_title", ui_lang) }}</h3>
+                <p>{{ t("result.continue_copy", ui_lang) }}</p>
+                <div class="conversion-actions">
+                    {% if access.can_unlock_here and generated_report_id and access.show_unlock_cta %}
+                    <button class="btn btn-primary" type="button" data-checkout-mode="{{ access.checkout_mode }}" data-unlock-report-btn>{{ unlock_tertiary_label }}</button>
+                    {% elif access.show_login_hint %}
+                    <a class="btn btn-primary" href="/login">{{ unlock_primary_label }}</a>
+                    {% endif %}
+                    <span class="premium-note">{{ t("result.continue_note", ui_lang) }}</span>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{% if top_anchors and (not is_parent_child_report or access.can_view_full_report) %}
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <h2 class="section-title">Top Interpretation Themes</h2>
+            <p class="section-lead">This is the story of your current phase. Each theme below explains why this period feels the way it does and where it is trying to move you.</p>
+            <div class="anchor-grid">
+                {% for anchor in visible_anchors %}
+                <div class="advisory-card anchor-card" data-anchor-card data-anchor-rank="{{ anchor.rank }}">
+                    <div class="report-pill-row">
+                        <span class="anchor-rank">{{ anchor.rank }}</span>
+                        <span class="report-pill">Current theme</span>
+                    </div>
+                    <div class="anchor-story">
+                        <h3 class="card-title">{{ anchor.title }}</h3>
+                        <p class="anchor-summary">{{ anchor.summary }}</p>
+                        {% if anchor.why_it_matters %}
+                        <p class="anchor-why"><strong>Why this matters:</strong> {{ anchor.why_it_matters }}</p>
+                        {% endif %}
+                        {% if anchor.opportunity %}
+                        <p class="muted" style="margin:0;"><strong>Opportunity:</strong> {{ anchor.opportunity }}</p>
+                        {% endif %}
+                        {% if anchor.risk %}
+                        <p class="muted" style="margin:0;"><strong>Watch for:</strong> {{ anchor.risk }}</p>
+                        {% endif %}
+                        {% if anchor.rank in saved_anchor_ranks %}
+                        <p class="feedback-note">Saved. You already shared feedback on this theme.</p>
+                        {% endif %}
+                    </div>
+                    {% if generated_report_id %}
+                    <form class="anchor-feedback" data-feedback-form data-report-id="{{ generated_report_id }}" data-anchor-rank="{{ anchor.rank }}" {% if anchor.rank in saved_anchor_ranks %}data-feedback-saved="true"{% endif %}>
+                        <div>
+                            <div class="metric-label">Did this feel relevant?</div>
+                            <div class="feedback-labels">
+                                <button type="button" class="feedback-choice" data-feedback-label="very_helpful">Very helpful</button>
+                                <button type="button" class="feedback-choice" data-feedback-label="accurate">Felt accurate</button>
+                                <button type="button" class="feedback-choice" data-feedback-label="too_generic">Too general</button>
+                                <button type="button" class="feedback-choice" data-feedback-label="not_relevant">Not relevant</button>
+                            </div>
+                        </div>
+                        <input type="hidden" name="feedback_label" value="">
+                        <div class="feedback-inline">
+                            <select name="user_rating">
+                                <option value="">Usefulness</option>
+                                <option value="5">5</option>
+                                <option value="4">4</option>
+                                <option value="3">3</option>
+                                <option value="2">2</option>
+                                <option value="1">1</option>
+                            </select>
+                            <textarea name="free_text_comment" maxlength="400" placeholder="Optional note"></textarea>
+                            <button type="submit" class="btn btn-secondary">Save</button>
+                        </div>
+                        <div class="feedback-status" aria-live="polite"></div>
+                    </form>
+                    {% else %}
+                    <p class="feedback-note">Feedback becomes available when this reading is saved to your account.</p>
+                    {% endif %}
+                </div>
+                {% endfor %}
+                {% if access.is_preview and has_locked_anchors %}
+                <div class="locked-teaser-card">
+                    <div class="premium-status">More themes inside</div>
+                    <p class="locked-copy">To see the full picture, unlock the deeper interpretation themes, why they matter now, and the opportunity versus risk pattern underneath them.</p>
+                    <div class="locked-shell">
+                        <div class="blur-line"></div>
+                        <div class="blur-line short"></div>
+                        <div class="blur-line"></div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{% if ((recommendation_layer and (recommendation_layer.opportunity_windows or recommendation_layer.risk_windows)) or peak_window or opportunity_window or pressure_window) and (not is_parent_child_report or access.can_view_full_report) %}
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <h2 class="section-title">Opportunity & Risk</h2>
+            <p class="section-lead">Keep these windows in mind when deciding what to move toward, what to protect, and where better timing may change the outcome.</p>
+            <div class="opportunity-risk-grid" style="margin-top:20px;">
+                <div class="advisory-card window-card{% if access.is_preview %} locked-shell{% endif %}">
+                    <div class="timing-date">Opportunity windows</div>
+                    {% if access.can_view_full_report and recommendation_layer and recommendation_layer.opportunity_windows %}
+                        {% for item in recommendation_layer.opportunity_windows %}
+                        <div class="window-item"><strong>{{ item.title }}</strong><br>{{ item.time_window }}</div>
+                        {% endfor %}
+                    {% elif access.can_view_full_report and opportunity_window %}
+                        <div class="window-item"><strong>{{ opportunity_window.label if opportunity_window.label is defined else "Opening period" }}</strong><br>{% if opportunity_window.start is defined and opportunity_window.end is defined %}{{ opportunity_window.start }} - {{ opportunity_window.end }}{% else %}A growth-supportive period is building.{% endif %}</div>
+                    {% elif access.is_preview %}
+                        <div class="window-item">Unlock to reveal the fuller opportunity map and the windows where momentum is more supportive.</div>
+                    {% else %}
+                        <div class="window-item">The main opportunities are already reflected in your priority recommendations above.</div>
+                    {% endif %}
+                </div>
+                <div class="advisory-card window-card{% if access.is_preview %} locked-shell{% endif %}">
+                    <div class="timing-date">Risk windows</div>
+                    {% if access.can_view_full_report and recommendation_layer and recommendation_layer.risk_windows %}
+                        {% for item in recommendation_layer.risk_windows %}
+                        <div class="window-item"><strong>{{ item.title }}</strong><br>{{ item.time_window }}</div>
+                        {% endfor %}
+                    {% elif access.can_view_full_report and pressure_window %}
+                        <div class="window-item"><strong>{{ pressure_window.label if pressure_window.label is defined else "Pressure period" }}</strong><br>{% if pressure_window.start is defined and pressure_window.end is defined %}{{ pressure_window.start }} - {{ pressure_window.end }}{% else %}This is a period to move with more care and pacing.{% endif %}</div>
+                    {% elif access.is_preview %}
+                        <div class="window-item">Unlock to see the pressure windows that call for slower pacing and cleaner decision-making.</div>
+                    {% else %}
+                        <div class="window-item">No concentrated risk window currently outweighs the main guidance above.</div>
+                    {% endif %}
+                </div>
+            </div>
+            {% if access.is_preview %}
+            <div class="conversion-band compact">
+                <h3>{{ t("result.more_title", ui_lang) }}</h3>
+                <p>{{ t("result.more_copy", ui_lang) }}</p>
+                <div class="conversion-actions">
+                    {% if access.can_unlock_here and generated_report_id and access.show_unlock_cta %}
+                    <button class="btn btn-primary" type="button" data-checkout-mode="{{ access.checkout_mode }}" data-unlock-report-btn>{{ unlock_quaternary_label }}</button>
+                    {% elif access.show_login_hint %}
+                    <a class="btn btn-primary" href="/login">{{ unlock_primary_label }}</a>
+                    {% endif %}
+                    <span class="premium-note">{{ t("result.more_note", ui_lang) }}</span>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{% if related_articles %}
+<section class="page-section" style="padding-top:0;">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <div class="row-between">
+                <div>
+                    <h2 class="section-title">{{ t("result.related_title", ui_lang) }}</h2>
+                    <p class="section-lead">{{ t("result.related_text", ui_lang) }}</p>
+                </div>
+            </div>
+            <div class="related-insights-grid">
+                {% for article in related_articles %}
+                <article class="related-insight-card">
+                    <div class="chip-row">
+                        <span class="chip">{{ t("article_categories." ~ article.category, ui_lang) }}</span>
+                    </div>
+                    <h3><a href="/articles/{{ article.slug }}">{{ article.title }}</a></h3>
+                    <p class="advisory-copy">{{ article.excerpt }}</p>
+                </article>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <div class="row-between">
+                <h2 class="section-title" data-result-text="ai_title">AI Stratejik Yorum</h2>
+                <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                    {% if access.can_download_pdf %}
+                    <button class="btn btn-secondary" id="pdf-export-btn" type="button" data-result-text="pdf_export">PDF Olustur</button>
+                    {% endif %}
+                    {% if not access.is_preview %}
+                    <button class="btn btn-secondary" id="pdf-preview-btn" type="button" data-result-text="pdf_preview">PDF Onizleme</button>
+                    {% endif %}
+                    {% if generated_report_id %}
+                    <a class="btn btn-secondary" href="/reports">View later</a>
+                    {% endif %}
+                    {% if access.can_view_full_report %}
+                    <button class="btn btn-primary" id="interpret-btn" type="button" data-result-text="get_ai">Yapay Zeka Yorumu Al</button>
+                    {% endif %}
+                </div>
+            </div>
+            <div id="interpret-loading" class="muted" style="display:none; margin-top:16px;" data-result-text="loading_text">Yorum hazirlaniyor...</div>
+            <div class="interpret-layout" style="margin-top:24px;">
+                <div class="glass-card soft card-pad ai-output" id="interpret-output">
+                    {% if access.can_view_full_report %}
+                    <span class="empty" data-result-text="empty_ai">Henuz yorum uretilmedi.</span>
+                    {% else %}
+                    <div class="locked-ai-card">
+                        <div class="premium-status">Full interpretation</div>
+                        <p class="locked-copy">The strategic AI reading stays locked in preview mode so the free experience remains useful without revealing the complete report.</p>
+                        <div class="locked-shell">
+                            <div class="blur-line"></div>
+                            <div class="blur-line short"></div>
+                            <div class="blur-line"></div>
+                        </div>
+                        <p class="locked-copy">Continue to your complete reading to open the full interpretation and personalized PDF report.</p>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="meta-stack">
+                    <div class="metric-card"><div class="metric-label" data-result-text="tone_mode">Ton modu</div><div class="metric-value" data-dynamic="tone_mode_label_meta"></div></div>
+                    <div class="metric-card"><div class="metric-label" data-result-text="timing_strategy">Zamanlama stratejisi</div><div class="metric-value" data-dynamic="timing_strategy_label_meta"></div></div>
+                    <div class="metric-card"><div class="metric-label" data-result-text="primary_focus_meta">Ana alan</div><div class="metric-value" data-dynamic="primary_focus_meta">{{ primary_focus }}</div></div>
+                    <div class="metric-card"><div class="metric-label" data-result-text="dominant_narrative">Baskin anlati</div><div class="metric-value" data-dynamic="dominant_narrative">{{ dominant_narrative }}</div></div>
+                </div>
+            </div>
+            <form id="ai-form">
+                <textarea class="hidden-payload" id="payload_json" name="payload_json">{{ payload_json | tojson }}</textarea>
+                <textarea class="hidden-payload" id="current_ai_interpretation" name="current_ai_interpretation"></textarea>
+            </form>
+        </div>
+    </div>
+</section>
+
+{% if access.can_view_full_report %}
+<section class="page-section">
+    <div class="container">
+        <div class="grid-2">
+            <div class="glass-card card-pad"><h3 class="card-title" data-result-text="do_title">Yap</h3><ul class="decision-list" id="do-list"></ul></div>
+            <div class="glass-card card-pad"><h3 class="card-title" data-result-text="avoid_title">Kacin</h3><ul class="decision-list" id="avoid-list"></ul></div>
+        </div>
+    </div>
+</section>
+{% elif access.is_preview %}
+<section class="page-section">
+    <div class="container">
+        <div class="locked-teaser-card">
+            <div class="premium-status">Actionable guidance</div>
+            <p class="locked-copy">The free preview stops before the full do / avoid decision layer. Continue to your complete reading to open the full action guidance.</p>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{% if access.is_preview and generated_report_id %}
+<section class="page-section" style="padding-top:0;">
+    <div class="container">
+        <div class="glass-card soft">
+            <div class="beta-feedback-block">
+                <div>
+                    <h3 class="beta-feedback-title">{{ t("result.feedback_preview_title", ui_lang) }}</h3>
+                    <p class="beta-feedback-intro">{{ t("result.feedback_intro_preview", ui_lang) }}</p>
+                </div>
+                <form
+                    class="beta-feedback-form"
+                    data-feedback-entry-form
+                    data-stage="preview"
+                    data-report-id="{{ generated_report_id }}"
+                    data-report-type="{{ report_type_value }}"
+                    data-success-message="{{ t("result.feedback_success", ui_lang) }}"
+                    data-saving-message="{{ t("result.feedback_saving", ui_lang) }}"
+                    data-error-message="{{ t("result.feedback_error", ui_lang) }}"
+                    data-missing-rating-message="{{ t("result.feedback_choose_rating", ui_lang) }}"
+                    data-missing-report-message="{{ t("result.feedback_unavailable", ui_lang) }}"
+                >
+                    <input type="hidden" name="rating" value="">
+                    <div class="feedback-labels">
+                        <button class="feedback-choice beta-feedback-choice" type="button" data-feedback-rating="very_accurate">{{ t("result.feedback_preview_option_1", ui_lang) }}</button>
+                        <button class="feedback-choice beta-feedback-choice" type="button" data-feedback-rating="somewhat">{{ t("result.feedback_preview_option_2", ui_lang) }}</button>
+                        <button class="feedback-choice beta-feedback-choice" type="button" data-feedback-rating="not_really">{{ t("result.feedback_preview_option_3", ui_lang) }}</button>
+                    </div>
+                    <textarea class="beta-feedback-comment" name="comment" placeholder="{{ t("result.feedback_preview_comment", ui_lang) }}"></textarea>
+                    <div class="beta-feedback-actions">
+                        <button class="btn btn-secondary" type="submit">{{ t("result.feedback_submit", ui_lang) }}</button>
+                        <div class="feedback-status" aria-live="polite"></div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{% if access.is_preview %}
+<section class="page-section" style="padding-top:0;">
+    <div class="container">
+        <div class="premium-value-card">
+            <div>
+                <div class="premium-status">Complete reading</div>
+                <h2 class="section-title" style="margin-top:12px;">{{ t("result.final_title_child", ui_lang) if is_parent_child_report else t("result.final_title_personal", ui_lang) }}</h2>
+                <p class="premium-note">{{ t("result.final_copy_child", ui_lang) if is_parent_child_report else t("result.final_copy_personal", ui_lang) }}</p>
+            </div>
+            <div class="premium-actions">
+                {% if access.can_unlock_here and generated_report_id and access.show_unlock_cta %}
+                <button class="btn btn-primary" type="button" data-checkout-mode="{{ access.checkout_mode }}" data-unlock-report-btn>{{ unlock_primary_label }}</button>
+                {% elif access.show_login_hint %}
+                <a class="btn btn-primary" href="/login">{{ unlock_primary_label }}</a>
+                {% endif %}
+                <button class="btn btn-secondary" id="pdf-preview-btn" type="button" data-result-text="pdf_preview">PDF Onizleme</button>
+                <p class="premium-note">{{ t("result.final_note_child", ui_lang) if is_parent_child_report else t("result.final_note_personal", ui_lang) }}</p>
+            </div>
+            <form class="email-capture-form" data-email-capture-form data-source="bottom_cta">
+                <div class="email-capture-row">
+                    <input class="email-capture-input" type="email" name="email" placeholder="{{ t("result.email_placeholder", ui_lang) }}" autocomplete="email">
+                    <button class="btn btn-secondary" type="submit">{{ t("result.email_button", ui_lang) }}</button>
+                </div>
+                <div class="premium-note">{{ t("result.email_note_child", ui_lang) if is_parent_child_report else t("result.email_note_personal", ui_lang) }}</div>
+                <div class="email-capture-status" aria-live="polite"></div>
+            </form>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <h2 class="section-title" data-result-text="basis_title">Bu yorum neye dayaniyor?</h2>
+            <div class="grid-4" style="margin-top:24px;">
+                <div class="metric-card"><div class="metric-label" data-result-text="dominant_life_area">Baskin yasam alani</div><div class="metric-value" data-dynamic="dominant_life_area">{{ dominant_life_area }}</div></div>
+                <div class="metric-card"><div class="metric-label" data-result-text="strongest_narrative">En guclu anlati</div><div class="metric-value" data-dynamic="dominant_narrative_basis">{{ dominant_narrative }}</div></div>
+                <div class="metric-card"><div class="metric-label" data-result-text="timing_model">Ana zamanlama modeli</div><div class="metric-value" data-dynamic="timing_strategy_label_basis"></div></div>
+                <div class="metric-card"><div class="metric-label" data-result-text="decision_logic">Karar mantigi</div><div class="metric-value" data-dynamic="decision_posture_label_basis"></div></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <h2 class="section-title" data-result-text="technical_layers">Teknik katmanlar</h2>
+            <div class="tab-buttons" style="margin-top:20px;">
+                <button class="tab-button active" type="button" data-tab="natal" data-result-text="tab_natal">Natal</button>
+                <button class="tab-button" type="button" data-tab="dasha" data-result-text="tab_dasha">Dasha</button>
+                <button class="tab-button" type="button" data-tab="navamsa" data-result-text="tab_navamsa">Navamsa</button>
+                <button class="tab-button" type="button" data-tab="transits" data-result-text="tab_transits">Transitler</button>
+                <button class="tab-button" type="button" data-tab="eclipses" data-result-text="tab_eclipses">Tutulmalar</button>
+            </div>
+            <div class="tab-panel active" data-panel="natal">
+                <div class="table-wrap"><table><thead><tr><th data-result-text="planet">Gezegen</th><th data-result-text="sign">Burc</th><th data-result-text="house">Ev</th><th data-result-text="degree">Derece</th><th data-result-text="nakshatra">Nakshatra</th><th data-result-text="retrograde">Retro</th></tr></thead><tbody>{% if natal_data and natal_data.planets %}{% for planet in natal_data.planets %}<tr><td>{{ planet.name }}</td><td>{% if planet.sign_idx is not none %}<span data-sign-index="{{ planet.sign_idx }}">{{ sign_names[planet.sign_idx] }}</span>{% else %}-{% endif %}</td><td>{{ planet.house if planet.house is defined else "-" }}</td><td>{{ planet.degree if planet.degree is defined else "-" }}</td><td>{{ planet.nakshatra if planet.nakshatra is defined else "-" }}</td><td>{% if planet.is_retrograde is defined %}<span data-bool-text="{{ 'true' if planet.is_retrograde else 'false' }}">{{ "Evet" if planet.is_retrograde else "Hayir" }}</span>{% else %}-{% endif %}</td></tr>{% endfor %}{% else %}<tr><td colspan="6" class="empty" data-result-text="empty_natal">Natal veri bulunamadi.</td></tr>{% endif %}</tbody></table></div>
+            </div>
+            <div class="tab-panel" data-panel="dasha">
+                <div class="table-wrap"><table><thead><tr><th data-result-text="layer">Katman</th><th data-result-text="planet">Gezegen</th><th data-result-text="start">Baslangic</th><th data-result-text="end">Bitis</th></tr></thead><tbody>{% if dasha_data %}{% for item in dasha_data[:3] %}<tr><td><span data-dasha-level="{{ loop.index0 }}">{% if loop.index0 == 0 %}Mahadasha{% elif loop.index0 == 1 %}Antardasha{% else %}Pratyantardasha{% endif %}</span></td><td>{{ item.planet if item.planet is defined else "-" }}</td><td>{{ item.start if item.start is defined else "-" }}</td><td>{{ item.end if item.end is defined else "-" }}</td></tr>{% endfor %}{% else %}<tr><td colspan="4" class="empty" data-result-text="empty_dasha">Dasha verisi bulunamadi.</td></tr>{% endif %}</tbody></table></div>
+            </div>
+            <div class="tab-panel" data-panel="navamsa">
+                <div class="table-wrap"><table><thead><tr><th data-result-text="planet">Gezegen</th><th data-result-text="sign">Burc</th><th data-result-text="house">Ev</th><th data-result-text="degree">Derece</th></tr></thead><tbody>{% if navamsa_data and navamsa_data.planets %}{% for planet in navamsa_data.planets %}<tr><td>{{ planet.name }}</td><td>{% if planet.sign_idx is not none %}<span data-sign-index="{{ planet.sign_idx }}">{{ sign_names[planet.sign_idx] }}</span>{% else %}-{% endif %}</td><td>{{ planet.house if planet.house is defined else "-" }}</td><td>{{ planet.degree if planet.degree is defined else "-" }}</td></tr>{% endfor %}{% else %}<tr><td colspan="4" class="empty" data-result-text="empty_navamsa">Navamsa verisi bulunamadi.</td></tr>{% endif %}</tbody></table></div>
+            </div>
+            <div class="tab-panel" data-panel="transits">
+                <div class="table-wrap"><table><thead><tr><th data-result-text="event">Olay</th><th data-result-text="score">Skor</th><th data-result-text="house">Ev</th></tr></thead><tbody>{% if transit_data %}{% for item in transit_data %}<tr><td>{{ item.event if item.event is defined else "-" }}</td><td>{{ item.score if item.score is defined else "-" }}</td><td>{{ item.house if item.house is defined else "-" }}</td></tr>{% endfor %}{% else %}<tr><td colspan="3" class="empty" data-result-text="empty_transits">Transit verisi bulunamadi.</td></tr>{% endif %}</tbody></table></div>
+            </div>
+            <div class="tab-panel" data-panel="eclipses">
+                <div class="table-wrap"><table><thead><tr><th data-result-text="date">Tarih</th><th data-result-text="type">Tur</th><th data-result-text="subtype">Alt tur</th><th data-result-text="sign">Burc</th><th data-result-text="degree">Derece</th><th data-result-text="impact">Etki</th></tr></thead><tbody>{% if eclipse_data %}{% for eclipse in eclipse_data %}<tr><td>{{ eclipse.date if eclipse.date is defined else "-" }}</td><td>{{ eclipse.type if eclipse.type is defined else "-" }}</td><td>{{ eclipse.subtype if eclipse.subtype is defined else "-" }}</td><td>{% if eclipse.sign_idx is defined %}<span data-sign-index="{{ eclipse.sign_idx }}">{{ sign_names[eclipse.sign_idx] }}</span>{% else %}-{% endif %}</td><td>{{ eclipse.degree if eclipse.degree is defined else "-" }}</td><td>{{ eclipse.natal_impact if eclipse.natal_impact is defined else "-" }}</td></tr>{% endfor %}{% else %}<tr><td colspan="6" class="empty" data-result-text="empty_eclipses">Tutulma verisi bulunamadi.</td></tr>{% endif %}</tbody></table></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% if access.can_view_full_report and generated_report_id %}
+<section class="page-section" style="padding-top:0;">
+    <div class="container">
+        <div class="glass-card soft">
+            <div class="beta-feedback-block">
+                <div>
+                    <h3 class="beta-feedback-title">{{ t("result.feedback_full_title", ui_lang) }}</h3>
+                    <p class="beta-feedback-intro">{{ t("result.feedback_intro_full", ui_lang) }}</p>
+                </div>
+                <form
+                    class="beta-feedback-form"
+                    data-feedback-entry-form
+                    data-stage="full"
+                    data-report-id="{{ generated_report_id }}"
+                    data-report-type="{{ report_type_value }}"
+                    data-success-message="{{ t("result.feedback_success", ui_lang) }}"
+                    data-saving-message="{{ t("result.feedback_saving", ui_lang) }}"
+                    data-error-message="{{ t("result.feedback_error", ui_lang) }}"
+                    data-missing-rating-message="{{ t("result.feedback_choose_rating", ui_lang) }}"
+                    data-missing-report-message="{{ t("result.feedback_unavailable", ui_lang) }}"
+                >
+                    <input type="hidden" name="rating" value="">
+                    <div class="feedback-labels">
+                        <button class="feedback-choice beta-feedback-choice" type="button" data-feedback-rating="very_helpful">{{ t("result.feedback_full_option_1", ui_lang) }}</button>
+                        <button class="feedback-choice beta-feedback-choice" type="button" data-feedback-rating="somewhat_helpful">{{ t("result.feedback_full_option_2", ui_lang) }}</button>
+                        <button class="feedback-choice beta-feedback-choice" type="button" data-feedback-rating="not_helpful">{{ t("result.feedback_full_option_3", ui_lang) }}</button>
+                    </div>
+                    <textarea class="beta-feedback-comment" name="comment" placeholder="{{ t("result.feedback_full_comment", ui_lang) }}"></textarea>
+                    <label class="beta-feedback-check">
+                        <input type="checkbox" name="recommend_flag" value="true">
+                        <span>{{ t("result.feedback_full_recommend", ui_lang) }}</span>
+                    </label>
+                    <div class="beta-feedback-actions">
+                        <button class="btn btn-secondary" type="submit">{{ t("result.feedback_submit", ui_lang) }}</button>
+                        <div class="feedback-status" aria-live="polite"></div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+<section class="page-section">
+    <div class="container">
+        <div class="grid-4">
+            <div class="glass-card card-pad"><h3 class="card-title" data-result-text="cta_pdf">PDF Raporu</h3><p class="muted" data-result-text="cta_pdf_text">Yazdirmaya hazir rapor onizlemesini yeni sekmede ac.</p></div>
+            <div class="glass-card card-pad"><h3 class="card-title" data-result-text="cta_share">Paylas</h3><p class="muted" data-result-text="cta_share_text">Sonucu danismanla veya kendinle paylas.</p></div>
+            <div class="glass-card card-pad"><h3 class="card-title" data-result-text="cta_guidance">Aylik rehberlik</h3><p class="muted" data-result-text="cta_guidance_text">Bu analizi duzenli icgoruye donustur.</p></div>
+            <div class="glass-card card-pad"><h3 class="card-title" data-result-text="cta_question">Yeni soru sor</h3><p class="muted" data-result-text="cta_question_text">Belirli bir alana odaklanmak icin yeni analiz baslat.</p></div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const rawInterpretationContext = {{ (interpretation_context or {})|tojson }};
+const resultState = {
+    primaryFocus: rawInterpretationContext.primary_focus || "Ana yasam odagi",
+    secondaryFocus: rawInterpretationContext.secondary_focus || "Ikincil odak",
+    dominantNarrative: (rawInterpretationContext.dominant_narratives && rawInterpretationContext.dominant_narratives[0]) || "mevcut yasam dongusu",
+    dominantLifeArea: (rawInterpretationContext.dominant_life_areas && rawInterpretationContext.dominant_life_areas[0]) || rawInterpretationContext.primary_focus || "Ana yasam odagi",
+    decisionPosture: rawInterpretationContext.decision_posture || "prepare",
+    toneMode: rawInterpretationContext.tone_mode || "balanced_advisory",
+    timingStrategy: rawInterpretationContext.timing_strategy || "mixed",
+    confidenceLevel: rawInterpretationContext.confidence_level || "moderate"
+};
+
+const resultTranslations = {
+    tr: {
+        hero_title: "Bu donemin ana temasi",
+        resolved_birthplace_label: "Hesaplamada kullanilan dogum yeri:",
+        hero_text_prefix: "Yorumun ana omurgasi",
+        hero_text_middle: "alaninda yogunlasiyor ve",
+        hero_text_suffix: "uzerinden okunuyor.",
+        decision_posture: "Karar durusu",
+        top_timing: "En onemli zamanlama",
+        confidence_level: "Guven seviyesi",
+        primary_focus: "Ana odak",
+        secondary_focus: "Ikincil odak",
+        tone_mode: "Ton modu",
+        timing_strategy: "Zamanlama stratejisi",
+        peak_window: "Zirve Donemi",
+        opportunity_window: "Firsat Donemi",
+        pressure_window: "Baski Donemi",
+        ai_title: "AI Stratejik Yorum",
+        get_ai: "Yapay Zeka Yorumu Al",
+        pdf_export: "PDF Olustur",
+        pdf_preview: "PDF Onizleme",
+        loading_text: "Yorum hazirlaniyor...",
+        empty_ai: "Henuz yorum uretilmedi.",
+        ai_error: "Yorum su anda alinamadi. Lutfen birazdan tekrar dene.",
+        ai_unavailable: "AI yorum servisi su anda kullanilamiyor. Lutfen GEMINI_API_KEY ayarini kontrol edip tekrar dene.",
+        primary_focus_meta: "Ana alan",
+        dominant_narrative: "Baskin anlati",
+        do_title: "Yap",
+        avoid_title: "Kacin",
+        basis_title: "Bu yorum neye dayaniyor?",
+        dominant_life_area: "Baskin yasam alani",
+        strongest_narrative: "En guclu anlati",
+        timing_model: "Ana zamanlama modeli",
+        decision_logic: "Karar mantigi",
+        technical_layers: "Teknik katmanlar",
+        tab_natal: "Natal",
+        tab_dasha: "Dasha",
+        tab_navamsa: "Navamsa",
+        tab_transits: "Transitler",
+        tab_eclipses: "Tutulmalar",
+        planet: "Gezegen",
+        sign: "Burc",
+        house: "Ev",
+        degree: "Derece",
+        nakshatra: "Nakshatra",
+        retrograde: "Retro",
+        layer: "Katman",
+        start: "Baslangic",
+        end: "Bitis",
+        event: "Olay",
+        score: "Skor",
+        date: "Tarih",
+        type: "Tur",
+        subtype: "Alt tur",
+        impact: "Etki",
+        dasha_maha: "Mahadasha",
+        dasha_antar: "Antardasha",
+        dasha_pratyantar: "Pratyantardasha",
+        empty_natal: "Natal veri bulunamadi.",
+        empty_dasha: "Dasha verisi bulunamadi.",
+        empty_navamsa: "Navamsa verisi bulunamadi.",
+        empty_transits: "Transit verisi bulunamadi.",
+        empty_eclipses: "Tutulma verisi bulunamadi.",
+        cta_pdf: "PDF indir",
+        cta_pdf_text: "Yazdirmaya hazir rapor onizlemesini yeni sekmede ac.",
+        cta_share: "Paylas",
+        cta_share_text: "Sonucu danismanla veya kendinle paylas.",
+        cta_guidance: "Aylik rehberlik",
+        cta_guidance_text: "Bu analizi duzenli icgoruye donustur.",
+        cta_question: "Yeni soru sor",
+        cta_question_text: "Belirli bir alana odaklanmak icin yeni analiz baslat.",
+        continue_reading: "Devamini gor",
+        collapse: "Daralt",
+        loading_label: "Yorum uretiliyor",
+        risk_label: "Riskler",
+        opportunity_label: "Firsatlar",
+        timing_label: "Zamanlama",
+        guidance_label: "Yonlendirme",
+        neutral_label: "Analiz",
+        posture_act: "Simdi ilerleme zamani",
+        posture_act_cautiously: "Temkinli ilerleme zamani",
+        posture_hold: "Bekleyip dengeleme zamani",
+        posture_avoid: "Yuksek risk - kacinma zamani",
+        posture_prepare: "Hazirlik zamani",
+        tone_calm_strategic: "Sakin ve stratejik donem",
+        tone_confident_expansive: "Acilim ve buyume odakli donem",
+        tone_careful_guidance: "Dikkatli yonlendirme donemi",
+        tone_balanced_advisory: "Dengeli danismanlik modu",
+        strategy_cluster_driven: "Olay kumeleri belirleyici",
+        strategy_peak_driven: "Peak donemler belirleyici",
+        strategy_window_driven: "Zaman pencereleri belirleyici",
+        strategy_mixed: "Karma zamanlama modeli",
+        confidence_high: "Yuksek",
+        confidence_moderate: "Orta",
+        confidence_low: "Dusuk"
+    },
+    en: {
+        hero_title: "Main theme of this period",
+        resolved_birthplace_label: "Resolved birth place used for calculation:",
+        hero_text_prefix: "The interpretation is primarily focused on",
+        hero_text_middle: "and reads this period through",
+        hero_text_suffix: ".",
+        decision_posture: "Decision posture",
+        top_timing: "Top timing window",
+        confidence_level: "Confidence level",
+        primary_focus: "Primary focus",
+        secondary_focus: "Secondary focus",
+        tone_mode: "Tone mode",
+        timing_strategy: "Timing strategy",
+        peak_window: "Peak Window",
+        opportunity_window: "Opportunity Window",
+        pressure_window: "Pressure Window",
+        ai_title: "AI Strategic Interpretation",
+        get_ai: "Get AI Interpretation",
+        pdf_export: "Create PDF",
+        pdf_preview: "PDF Preview",
+        loading_text: "Preparing interpretation...",
+        empty_ai: "No interpretation has been generated yet.",
+        ai_error: "The interpretation could not be retrieved right now. Please try again shortly.",
+        ai_unavailable: "The AI interpretation service is currently unavailable. Please verify the GEMINI_API_KEY setup and try again.",
+        primary_focus_meta: "Primary focus",
+        dominant_narrative: "Dominant narrative",
+        do_title: "Do",
+        avoid_title: "Avoid",
+        basis_title: "What this interpretation is based on",
+        dominant_life_area: "Dominant life area",
+        strongest_narrative: "Strongest narrative",
+        timing_model: "Timing model",
+        decision_logic: "Decision logic",
+        technical_layers: "Technical layers",
+        tab_natal: "Natal",
+        tab_dasha: "Dasha",
+        tab_navamsa: "Navamsa",
+        tab_transits: "Transits",
+        tab_eclipses: "Eclipses",
+        planet: "Planet",
+        sign: "Sign",
+        house: "House",
+        degree: "Degree",
+        nakshatra: "Nakshatra",
+        retrograde: "Retrograde",
+        layer: "Layer",
+        start: "Start",
+        end: "End",
+        event: "Event",
+        score: "Score",
+        date: "Date",
+        type: "Type",
+        subtype: "Subtype",
+        impact: "Impact",
+        dasha_maha: "Major period",
+        dasha_antar: "Sub-period",
+        dasha_pratyantar: "Sub-sub-period",
+        empty_natal: "Natal data is unavailable.",
+        empty_dasha: "Dasha data is unavailable.",
+        empty_navamsa: "Navamsa data is unavailable.",
+        empty_transits: "Transit data is unavailable.",
+        empty_eclipses: "Eclipse data is unavailable.",
+        cta_pdf: "Download PDF",
+        cta_pdf_text: "Open the print-ready report preview in a new tab.",
+        cta_share: "Share",
+        cta_share_text: "Share the outcome with a consultant or keep it for yourself.",
+        cta_guidance: "Monthly guidance",
+        cta_guidance_text: "Turn this analysis into ongoing insight.",
+        cta_question: "Ask a new question",
+        cta_question_text: "Start a new analysis for a specific area.",
+        continue_reading: "Read more",
+        collapse: "Collapse",
+        loading_label: "Generating interpretation",
+        risk_label: "Risks",
+        opportunity_label: "Opportunities",
+        timing_label: "Timing",
+        guidance_label: "Guidance",
+        neutral_label: "Analysis",
+        posture_act: "Time to move forward",
+        posture_act_cautiously: "Time to move carefully",
+        posture_hold: "Time to pause and stabilize",
+        posture_avoid: "High risk - avoid major moves",
+        posture_prepare: "Time to prepare",
+        tone_calm_strategic: "Calm and strategic period",
+        tone_confident_expansive: "Expansion and growth period",
+        tone_careful_guidance: "Careful guidance period",
+        tone_balanced_advisory: "Balanced advisory mode",
+        strategy_cluster_driven: "Event clusters are decisive",
+        strategy_peak_driven: "Peak periods are decisive",
+        strategy_window_driven: "Time windows are decisive",
+        strategy_mixed: "Mixed timing model",
+        confidence_high: "High",
+        confidence_moderate: "Moderate",
+        confidence_low: "Low"
+    }
+};
+
+const signTranslations = {
+    tr: ["Koc", "Boga", "Ikizler", "Yengec", "Aslan", "Basak", "Terazi", "Akrep", "Yay", "Oglak", "Kova", "Balik"],
+    en: ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"]
+};
+
+const focusTranslations = {
+    tr: {
+        career: "Kariyer",
+        finances: "Finans",
+        relationships: "Iliskiler",
+        personal_growth: "Kisisel gelisim",
+        spirituality: "Anlam ve inanc",
+        home: "Ic dunya ve ev",
+        health: "Saglik",
+        social_network: "Sosyal ag",
+        general: "Genel yasam akisi"
+    },
+    en: {
+        career: "Career",
+        finances: "Finances",
+        relationships: "Relationships",
+        personal_growth: "Personal growth",
+        spirituality: "Meaning and belief",
+        home: "Home and inner world",
+        health: "Health",
+        social_network: "Social network",
+        general: "General life flow"
+    }
+};
+
+const decisionCopy = {
+    tr: {
+        act: { do: ["Ana odakta gorunur adimlar at.", "Kararlari geciktirmek yerine planli sekilde uygula.", "Mevcut ivmeyi kaybetmeden ilerle."], avoid: ["Gereksiz erteleme yapma.", "Kararsizlikta takili kalma.", "Birden fazla yone ayni anda dagilma."] },
+        act_cautiously: { do: ["Olculu ama istikrarli ilerle.", "Hizdan cok yapisal netlige odaklan.", "Riskli kararlarini parcali uygula."], avoid: ["Ani ve duygusal kararlar alma.", "Asiri yuk ustlenme.", "Kontrol edemedigin riskleri buyutme."] },
+        hold: { do: ["Buyuk kararlari netlik gelene kadar sabitle.", "Mevcut duzeni koruyarak gozlem yap.", "Hazirlik ve planlama tarafini guclendir."], avoid: ["Belirsiz zeminde hizli taahhut verme.", "Kisa vadeli baskiya gore yonunu bozma.", "Dis gurultuye gore tepki verme."] },
+        avoid: { do: ["Yuksek riskli alanlarda enerjini koru.", "Plan disi hasar ihtimalini azalt.", "Ozellikle ana odakta tepkisel degil planli davran."], avoid: ["Yeni kriz alani acacak hamleler yapma.", "Yuksek stres altinda buyuk sozler verme.", "Finansal veya duygusal asiri reaksiyonlardan kacin."] },
+        prepare: { do: ["Bir sonraki yogun doneme hazirlik yap.", "Yarim kalan yapilari duzenle.", "Net karar oncesi veri ve icgoru topla."], avoid: ["Hazirlik isteyen konularda acele etme.", "Yetersiz veriyle yon degistirme.", "Icgoruden once kesin karar verme."] }
+    },
+    en: {
+        act: { do: ["Take visible steps in the main focus area.", "Execute decisions in a structured way instead of delaying them.", "Use the current momentum while it is available."], avoid: ["Do not postpone unnecessarily.", "Do not remain stuck in indecision.", "Do not scatter your energy across too many directions."] },
+        act_cautiously: { do: ["Move forward steadily but with restraint.", "Prioritize structure and clarity over speed.", "Break risky decisions into smaller stages."], avoid: ["Avoid sudden emotional decisions.", "Do not take on excessive load.", "Do not magnify risks you cannot control."] },
+        hold: { do: ["Hold major decisions until more clarity emerges.", "Protect the current structure while observing carefully.", "Strengthen planning and preparation."], avoid: ["Do not commit quickly on unstable ground.", "Do not let short-term pressure distort your long-term direction.", "Do not react only to outside noise."] },
+        avoid: { do: ["Protect your energy in high-risk areas.", "Reduce the chance of preventable damage.", "Respond with planning instead of impulse in the main focus area."], avoid: ["Do not open new crisis fronts.", "Do not make major promises under high stress.", "Avoid financial or emotional overreaction."] },
+        prepare: { do: ["Prepare for the next intense period.", "Organize unfinished structures.", "Gather insight before making firm decisions."], avoid: ["Do not rush areas that need preparation.", "Do not change direction with weak data.", "Do not force certainty too early."] }
+    }
+};
+
+function currentLanguage() { return window.APP_LANGUAGE ? window.APP_LANGUAGE.get() : "tr"; }
+function t(key) { const language = currentLanguage(); const dict = resultTranslations[language] || resultTranslations.tr; return dict[key] || key; }
+function titleCase(value) { return String(value || "").replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase()); }
+function localizedConfidence() { return t(`confidence_${resultState.confidenceLevel || "moderate"}`); }
+function localizedDecisionPosture() { return t(`posture_${resultState.decisionPosture || "prepare"}`); }
+function localizedToneMode() { return t(`tone_${resultState.toneMode || "balanced_advisory"}`); }
+function localizedTimingStrategy() { return t(`strategy_${resultState.timingStrategy || "mixed"}`); }
+function localizedText(value) {
+    const language = currentLanguage();
+    const normalized = String(value || "").trim().toLowerCase().replace(/\s+/g, "_");
+    return (focusTranslations[language] && focusTranslations[language][normalized]) || titleCase(value);
+}
+
+function localizeSignsAndBooleans(language) {
+    const signs = signTranslations[language] || signTranslations.tr;
+    document.querySelectorAll("[data-sign-index]").forEach((element) => {
+        const index = Number(element.dataset.signIndex);
+        if (Number.isInteger(index) && signs[index]) element.textContent = signs[index];
+    });
+    document.querySelectorAll("[data-bool-text]").forEach((element) => {
+        const value = element.dataset.boolText === "true";
+        element.textContent = language === "en" ? (value ? "Yes" : "No") : (value ? "Evet" : "Hayir");
+    });
+    document.querySelectorAll("[data-dasha-level]").forEach((element) => {
+        const index = Number(element.dataset.dashaLevel);
+        const key = index === 0 ? "dasha_maha" : index === 1 ? "dasha_antar" : "dasha_pratyantar";
+        element.textContent = t(key);
+    });
+}
+
+function applyResultTranslations(language) {
+    const dict = resultTranslations[language] || resultTranslations.tr;
+    document.querySelectorAll("[data-result-text]").forEach((element) => {
+        const key = element.dataset.resultText;
+        if (dict[key]) { element.textContent = dict[key]; }
+    });
+    document.querySelectorAll("[data-dynamic='decision_posture_label'], [data-dynamic='decision_posture_label_basis']").forEach((el) => { el.textContent = localizedDecisionPosture(); });
+    document.querySelectorAll("[data-dynamic='confidence_label']").forEach((el) => { el.textContent = localizedConfidence(); });
+    document.querySelectorAll("[data-dynamic='tone_mode_label'], [data-dynamic='tone_mode_label_meta']").forEach((el) => { el.textContent = localizedToneMode(); });
+    document.querySelectorAll("[data-dynamic='timing_strategy_label'], [data-dynamic='timing_strategy_label_meta'], [data-dynamic='timing_strategy_label_basis']").forEach((el) => { el.textContent = localizedTimingStrategy(); });
+    ["primary_focus","secondary_focus","primary_focus_meta","hero_focus","hero_area","dominant_life_area"].forEach((name) => {
+        const source = name.includes("secondary") ? resultState.secondaryFocus : name.includes("life_area") || name.includes("hero_area") ? resultState.dominantLifeArea : resultState.primaryFocus;
+        document.querySelectorAll(`[data-dynamic='${name}']`).forEach((el) => { el.textContent = localizedText(source); });
+    });
+    ["dominant_narrative","dominant_narrative_basis","hero_narrative"].forEach((name) => {
+        document.querySelectorAll(`[data-dynamic='${name}']`).forEach((el) => { el.textContent = localizedText(resultState.dominantNarrative); });
+    });
+    localizeSignsAndBooleans(language);
+    renderDecisionLists(language);
+}
+
+window.applyPageTranslations = applyResultTranslations;
+
+function renderDecisionLists(language) {
+    const set = (decisionCopy[language] || decisionCopy.tr)[resultState.decisionPosture] || (decisionCopy[language] || decisionCopy.tr).prepare;
+    const doList = document.getElementById("do-list");
+    const avoidList = document.getElementById("avoid-list");
+    if (!doList || !avoidList) return;
+    doList.innerHTML = "";
+    avoidList.innerHTML = "";
+    set.do.forEach((item) => { const li = document.createElement("li"); li.textContent = item; doList.appendChild(li); });
+    set.avoid.forEach((item) => { const li = document.createElement("li"); li.textContent = item; avoidList.appendChild(li); });
+}
+
+function createLoadingShell() {
+    const wrapper = document.createElement("div");
+    wrapper.className = "loading-shell";
+    for (let i = 0; i < 4; i += 1) {
+        const bar = document.createElement("div");
+        bar.className = "loading-bar";
+        wrapper.appendChild(bar);
+    }
+    return wrapper;
+}
+
+function sectionMeta(title) {
+    const normalized = String(title || "").toUpperCase();
+    if (normalized.includes("RISK")) return { tone: "tone-risk", label: t("risk_label") };
+    if (normalized.includes("FIRSAT") || normalized.includes("OPPORTUNIT")) return { tone: "tone-opportunity", label: t("opportunity_label") };
+    if (normalized.includes("ZAMAN") || normalized.includes("TIMING")) return { tone: "tone-timing", label: t("timing_label") };
+    if (normalized.includes("STRATEJ") || normalized.includes("GUIDANCE")) return { tone: "tone-guidance", label: t("guidance_label") };
+    return { tone: "tone-neutral", label: t("neutral_label") };
+}
+
+function shouldHighlight(text, tone) {
+    const source = String(text || "").toLowerCase();
+    const riskWords = ["risk", "baski", "pressure", "avoid", "kacin", "warning"];
+    const oppWords = ["firsat", "opportunity", "growth", "acilim"];
+    const timingWords = ["zaman", "window", "period", "timing", "peak"];
+    const guideWords = ["oner", "adim", "aksiyon", "strategy", "plan", "yonlendirme"];
+    if (tone === "tone-risk") return riskWords.some((word) => source.includes(word));
+    if (tone === "tone-opportunity") return oppWords.some((word) => source.includes(word));
+    if (tone === "tone-timing") return timingWords.some((word) => source.includes(word));
+    if (tone === "tone-guidance") return guideWords.some((word) => source.includes(word));
+    return false;
+}
+
+function buildBodyBlocks(lines, tone) {
+    const blocks = [];
+    let list = null;
+    lines.forEach((rawLine) => {
+        const line = rawLine.trim();
+        if (!line) return;
+        const listMatch = line.match(/^[-*]\s+(.*)$/);
+        if (listMatch) {
+            if (!list) {
+                list = document.createElement("ul");
+                blocks.push(list);
+            }
+            const li = document.createElement("li");
+            li.textContent = listMatch[1].trim();
+            list.appendChild(li);
+            return;
+        }
+        list = null;
+        if (shouldHighlight(line, tone) && line.length < 120) {
+            const row = document.createElement("div");
+            row.className = "report-pill-row";
+            const pill = document.createElement("span");
+            pill.className = "report-pill";
+            pill.textContent = line;
+            row.appendChild(pill);
+            blocks.push(row);
+            return;
+        }
+        const p = document.createElement("p");
+        p.textContent = line;
+        blocks.push(p);
+    });
+    return blocks;
+}
+
+function renderInterpretationReport(text) {
+    const target = document.getElementById("interpret-output");
+    target.innerHTML = "";
+    if (!text || !String(text).trim()) {
+        const empty = document.createElement("span");
+        empty.className = "empty";
+        empty.textContent = t("empty_ai");
+        target.appendChild(empty);
+        return;
+    }
+    const root = document.createElement("div");
+    root.className = "report-root";
+    const sections = [];
+    let current = { title: "", lines: [] };
+    String(text).split(/\r?\n/).forEach((line) => {
+        if (line.trim().startsWith("###")) {
+            if (current.title || current.lines.length) sections.push(current);
+            current = { title: line.replace(/^###\s*/, "").trim(), lines: [] };
+            return;
+        }
+        current.lines.push(line);
+    });
+    if (current.title || current.lines.length) sections.push(current);
+    const mainTitles = ["RUHSAL", "ZAMAN", "STRATEJ", "MAIN", "TIMING", "GUIDANCE"];
+    sections.forEach((section) => {
+        const meta = sectionMeta(section.title);
+        const wrapper = document.createElement("section");
+        wrapper.className = `report-section ${meta.tone}`;
+        const kicker = document.createElement("div");
+        kicker.className = "report-kicker";
+        kicker.textContent = meta.label;
+        wrapper.appendChild(kicker);
+        if (section.title) {
+            const title = document.createElement("h3");
+            title.className = "report-title";
+            title.textContent = section.title;
+            wrapper.appendChild(title);
+        }
+        const body = document.createElement("div");
+        body.className = "report-body";
+        const blocks = buildBodyBlocks(section.lines, meta.tone);
+        const titleText = String(section.title || "").toUpperCase();
+        const keepOpen = mainTitles.some((token) => titleText.includes(token));
+        const collapsible = blocks.length > 4 && !keepOpen;
+        const previewCount = 3;
+        if (collapsible) {
+            body.classList.add("report-fade");
+            blocks.forEach((block, index) => {
+                if (index >= previewCount) block.style.display = "none";
+                body.appendChild(block);
+            });
+            const toggle = document.createElement("button");
+            toggle.type = "button";
+            toggle.className = "report-toggle";
+            toggle.textContent = t("continue_reading");
+            toggle.addEventListener("click", () => {
+                const expanded = toggle.dataset.expanded === "true";
+                toggle.dataset.expanded = expanded ? "false" : "true";
+                toggle.textContent = expanded ? t("continue_reading") : t("collapse");
+                body.classList.toggle("report-fade", expanded);
+                [...body.children].forEach((child, index) => {
+                    if (index >= previewCount) child.style.display = expanded ? "none" : "";
+                });
+            });
+            wrapper.appendChild(body);
+            wrapper.appendChild(toggle);
+        } else {
+            blocks.forEach((block) => body.appendChild(block));
+            wrapper.appendChild(body);
+        }
+        root.appendChild(wrapper);
+    });
+    target.appendChild(root);
+}
+
+function openPdfPreview() {
+    submitReportForm("/report/pdf-preview");
+}
+
+function openPdfExport() {
+    submitReportForm("/report/pdf");
+}
+
+function submitReportForm(action) {
+    const payloadEl = document.getElementById("payload_json");
+    const interpretationEl = document.getElementById("current_ai_interpretation");
+    if (!payloadEl) return;
+    const payload = JSON.parse(payloadEl.value);
+    payload.language = currentLanguage();
+    if (interpretationEl && interpretationEl.value.trim()) {
+        payload.ai_interpretation = interpretationEl.value;
+    }
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = action;
+    form.target = "_blank";
+    const payloadInput = document.createElement("textarea");
+    payloadInput.name = "payload_json";
+    payloadInput.value = JSON.stringify(payload);
+    const languageInput = document.createElement("input");
+    languageInput.type = "hidden";
+    languageInput.name = "language";
+    languageInput.value = currentLanguage();
+    form.appendChild(payloadInput);
+    form.appendChild(languageInput);
+    document.body.appendChild(form);
+    form.submit();
+    form.remove();
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    applyResultTranslations(currentLanguage());
+    document.querySelectorAll(".tab-button").forEach((button) => {
+        button.addEventListener("click", () => {
+            document.querySelectorAll(".tab-button").forEach((node) => node.classList.remove("active"));
+            document.querySelectorAll(".tab-panel").forEach((node) => node.classList.remove("active"));
+            button.classList.add("active");
+            const panel = document.querySelector(`.tab-panel[data-panel="${button.dataset.tab}"]`);
+            if (panel) panel.classList.add("active");
+        });
+    });
+    const interpretBtn = document.getElementById("interpret-btn");
+    const unlockButtons = Array.from(document.querySelectorAll("[data-unlock-report-btn]"));
+    const emailCaptureForms = Array.from(document.querySelectorAll("[data-email-capture-form]"));
+    const feedbackEntryForms = Array.from(document.querySelectorAll("[data-feedback-entry-form]"));
+    const topPdfPreviewBtn = document.getElementById("top-pdf-preview-btn");
+    const pdfPreviewBtn = document.getElementById("pdf-preview-btn");
+    const pdfExportBtn = document.getElementById("pdf-export-btn");
+    const interpretLoading = document.getElementById("interpret-loading");
+    const interpretOutput = document.getElementById("interpret-output");
+    const payloadEl = document.getElementById("payload_json");
+    const interpretationStore = document.getElementById("current_ai_interpretation");
+    if (topPdfPreviewBtn) {
+        topPdfPreviewBtn.addEventListener("click", openPdfPreview);
+    }
+    if (pdfPreviewBtn) {
+        pdfPreviewBtn.addEventListener("click", openPdfPreview);
+    }
+    if (pdfExportBtn) {
+        pdfExportBtn.addEventListener("click", openPdfExport);
+    }
+    if (emailCaptureForms.length) {
+        emailCaptureForms.forEach((form) => {
+            const input = form.querySelector('input[name="email"]');
+            const status = form.querySelector(".email-capture-status");
+            const submitButton = form.querySelector('button[type="submit"]');
+            let isSubmitting = false;
+
+            function setCaptureStatus(message, tone = "") {
+                if (!status) return;
+                status.textContent = message;
+                status.classList.remove("success", "error");
+                if (tone) status.classList.add(tone);
+            }
+
+            form.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                if (isSubmitting || !input) return;
+                const email = input.value.trim();
+                if (!email) {
+                    setCaptureStatus("Please enter your email to save this reading.", "error");
+                    return;
+                }
+                isSubmitting = true;
+                if (submitButton) submitButton.disabled = true;
+                setCaptureStatus("Saving...");
+                try {
+                    const payload = payloadEl ? JSON.parse(payloadEl.value || "{}") : {};
+                    const response = await fetch("/api/v1/email-capture", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Accept": "application/json",
+                        },
+                        body: JSON.stringify({
+                            email,
+                            report_id: payload.generated_report_id || null,
+                            source: form.dataset.source || "result_page",
+                        }),
+                    });
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok || !data.ok) {
+                        throw new Error((data && data.error) || "email_capture_failed");
+                    }
+                    setCaptureStatus((data && data.message) || "Your reading has been saved for later.", "success");
+                } catch (_error) {
+                    setCaptureStatus("We could not save your email. Please try again.", "error");
+                    if (submitButton) submitButton.disabled = false;
+                    isSubmitting = false;
+                    return;
+                }
+                isSubmitting = false;
+            });
+        });
+    }
+    if (feedbackEntryForms.length) {
+        feedbackEntryForms.forEach((form) => {
+            const ratingInput = form.querySelector('input[name="rating"]');
+            const commentInput = form.querySelector('textarea[name="comment"]');
+            const recommendInput = form.querySelector('input[name="recommend_flag"]');
+            const status = form.querySelector(".feedback-status");
+            const submitButton = form.querySelector('button[type="submit"]');
+            const ratingButtons = Array.from(form.querySelectorAll("[data-feedback-rating]"));
+            let isSubmitting = false;
+            let isSaved = false;
+
+            function setFeedbackEntryStatus(message, tone = "") {
+                if (!status) return;
+                status.textContent = message;
+                status.classList.remove("success", "error");
+                if (tone) status.classList.add(tone);
+            }
+
+            function disableFeedbackEntryForm() {
+                isSaved = true;
+                ratingButtons.forEach((button) => {
+                    button.disabled = true;
+                });
+                if (commentInput) commentInput.disabled = true;
+                if (recommendInput) recommendInput.disabled = true;
+                if (submitButton) submitButton.disabled = true;
+            }
+
+            ratingButtons.forEach((button) => {
+                button.addEventListener("click", () => {
+                    if (isSaved) return;
+                    const value = button.dataset.feedbackRating || "";
+                    if (ratingInput) ratingInput.value = value;
+                    ratingButtons.forEach((choice) => choice.classList.toggle("active", choice === button));
+                    setFeedbackEntryStatus("");
+                });
+            });
+
+            form.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                if (isSubmitting || isSaved) return;
+                const reportId = Number(form.dataset.reportId || 0);
+                if (!reportId) {
+                    setFeedbackEntryStatus(form.dataset.missingReportMessage || "Feedback is unavailable right now.", "error");
+                    return;
+                }
+                if (!ratingInput || !ratingInput.value) {
+                    setFeedbackEntryStatus(form.dataset.missingRatingMessage || "Please choose one option before sending feedback.", "error");
+                    return;
+                }
+
+                isSubmitting = true;
+                if (submitButton) submitButton.disabled = true;
+                setFeedbackEntryStatus(form.dataset.savingMessage || "Saving...");
+
+                try {
+                    const response = await fetch("/api/v1/feedback", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Accept": "application/json",
+                        },
+                        body: JSON.stringify({
+                            report_id: reportId,
+                            report_type: form.dataset.reportType || "premium",
+                            stage: form.dataset.stage || "preview",
+                            rating: ratingInput.value,
+                            comment: commentInput ? commentInput.value.trim() : "",
+                            recommend_flag: recommendInput ? Boolean(recommendInput.checked) : null,
+                        }),
+                    });
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok || !data.ok) {
+                        throw new Error((data && data.error) || "feedback_save_failed");
+                    }
+                    disableFeedbackEntryForm();
+                    setFeedbackEntryStatus(form.dataset.successMessage || "Thanks for your feedback", "success");
+                } catch (_error) {
+                    if (submitButton) submitButton.disabled = false;
+                    setFeedbackEntryStatus(form.dataset.errorMessage || "We could not save your feedback. Please try again.", "error");
+                } finally {
+                    isSubmitting = false;
+                }
+            });
+        });
+    }
+    if (unlockButtons.length && payloadEl) {
+        unlockButtons.forEach((unlockBtn) => {
+            unlockBtn.addEventListener("click", async () => {
+                try {
+                    const payload = JSON.parse(payloadEl.value);
+                    if (!payload.generated_report_id) return;
+                    unlockButtons.forEach((button) => { button.disabled = true; });
+                    const mode = unlockBtn.dataset.checkoutMode || "payment";
+                    const targetUrl = mode === "beta"
+                        ? `/api/v1/reports/${payload.generated_report_id}/beta-unlock`
+                        : `/api/v1/reports/${payload.generated_report_id}/checkout`;
+                    const response = await fetch(targetUrl, {
+                        method: "POST",
+                        headers: { "Accept": "application/json" },
+                    });
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok || !data.ok) {
+                        throw new Error((data && (data.detail || data.error)) || "unlock_failed");
+                    }
+                    const redirectUrl = data && data.redirect_url ? data.redirect_url : `/reports/${payload.generated_report_id}?unlocked=1`;
+                    window.location.href = redirectUrl;
+                } catch (_error) {
+                    unlockButtons.forEach((button) => { button.disabled = false; });
+                }
+            });
+        });
+    }
+    if (interpretBtn && payloadEl) {
+        interpretBtn.addEventListener("click", async () => {
+            interpretBtn.disabled = true;
+            interpretLoading.style.display = "block";
+            interpretOutput.innerHTML = "";
+            interpretOutput.appendChild(createLoadingShell());
+            try {
+                const payload = JSON.parse(payloadEl.value);
+                payload.language = currentLanguage();
+                const response = await fetch("/interpret", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    const err = new Error((data && data.detail) || "request_failed");
+                    err.status = response.status;
+                    throw err;
+                }
+                if (interpretationStore) interpretationStore.value = data && data.interpretation ? data.interpretation : "";
+                renderInterpretationReport(data && data.interpretation ? data.interpretation : "");
+            } catch (error) {
+                interpretOutput.innerHTML = "";
+                if (interpretationStore) interpretationStore.value = "";
+                const empty = document.createElement("span");
+                empty.className = "empty";
+                empty.textContent = error && error.status === 503 ? t("ai_unavailable") : t("ai_error");
+                interpretOutput.appendChild(empty);
+            } finally {
+                interpretLoading.style.display = "none";
+                interpretBtn.disabled = false;
+            }
+        });
+    }
+
+    document.querySelectorAll("[data-feedback-form]").forEach((form) => {
+        let isSubmitting = false;
+        let isSaved = form.dataset.feedbackSaved === "true";
+        const hiddenLabel = form.querySelector('input[name="feedback_label"]');
+        const status = form.querySelector(".feedback-status");
+        const choices = Array.from(form.querySelectorAll("[data-feedback-label]"));
+        const submitButton = form.querySelector('button[type="submit"]');
+        const ratingField = form.querySelector('select[name="user_rating"]');
+        const commentField = form.querySelector('textarea[name="free_text_comment"]');
+
+        function setFeedbackStatus(message, tone = "") {
+            status.textContent = message;
+            status.classList.remove("success", "error");
+            if (tone) {
+                status.classList.add(tone);
+            }
+        }
+
+        choices.forEach((choice) => {
+            choice.addEventListener("click", () => {
+                if (isSaved) return;
+                hiddenLabel.value = choice.dataset.feedbackLabel || "";
+                choices.forEach((item) => item.classList.toggle("active", item === choice));
+                setFeedbackStatus("");
+            });
+        });
+
+        if (isSaved) {
+            submitButton.disabled = true;
+            submitButton.textContent = "Saved";
+            choices.forEach((choice) => {
+                choice.disabled = true;
+            });
+            if (ratingField) ratingField.disabled = true;
+            if (commentField) commentField.disabled = true;
+            setFeedbackStatus("You already saved feedback for this theme.", "success");
+        }
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            if (isSubmitting || isSaved) {
+                return;
+            }
+            if (!hiddenLabel.value) {
+                setFeedbackStatus("Please choose one relevance option before saving.", "error");
+                return;
+            }
+
+            const payload = {
+                report_id: Number(form.dataset.reportId),
+                anchor_rank: Number(form.dataset.anchorRank),
+                feedback_label: hiddenLabel.value,
+            };
+            if (ratingField && ratingField.value) {
+                payload.user_rating = Number(ratingField.value);
+            }
+            if (commentField && commentField.value.trim()) {
+                payload.free_text_comment = commentField.value.trim();
+            }
+
+            isSubmitting = true;
+            submitButton.disabled = true;
+            setFeedbackStatus("Saving...");
+
+            try {
+                const response = await fetch("/api/v1/interpretation-feedback", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Accept": "application/json",
+                    },
+                    body: JSON.stringify(payload),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || !data.ok) {
+                    throw new Error(data.error || "save_failed");
+                }
+                isSaved = true;
+                submitButton.textContent = "Saved";
+                choices.forEach((choice) => {
+                    choice.disabled = true;
+                });
+                if (ratingField) ratingField.disabled = true;
+                if (commentField) commentField.disabled = true;
+                setFeedbackStatus("Thanks — this helps us improve the relevance of future interpretations.", "success");
+            } catch (_error) {
+                submitButton.disabled = false;
+                isSubmitting = false;
+                setFeedbackStatus("We could not save your feedback. Please try again.", "error");
+                return;
+            }
+
+            isSubmitting = false;
+        });
+    });
+
+    document.querySelectorAll("[data-recommendation-feedback-form]").forEach((form) => {
+        let isSubmitting = false;
+        let isSaved = form.dataset.feedbackSaved === "true";
+        const hiddenLabel = form.querySelector('input[name="user_feedback_label"]');
+        const status = form.querySelector(".feedback-status");
+        const choices = Array.from(form.querySelectorAll("[data-recommendation-label]"));
+        const submitButton = form.querySelector('button[type="submit"]');
+        const ratingField = form.querySelector('select[name="user_rating"]');
+        const commentField = form.querySelector('textarea[name="free_text_comment"]');
+        const actedField = form.querySelector('input[name="acted_on"]');
+        const alreadyActedField = form.querySelector('input[name="already_acted"]');
+        const savedField = form.querySelector('input[name="saved_for_later"]');
+
+        function setRecommendationStatus(message, tone = "") {
+            status.textContent = message;
+            status.classList.remove("success", "error");
+            if (tone) {
+                status.classList.add(tone);
+            }
+        }
+
+        choices.forEach((choice) => {
+            choice.addEventListener("click", () => {
+                if (isSaved) return;
+                hiddenLabel.value = choice.dataset.recommendationLabel || "";
+                choices.forEach((item) => item.classList.toggle("active", item === choice));
+                setRecommendationStatus("");
+            });
+        });
+
+        if (isSaved) {
+            submitButton.disabled = true;
+            submitButton.textContent = "Saved";
+            choices.forEach((choice) => {
+                choice.disabled = true;
+            });
+            form.querySelectorAll("input, select, textarea").forEach((field) => {
+                field.disabled = true;
+            });
+            setRecommendationStatus("You already saved feedback for this recommendation.", "success");
+        }
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            if (isSubmitting || isSaved) {
+                return;
+            }
+            if (!hiddenLabel.value) {
+                setRecommendationStatus("Please choose one usefulness option before saving.", "error");
+                return;
+            }
+
+            const payload = {
+                report_id: Number(form.dataset.reportId),
+                recommendation_index: Number(form.dataset.recommendationIndex),
+                user_feedback_label: hiddenLabel.value,
+                acted_on: Boolean((actedField && actedField.checked) || (alreadyActedField && alreadyActedField.checked)),
+                saved_for_later: Boolean(savedField && savedField.checked),
+            };
+            if (ratingField && ratingField.value) {
+                payload.user_rating = Number(ratingField.value);
+            }
+            if (commentField && commentField.value.trim()) {
+                payload.free_text_comment = commentField.value.trim();
+            }
+
+            isSubmitting = true;
+            submitButton.disabled = true;
+            setRecommendationStatus("Saving...");
+
+            try {
+                const response = await fetch("/api/v1/recommendation-feedback", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Accept": "application/json",
+                    },
+                    body: JSON.stringify(payload),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || !data.ok) {
+                    throw new Error(data.error || "save_failed");
+                }
+                isSaved = true;
+                submitButton.textContent = "Saved";
+                choices.forEach((choice) => {
+                    choice.disabled = true;
+                });
+                form.querySelectorAll("input, select, textarea").forEach((field) => {
+                    field.disabled = true;
+                });
+                setRecommendationStatus("Thanks — this helps us improve your recommendations.", "success");
+            } catch (_error) {
+                submitButton.disabled = false;
+                isSubmitting = false;
+                setRecommendationStatus("We could not save your feedback. Please try again.", "error");
+                return;
+            }
+
+            isSubmitting = false;
+        });
+    });
+});
+</script>
+{% endblock %}

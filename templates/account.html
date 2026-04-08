@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}Jyotish | Hesabim{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <h1 class="hero-title" style="font-size:2.5rem;">Hesabim</h1>
+            <p class="hero-text">{{ dashboard_user.email }} • {{ plan_features.label }} Plan</p>
+            <div class="grid-2" style="margin-top:24px;">
+                <div class="metric-card">
+                    <div class="metric-label">Kullanici</div>
+                    <div class="metric-value">{{ dashboard_user.name or dashboard_user.email }}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Plan Ozellikleri</div>
+                    <div class="metric-value">{{ ", ".join(plan_features.allowed_report_types) }}</div>
+                </div>
+            </div>
+            <form action="/account/plan" method="post" style="display:grid; gap:16px; max-width:360px; margin-top:24px;">
+                <label for="plan_code">Plan Degistir (yerel test)</label>
+                <select id="plan_code" name="plan_code">
+                    <option value="free">Free</option>
+                    <option value="basic">Basic</option>
+                    <option value="premium">Full</option>
+                    <option value="elite">Elite</option>
+                </select>
+                <button class="btn btn-secondary" type="submit">Plani Guncelle</button>
+            </form>
+        </div>
+    </div>
+</section>
+{% endblock %}

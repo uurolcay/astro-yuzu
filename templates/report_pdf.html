@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="{{ language }}">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ report_title }}</title>
+    <link rel="preload" href="/static/focus-logo.png" as="image">
+    <style>
+        @page { size: A4; margin: 14mm; }
+        :root {
+            --bg: #0f172a;
+            --bg-soft: #111c33;
+            --panel: rgba(15, 23, 42, 0.92);
+            --panel-soft: rgba(255, 255, 255, 0.04);
+            --line: rgba(212, 175, 55, 0.24);
+            --line-strong: rgba(212, 175, 55, 0.48);
+            --gold: #d4af37;
+            --gold-soft: #f3e3a8;
+            --text: #f8f4ea;
+            --muted: #c8bc9f;
+            --muted-soft: #a9997e;
+            --shadow: 0 18px 44px rgba(0, 0, 0, 0.24);
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            color: var(--text);
+            font-family: Georgia, "Times New Roman", serif;
+            background:
+                radial-gradient(circle at 12% 8%, rgba(212, 175, 55, 0.10), transparent 28%),
+                radial-gradient(circle at 88% 6%, rgba(255, 255, 255, 0.05), transparent 24%),
+                linear-gradient(180deg, rgba(255,255,255,0.02), transparent 18%, transparent 84%, rgba(212,175,55,0.04)),
+                var(--bg);
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        .report-shell {
+            max-width: 820px;
+            margin: 0 auto;
+            padding: 28px 0 32px;
+        }
+        .print-tools {
+            position: fixed;
+            right: 16px;
+            bottom: 16px;
+            z-index: 10;
+            display: flex;
+            gap: 8px;
+        }
+        .print-btn {
+            border: 1px solid rgba(212, 175, 55, 0.52);
+            background: rgba(15, 23, 42, 0.94);
+            color: var(--text);
+            border-radius: 999px;
+            padding: 10px 14px;
+            font: inherit;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .cover-card,
+        .section-card,
+        .trust-card,
+        .footer-card {
+            background: linear-gradient(180deg, rgba(17, 28, 51, 0.98), rgba(15, 23, 42, 0.96));
+            border: 1px solid var(--line);
+            border-radius: 26px;
+            box-shadow: var(--shadow);
+        }
+        .cover-card {
+            padding: 28px 30px 26px;
+            min-height: 250px;
+            position: relative;
+            overflow: hidden;
+        }
+        .cover-card::after {
+            content: "";
+            position: absolute;
+            inset: 12px;
+            border: 1px solid rgba(255,255,255,0.04);
+            border-radius: 18px;
+            pointer-events: none;
+        }
+        .section-card,
+        .trust-card,
+        .footer-card {
+            padding: 22px 24px;
+            margin-top: 18px;
+        }
+        .section-card,
+        .trust-card,
+        .anchor-card,
+        .recommendation-card,
+        .window-card,
+        .note-card,
+        .reading-card {
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+        .cover-top,
+        .section-head,
+        .footer-row,
+        .meta-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+        }
+        .cover-top {
+            align-items: flex-start;
+            margin-bottom: 26px;
+        }
+        .brand-lockup {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+        }
+        .brand-logo {
+            width: 210px;
+            max-width: 100%;
+            height: auto;
+            display: block;
+        }
+        .brand-watermark {
+            width: 120px;
+            height: auto;
+            opacity: 0.38;
+        }
+        .eyebrow,
+        .meta-label,
+        .pill,
+        .footer-copy,
+        .minor-note {
+            text-transform: uppercase;
+            letter-spacing: 0.18em;
+            font-size: 10px;
+            color: var(--muted-soft);
+        }
+        .divider {
+            width: 100%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.9), transparent);
+            margin: 16px 0 18px;
+        }
+        .display-title {
+            margin: 0;
+            font-size: 34px;
+            line-height: 1.08;
+            letter-spacing: 0.03em;
+        }
+        .display-subtitle,
+        .section-lead,
+        .anchor-copy,
+        .recommendation-copy,
+        .body-copy,
+        .status-note,
+        li {
+            color: var(--muted);
+            line-height: 1.74;
+            font-size: 14px;
+        }
+        .hero-copy {
+            color: var(--text);
+            font-size: 20px;
+            line-height: 1.72;
+            margin: 0;
+        }
+        .section-title {
+            margin: 0;
+            font-size: 25px;
+            line-height: 1.16;
+            letter-spacing: 0.04em;
+        }
+        .pill-row,
+        .meta-grid,
+        .promise-grid,
+        .anchor-grid,
+        .recommendation-grid,
+        .window-grid,
+        .notes-grid,
+        .reading-grid {
+            display: grid;
+            gap: 14px;
+        }
+        .pill-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 7px 11px;
+            border-radius: 999px;
+            border: 1px solid var(--line-strong);
+            color: var(--gold-soft);
+        }
+        .meta-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+        .promise-grid {
+            grid-template-columns: repeat(3, 1fr);
+            margin-top: 18px;
+        }
+        .anchor-grid,
+        .recommendation-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        .window-grid,
+        .reading-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        .notes-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+        .meta-card,
+        .promise-card,
+        .anchor-card,
+        .recommendation-card,
+        .window-card,
+        .note-card,
+        .reading-card {
+            border: 1px solid rgba(212, 175, 55, 0.18);
+            border-radius: 20px;
+            padding: 16px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02));
+        }
+        .meta-value {
+            color: var(--text);
+            line-height: 1.65;
+            font-size: 14px;
+        }
+        .promise-card {
+            padding: 14px 15px;
+        }
+        .card-title {
+            margin: 0 0 10px;
+            font-size: 18px;
+            color: var(--gold-soft);
+            line-height: 1.3;
+        }
+        .micro-title {
+            margin: 0 0 8px;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: var(--gold-soft);
+        }
+        .callout {
+            border-left: 2px solid rgba(212, 175, 55, 0.65);
+            padding-left: 12px;
+            margin-top: 12px;
+        }
+        ul {
+            margin: 0;
+            padding-left: 18px;
+        }
+        li + li {
+            margin-top: 8px;
+        }
+        .status-note {
+            border: 1px dashed rgba(212, 175, 55, 0.42);
+            border-radius: 16px;
+            padding: 14px 15px;
+            margin: 0 0 14px;
+        }
+        .footer-card {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .footer-row {
+            align-items: center;
+        }
+        .footer-brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+        .footer-logo {
+            width: 110px;
+            height: auto;
+            opacity: 0.8;
+        }
+        .page-hint {
+            color: var(--muted-soft);
+            font-size: 11px;
+        }
+        @media print {
+            .print-tools { display: none; }
+        }
+    </style>
+</head>
+<body>
+    {% set request_host = request.headers.get('host', '') if request is defined and request else '' %}
+    {% set logo_src = request.url_for('static', path='focus-logo.png') if request is defined and request and request_host != 'testserver' else 'static/focus-logo.png' %}
+    {% set primary_anchor = top_anchors[0] if top_anchors else None %}
+    {% set primary_recommendation = top_recommendations[0] if top_recommendations else None %}
+    {% set child_profile_report = child_profile_report if child_profile_report is defined else {} %}
+    {% set relationship_dynamics_report = relationship_dynamics_report if relationship_dynamics_report is defined else {} %}
+    {% set school_guidance_report = school_guidance_report if school_guidance_report is defined else {} %}
+    {% set parenting_guidance_report = parenting_guidance_report if parenting_guidance_report is defined else {} %}
+    {% set watch_areas_report = watch_areas_report if watch_areas_report is defined else [] %}
+    {% set growth_guidance_report = growth_guidance_report if growth_guidance_report is defined else {} %}
+    {% set timing_notes_report = timing_notes_report if timing_notes_report is defined else [] %}
+    {% set decision_items = decision_items if decision_items is defined else {"do": [], "avoid": []} %}
+    <div class="report-shell">
+        <div class="print-tools">
+            <button class="print-btn" type="button" onclick="window.print()">{{ t("pdf.print_button", language) }}</button>
+        </div>
+
+        <section class="cover-card">
+            <div class="cover-top">
+                <div class="brand-lockup">
+                    <img class="brand-logo" src="{{ logo_src }}" alt="Focus Astrology logo">
+                </div>
+                <div class="pill-row" style="margin-bottom:0; justify-content:flex-end;">
+                    <span class="pill">{{ report_type_label }}</span>
+                    {% if report_access and report_access.is_preview %}
+                    <span class="pill">{{ t("pdf.preview_access", language) }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="divider"></div>
+            <div class="eyebrow">{{ t("pdf.report_subtitle", language) }}</div>
+            <h1 class="display-title">{{ report_title }}</h1>
+            <p class="display-subtitle">{{ report_subtitle }}</p>
+            <div class="promise-grid">
+                <div class="promise-card">
+                    <div class="meta-label">{{ t("pdf.promise_inside_label", language) }}</div>
+                    <div class="meta-value">{{ t("pdf.promise_inside_value", language) }}</div>
+                </div>
+                <div class="promise-card">
+                    <div class="meta-label">{{ t("pdf.promise_receive_label", language) }}</div>
+                    <div class="meta-value">
+                        {% if report_type == "parent_child" %}
+                        {{ t("pdf.promise_receive_child", language) }}
+                        {% else %}
+                        {{ t("pdf.promise_receive_personal", language) }}
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="promise-card">
+                    <div class="meta-label">{{ t("pdf.promise_designed_label", language) }}</div>
+                    <div class="meta-value">{{ t("pdf.promise_designed_value", language) }}</div>
+                </div>
+            </div>
+            <div class="meta-grid" style="margin-top:22px;">
+                <div class="meta-card">
+                    <div class="meta-label">{{ t("pdf.prepared_for", language) }}</div>
+                    <div class="meta-value">{{ client_name }}</div>
+                </div>
+                <div class="meta-card">
+                    <div class="meta-label">{{ t("pdf.birth_details", language) }}</div>
+                    <div class="meta-value">{{ birth_summary }}</div>
+                </div>
+                <div class="meta-card">
+                    <div class="meta-label">{{ t("pdf.current_focus", language) }}</div>
+                    <div class="meta-value">{{ primary_focus_label }}</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section-card">
+            <div class="section-head">
+                <div>
+                    <div class="eyebrow">{{ t("pdf.first_read", language) }}</div>
+                    <h2 class="section-title">{{ t("pdf.meaning_title", language) }}</h2>
+                </div>
+                <div class="minor-note">{{ generated_at }}</div>
+            </div>
+            <div class="divider"></div>
+            {% if report_access and report_access.is_preview %}
+            <div class="status-note">{{ t("pdf.preview_notice", language) }}</div>
+            {% endif %}
+            {% if access_notice %}
+            <div class="status-note">{{ access_notice }}</div>
+            {% endif %}
+            {% if ai_status_note %}
+            <div class="status-note">{{ ai_status_note }}</div>
+            {% endif %}
+            <p class="hero-copy">
+                {% if primary_recommendation and primary_recommendation.reasoning %}
+                    {{ primary_recommendation.reasoning }}
+                {% elif primary_anchor and primary_anchor.summary %}
+                    {{ primary_anchor.summary }}
+                {% else %}
+                    {{ t("pdf.fallback_meaning", language) }}
+                {% endif %}
+            </p>
+            <div class="window-grid" style="margin-top:18px;">
+                <div class="window-card">
+                    <div class="meta-label">{{ t("pdf.primary_theme", language) }}</div>
+                    <h3 class="card-title">{{ primary_anchor.title if primary_anchor else primary_focus_label }}</h3>
+                    <p class="anchor-copy">{{ primary_anchor.why_it_matters if primary_anchor and primary_anchor.why_it_matters else t("pdf.primary_theme_fallback", language) }}</p>
+                </div>
+                <div class="window-card">
+                    <div class="meta-label">{{ t("pdf.recommended_focus", language) }}</div>
+                    <h3 class="card-title">{{ primary_recommendation.title if primary_recommendation else secondary_focus_label }}</h3>
+                    <p class="anchor-copy">{{ primary_recommendation.time_window if primary_recommendation and primary_recommendation.time_window else t("pdf.recommended_focus_fallback", language) }}</p>
+                </div>
+            </div>
+        </section>
+
+        {% if report_type == "parent_child" %}
+        <section class="section-card">
+            <div class="section-head">
+                <div>
+                    <div class="eyebrow">{{ t("pdf.family_layer", language) }}</div>
+                    <h2 class="section-title">{{ t("pdf.parent_child_guidance", language) }}</h2>
+                </div>
+            </div>
+            <div class="divider"></div>
+            <div class="reading-grid">
+                <article class="reading-card">
+                    <h3 class="card-title">{{ t("pdf.child_core_nature", language) }}</h3>
+                    <p class="body-copy">{{ child_profile_report.temperament }}</p>
+                    <div class="callout"><strong>{{ t("pdf.emotional_needs", language) }}:</strong> {{ child_profile_report.emotional_needs }}</div>
+                </article>
+                <article class="reading-card">
+                    <h3 class="card-title">{{ t("pdf.parent_child_dynamic", language) }}</h3>
+                    <p class="body-copy">{{ relationship_dynamics_report.emotional_compatibility }}</p>
+                    <div class="callout"><strong>{{ t("pdf.communication", language) }}:</strong> {{ relationship_dynamics_report.communication_style_difference }}</div>
+                </article>
+                <article class="reading-card">
+                    <h3 class="card-title">{{ t("pdf.school_growth_guidance", language) }}</h3>
+                    <p class="body-copy">{{ school_guidance_report.learning_style }}</p>
+                    <div class="callout"><strong>{{ t("pdf.attention_pattern", language) }}:</strong> {{ school_guidance_report.attention_tendency }}</div>
+                </article>
+                <article class="reading-card">
+                    <h3 class="card-title">{{ t("pdf.recommended_approach", language) }}</h3>
+                    <p class="body-copy">{{ parenting_guidance_report.best_support }}</p>
+                    <div class="callout"><strong>{{ t("pdf.what_works_best", language) }}:</strong> {{ parenting_guidance_report.communication_guidance }}</div>
+                </article>
+            </div>
+            {% if watch_areas_report %}
+            <div class="status-note" style="margin-top:16px;">
+                <strong>{{ t("pdf.watch_areas", language) }}:</strong>
+                {{ watch_areas_report[:4]|join("; ") }}
+            </div>
+            {% endif %}
+            {% if growth_guidance_report %}
+            <div class="status-note">
+                <strong>{{ t("pdf.growth_path", language) }}:</strong>
+                {{ growth_guidance_report.thrive_support }} {{ growth_guidance_report.relationship_strengthening }}
+            </div>
+            {% endif %}
+            {% if timing_notes_report %}
+            <div class="status-note">
+                <strong>{{ t("pdf.timing_note", language) }}:</strong>
+                {{ timing_notes_report[0].title }} - {{ timing_notes_report[0].note }}
+            </div>
+            {% endif %}
+        </section>
+        {% endif %}
+
+        {% if top_anchors %}
+        <section class="section-card">
+            <div class="section-head">
+                <div>
+                    <div class="eyebrow">{{ t("pdf.interpretation_layer", language) }}</div>
+                    <h2 class="section-title">{{ t("pdf.core_themes", language) }}</h2>
+                </div>
+                <div class="section-lead">{{ t("pdf.core_themes_lead", language) }}</div>
+            </div>
+            <div class="divider"></div>
+            <div class="anchor-grid">
+                {% for anchor in top_anchors[:3] %}
+                <article class="anchor-card">
+                    <div class="pill-row">
+                        <span class="pill">{{ t("pdf.theme", language) }} {{ anchor.rank or loop.index }}</span>
+                    </div>
+                    <h3 class="card-title">{{ anchor.title }}</h3>
+                    {% if anchor.summary %}<p class="anchor-copy">{{ anchor.summary }}</p>{% endif %}
+                    {% if anchor.why_it_matters %}
+                    <div class="callout">
+                        <div class="micro-title">{{ t("pdf.why_this_matters", language) }}</div>
+                        <div class="body-copy">{{ anchor.why_it_matters }}</div>
+                    </div>
+                    {% endif %}
+                    {% if anchor.opportunity %}
+                    <div class="callout">
+                        <div class="micro-title">{{ t("pdf.opportunity", language) }}</div>
+                        <div class="body-copy">{{ anchor.opportunity }}</div>
+                    </div>
+                    {% endif %}
+                    {% if anchor.risk %}
+                    <div class="callout">
+                        <div class="micro-title">{{ t("pdf.watch_for", language) }}</div>
+                        <div class="body-copy">{{ anchor.risk }}</div>
+                    </div>
+                    {% endif %}
+                </article>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+
+        {% if top_recommendations or opportunity_windows_report or risk_windows_report or show_action_guidance %}
+        <section class="section-card">
+            <div class="section-head">
+                <div>
+                    <div class="eyebrow">{{ t("pdf.action_layer", language) }}</div>
+                    <h2 class="section-title">{{ t("pdf.recommended_focus_now", language) }}</h2>
+                </div>
+                <div class="section-lead">{{ t("pdf.recommended_focus_lead", language) }}</div>
+            </div>
+            <div class="divider"></div>
+            {% if top_recommendations %}
+            <div class="recommendation-grid">
+                {% for item in top_recommendations %}
+                <article class="recommendation-card">
+                    <div class="pill-row">
+                        {% if item.priority_label %}<span class="pill">{{ item.priority_label }}</span>{% endif %}
+                        {% if item.time_window %}<span class="pill">{{ item.time_window }}</span>{% endif %}
+                        {% if item.type_label %}<span class="pill">{{ item.type_label }}</span>{% endif %}
+                    </div>
+                    <h3 class="card-title">{{ item.title }}</h3>
+                    {% if item.reasoning %}<p class="recommendation-copy">{{ item.reasoning }}</p>{% endif %}
+                    {% if item.linked_anchor_title %}
+                    <div class="callout">
+                        <div class="micro-title">{{ t("pdf.linked_theme", language) }}</div>
+                        <div class="body-copy">{{ item.linked_anchor_title }}</div>
+                    </div>
+                    {% endif %}
+                </article>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if opportunity_windows_report or risk_windows_report %}
+            <div class="window-grid" style="margin-top:16px;">
+                {% if opportunity_windows_report %}
+                <div class="window-card">
+                    <div class="meta-label">{{ t("pdf.opportunity_windows", language) }}</div>
+                    <ul>
+                        {% for item in opportunity_windows_report[:3] %}
+                        <li><strong>{{ item.title }}</strong>{% if item.time_window %} - {{ item.time_window }}{% endif %}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+                {% if risk_windows_report %}
+                <div class="window-card">
+                    <div class="meta-label">{{ t("pdf.risk_windows", language) }}</div>
+                    <ul>
+                        {% for item in risk_windows_report[:3] %}
+                        <li><strong>{{ item.title }}</strong>{% if item.time_window %} - {{ item.time_window }}{% endif %}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+            {% if show_action_guidance %}
+            <div class="reading-grid" style="margin-top:16px;">
+                <div class="reading-card">
+                    <div class="meta-label">{{ t("pdf.do", language) }}</div>
+                    <ul>
+                        {% for item in decision_items.do %}
+                        <li>{{ item }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div class="reading-card">
+                    <div class="meta-label">{{ t("pdf.avoid", language) }}</div>
+                    <ul>
+                        {% for item in decision_items.avoid %}
+                        <li>{{ item }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+        </section>
+        {% endif %}
+
+        <section class="section-card">
+            <div class="section-head">
+                <div>
+                    <div class="eyebrow">{{ t("pdf.how_to_use", language) }}</div>
+                    <h2 class="section-title">{{ t("pdf.return_when_title", language) }}</h2>
+                </div>
+                <div class="section-lead">{{ t("pdf.return_when_lead", language) }}</div>
+            </div>
+            <div class="divider"></div>
+            <div class="reading-grid">
+                <article class="reading-card">
+                    <h3 class="card-title">{{ t("pdf.best_revisited_when", language) }}</h3>
+                    <p class="body-copy">
+                        {% if report_type == "parent_child" %}
+                        {{ t("pdf.best_revisited_when_child", language) }}
+                        {% else %}
+                        {{ t("pdf.best_revisited_when_personal", language) }}
+                        {% endif %}
+                    </p>
+                </article>
+                <article class="reading-card">
+                    <h3 class="card-title">{{ t("pdf.keep_in_mind", language) }}</h3>
+                    <p class="body-copy">
+                        {% if report_type == "parent_child" %}
+                        {{ t("pdf.keep_in_mind_child", language) }}
+                        {% else %}
+                        {{ t("pdf.keep_in_mind_personal", language) }}
+                        {% endif %}
+                    </p>
+                </article>
+            </div>
+        </section>
+
+        {% if ai_sections %}
+        <section class="section-card">
+            <div class="section-head">
+                <div>
+                    <div class="eyebrow">Focus Astrology</div>
+                    <h2 class="section-title">{{ t("pdf.deeper_reading", language) }}</h2>
+                </div>
+                <div class="section-lead">{{ t("pdf.deeper_reading_lead", language) }}</div>
+            </div>
+            <div class="divider"></div>
+            {% for section in ai_sections %}
+            <article class="reading-card" style="margin-top:{% if loop.first %}0{% else %}14px{% endif %};">
+                {% if section["title"] %}<h3 class="card-title">{{ section["title"] }}</h3>{% endif %}
+                {% for block in section["blocks"] %}
+                    {% if block["type"] == "paragraph" %}
+                    <p class="body-copy" style="margin:0 0 10px;">{{ block["text"] }}</p>
+                    {% elif block["items"] %}
+                    <ul>
+                        {% for item in block["items"] %}
+                        <li>{{ item }}</li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                {% endfor %}
+            </article>
+            {% endfor %}
+        </section>
+        {% endif %}
+
+        <section class="trust-card">
+            <div class="section-head">
+                <div>
+                    <div class="eyebrow">{{ t("pdf.trust_layer", language) }}</div>
+                    <h2 class="section-title">{{ t("pdf.calculation_notes", language) }}</h2>
+                </div>
+                <div class="section-lead">{{ t("pdf.calculation_notes_lead", language) }}</div>
+            </div>
+            <div class="divider"></div>
+            <div class="notes-grid">
+                {% for item in methodology_notes %}
+                <div class="note-card">
+                    <div class="meta-label">{{ item.label }}</div>
+                    <div class="meta-value">{{ item.value }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <footer class="footer-card">
+            <div class="footer-row">
+                <div class="footer-brand">
+                    <img class="footer-logo" src="{{ logo_src }}" alt="Focus Astrology logo">
+                    <div>
+                        <div class="footer-copy">Focus Astrology</div>
+                        <div class="section-lead" style="margin:4px 0 0;">{{ t("pdf.report_subtitle", language) }}</div>
+                    </div>
+                </div>
+                <div class="page-hint">{{ t("pdf.client_copy", language) }}</div>
+            </div>
+            <div class="footer-row">
+                <img class="brand-watermark" src="{{ logo_src }}" alt="">
+                <div class="page-hint">{{ generated_at }}</div>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>

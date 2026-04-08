@@ -1,0 +1,332 @@
+{
+  "besiktas, turkiye": {
+    "raw_input": "Besiktas, Türkiye",
+    "normalized_place": "Beşiktaş, Istanbul, Marmara Region, Turkey",
+    "latitude": 41.042847,
+    "longitude": 29.007528,
+    "timezone": "Europe/Istanbul",
+    "provider": "nominatim",
+    "confidence": 0.55,
+    "cache_hit": false,
+    "location_source": "provider:nominatim"
+  },
+  "search::levent::5": {
+    "results": [
+      {
+        "display_name": "Levent, Levent Mahallesi, Yüreğir, Turkey",
+        "normalized_place": "Levent, Levent Mahallesi, Yüreğir, Adana, Mediterranean Region, 01285, Turkey",
+        "latitude": 36.978969,
+        "longitude": 35.376492,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.65,
+        "raw_input": "levent",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Levent Mahallesi, Beşiktaş, Turkey",
+        "normalized_place": "Levent Mahallesi, Beşiktaş, Istanbul, Marmara Region, Turkey",
+        "latitude": 41.081572,
+        "longitude": 29.01695,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.55,
+        "raw_input": "levent",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Levent Mahallesi, Konak, İzmir, Turkey",
+        "normalized_place": "Levent Mahallesi, İzmir, Konak, Aegean Region, Turkey",
+        "latitude": 38.41624,
+        "longitude": 27.165923,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.55,
+        "raw_input": "levent",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Levent Mahallesi, Yüreğir, Turkey",
+        "normalized_place": "Levent Mahallesi, Yüreğir, Adana, Mediterranean Region, 01285, Turkey",
+        "latitude": 36.978226,
+        "longitude": 35.378461,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.55,
+        "raw_input": "levent",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Levent Neighborhood, Bandırma, Turkey",
+        "normalized_place": "Levent Neighborhood, Bandırma, Balıkesir, Marmara Region, Turkey",
+        "latitude": 40.35865,
+        "longitude": 27.99606,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.55,
+        "raw_input": "levent",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      }
+    ]
+  },
+  "search::le::5": {
+    "results": [
+      {
+        "display_name": "Apulia, Italy",
+        "normalized_place": "Lecce, Apulia, Italy",
+        "latitude": 40.152217,
+        "longitude": 18.226063,
+        "timezone": "Europe/Rome",
+        "provider": "nominatim",
+        "confidence": 0.55,
+        "raw_input": "le",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      }
+    ]
+  },
+  "search::st::5": {
+    "results": [
+      {
+        "display_name": "Kansas, United States",
+        "normalized_place": "Stanton County, Kansas, United States",
+        "latitude": 37.569107,
+        "longitude": -101.793565,
+        "timezone": "America/Chicago",
+        "provider": "nominatim",
+        "confidence": 0.55,
+        "raw_input": "st",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Moldova",
+        "normalized_place": "Strășeni District, Moldova",
+        "latitude": 47.161794,
+        "longitude": 28.54277,
+        "timezone": "Europe/Chisinau",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "st",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      }
+    ]
+  },
+  "search::pforzheim::5": {
+    "results": [
+      {
+        "display_name": "Pforzheim, Baden-Württemberg, Germany",
+        "normalized_place": "Pforzheim, Baden-Württemberg, Germany",
+        "latitude": 48.890934,
+        "longitude": 8.702551,
+        "timezone": "Europe/Berlin",
+        "provider": "nominatim",
+        "confidence": 0.55,
+        "raw_input": "pforzheim",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      }
+    ]
+  },
+  "search::stow::5": {
+    "results": [
+      {
+        "display_name": "Stow, Ohio, United States",
+        "normalized_place": "Stow, Summit County, Ohio, United States",
+        "latitude": 41.159626,
+        "longitude": -81.440626,
+        "timezone": "America/New_York",
+        "provider": "nominatim",
+        "confidence": 0.55,
+        "raw_input": "stow",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Stow, South Australia, Australia",
+        "normalized_place": "Stow, Wakefield Regional Council, South Australia, 5461, Australia",
+        "latitude": -34.006444,
+        "longitude": 138.413475,
+        "timezone": "Australia/Adelaide",
+        "provider": "nominatim",
+        "confidence": 0.55,
+        "raw_input": "stow",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Massachusetts, United States",
+        "normalized_place": "Stow, Middlesex County, Massachusetts, 01775, United States",
+        "latitude": 42.436595,
+        "longitude": -71.505001,
+        "timezone": "America/New_York",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "stow",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Maine, United States",
+        "normalized_place": "Stow, Oxford County, Maine, 04037, United States",
+        "latitude": 44.161026,
+        "longitude": -70.985413,
+        "timezone": "America/New_York",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "stow",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Scotland, United Kingdom",
+        "normalized_place": "Stow, Station Yard, Stow, Scottish Borders, Scotland, TD1 2SQ, United Kingdom",
+        "latitude": 55.691857,
+        "longitude": -2.866821,
+        "timezone": "Europe/London",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "stow",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      }
+    ]
+  },
+  "search::pf::5": {
+    "results": [
+      {
+        "display_name": "Madhya Pradesh, India",
+        "normalized_place": "Pf, Gajwara, Khandwa Tahsil, Khandwa, Madhya Pradesh, India",
+        "latitude": 21.949922,
+        "longitude": 76.296972,
+        "timezone": "Asia/Kolkata",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "pf",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Madhya Pradesh, India",
+        "normalized_place": "Pf, Badwara, Badwara Tahsil, Katni, Madhya Pradesh, India",
+        "latitude": 23.806529,
+        "longitude": 80.538633,
+        "timezone": "Asia/Kolkata",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "pf",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Madhya Pradesh, India",
+        "normalized_place": "Pf, Bilas, Guna Tahsil, Guna, Madhya Pradesh, India",
+        "latitude": 24.660693,
+        "longitude": 77.201726,
+        "timezone": "Asia/Kolkata",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "pf",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Madhya Pradesh, India",
+        "normalized_place": "Pf, Chitrangi Tahsil, Singrauli, Madhya Pradesh, India",
+        "latitude": 24.215863,
+        "longitude": 82.724212,
+        "timezone": "Asia/Kolkata",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "pf",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Madhya Pradesh, India",
+        "normalized_place": "PF, Ratlam Nagar Tahsil, Ratlam, Madhya Pradesh, India",
+        "latitude": 23.404877,
+        "longitude": 74.920225,
+        "timezone": "Asia/Kolkata",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "pf",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      }
+    ]
+  },
+  "search::pfo::5": {
+    "results": []
+  },
+  "search::besi::5": {
+    "results": [
+      {
+        "display_name": "Kosovo",
+        "normalized_place": "Besi, Municipality of Pristina, District of Prishtina, 10520, Kosovo",
+        "latitude": 42.753852,
+        "longitude": 21.146061,
+        "timezone": "Europe/Belgrade",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "besi",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Maluku, Indonesia",
+        "normalized_place": "Besi, Maluku Tengah, Maluku, 97557, Indonesia",
+        "latitude": -2.940734,
+        "longitude": 129.214876,
+        "timezone": "Asia/Jayapura",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "besi",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "South Kivu, Democratic Republic of the Congo",
+        "normalized_place": "Besi, Nindja (chefferie), Kabare, South Kivu, Democratic Republic of the Congo",
+        "latitude": -2.534331,
+        "longitude": 28.395532,
+        "timezone": "Africa/Lubumbashi",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "besi",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Northwest, Cameroon",
+        "normalized_place": "Besi, Batibo, Momo, Northwest, Cameroon",
+        "latitude": 5.812458,
+        "longitude": 9.917209,
+        "timezone": "Africa/Douala",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "besi",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Thabang-05, Lumbini Province, Nepal",
+        "normalized_place": "Besi, Thabang-05, Thawang, Rolpa, Lumbini Province, Nepal",
+        "latitude": 28.416547,
+        "longitude": 82.810822,
+        "timezone": "Asia/Kathmandu",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "besi",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      }
+    ]
+  }
+}

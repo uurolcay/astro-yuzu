@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Jyotish | Kayit Ol{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container" style="max-width:680px;">
+        <div class="glass-card card-pad">
+            <h1 class="hero-title" style="font-size:2.4rem;">Hesap Olustur</h1>
+            <p class="hero-text">Raporlarini kaydetmek, plan bazli ozellikleri kullanmak ve dashboard'una ulasmak icin hizlica kaydol.</p>
+            {% if error_message %}
+            <p class="muted" style="color:#efb1b1;">{{ error_message }}</p>
+            {% endif %}
+            <form action="/signup" method="post" style="display:grid; gap:16px; margin-top:20px;">
+                <div>
+                    <label for="name">Ad</label>
+                    <input id="name" name="name" type="text" value="{{ form_data.name if form_data else '' }}" style="width:100%; margin-top:8px;">
+                </div>
+                <div>
+                    <label for="email">E-posta</label>
+                    <input id="email" name="email" type="email" value="{{ form_data.email if form_data else '' }}" required style="width:100%; margin-top:8px;">
+                </div>
+                <div>
+                    <label for="password">Sifre</label>
+                    <input id="password" name="password" type="password" required style="width:100%; margin-top:8px;">
+                </div>
+                <button class="btn btn-primary" type="submit">Kayit Ol</button>
+            </form>
+            <p class="muted" style="margin-top:18px;">Zaten hesabin var mi? <a href="/login">Giris yap</a></p>
+        </div>
+    </div>
+</section>
+{% endblock %}

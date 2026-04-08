@@ -1,0 +1,8 @@
+Welcome to Jyotish
+
+Hello {{ user_name }},
+
+Your account is ready. You can now create reports, manage your plan, and access your dashboard.
+
+Dashboard: {{ dashboard_url }}
+Support: {{ support_email }}

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Jyotish | Giris{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container" style="max-width:640px;">
+        <div class="glass-card card-pad">
+            <h1 class="hero-title" style="font-size:2.4rem;">Hesabina Giris Yap</h1>
+            <p class="hero-text">Kayitli raporlarina, dashboard'una ve plan ozelliklerine buradan ulasabilirsin.</p>
+            {% if error_message %}
+            <p class="muted" style="color:#efb1b1;">{{ error_message }}</p>
+            {% endif %}
+            <form action="/login" method="post" style="display:grid; gap:16px; margin-top:20px;">
+                <div>
+                    <label for="email">E-posta</label>
+                    <input id="email" name="email" type="email" value="{{ form_data.email if form_data else '' }}" required style="width:100%; margin-top:8px;">
+                </div>
+                <div>
+                    <label for="password">Sifre</label>
+                    <input id="password" name="password" type="password" required style="width:100%; margin-top:8px;">
+                </div>
+                <button class="btn btn-primary" type="submit">Giris Yap</button>
+            </form>
+            <p class="muted" style="margin-top:18px;">Hesabin yok mu? <a href="/signup">Kayit ol</a></p>
+        </div>
+    </div>
+</section>
+{% endblock %}

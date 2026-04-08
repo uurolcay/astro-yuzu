@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Jyotish | Admin Analytics{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <h1 class="hero-title" style="font-size:2.3rem;">Analytics</h1>
+            <div class="grid-4" style="margin-top:24px;">
+                <div class="metric-card"><div class="metric-label">Total Users</div><div class="metric-value">{{ totals.total_users }}</div></div>
+                <div class="metric-card"><div class="metric-label">Total Reports</div><div class="metric-value">{{ totals.total_reports }}</div></div>
+                <div class="metric-card"><div class="metric-label">Paid Users</div><div class="metric-value">{{ totals.paid_users }}</div></div>
+                <div class="metric-card"><div class="metric-label">Avg Reports/User</div><div class="metric-value">{{ totals.average_reports_per_user }}</div></div>
+            </div>
+            <div class="grid-2" style="margin-top:24px;">
+                <div class="metric-card">
+                    <div class="metric-label">Reports Last 7 Days</div>
+                    <pre style="white-space:pre-wrap;">{{ report_counts }}</pre>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Signups Last 7 Days</div>
+                    <pre style="white-space:pre-wrap;">{{ signup_counts }}</pre>
+                </div>
+            </div>
+            <div class="grid-2" style="margin-top:24px;">
+                <div class="metric-card">
+                    <div class="metric-label">Reports by Type</div>
+                    <pre style="white-space:pre-wrap;">{{ reports_by_type }}</pre>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Plan Distribution</div>
+                    <pre style="white-space:pre-wrap;">{{ plan_distribution }}</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

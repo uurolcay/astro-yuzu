@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t("reports.page_title") }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    .reports-shell { display:grid; gap:28px; }
+    .reports-intro { padding-bottom:22px; border-bottom:1px solid var(--border); }
+    .history-shell { display:grid; gap:20px; }
+    .product-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:20px; }
+    .product-card { display:grid; gap:14px; padding:30px 28px; border-radius:var(--radius); background:rgba(30,50,86,.30); border:1px solid var(--border); transition:border-color .3s ease, background .3s ease; }
+    .product-card:hover { border-color:rgba(223,192,112,.38); background:rgba(30,50,86,.38); }
+    .decision-guidance { padding-top:18px; display:grid; gap:12px; }
+    .decision-guidance-title { margin:0; font-family:"Cormorant Garamond", serif; font-size:2rem; font-style:italic; font-weight:300; color:var(--text); }
+    .decision-guidance-copy { margin:0; color:var(--text-soft); line-height:1.82; max-width:760px; font-size:1.08rem; }
+    .product-subtitle { margin:0; color:var(--text); font-size:1.7rem; font-family:"Cormorant Garamond", serif; font-style:italic; font-weight:300; line-height:1.38; }
+    .product-bullets { margin:0; padding-left:18px; color:var(--text-soft); display:grid; gap:8px; line-height:1.8; font-size:1.02rem; }
+    .product-reassurance { margin:0; color:var(--text-soft); line-height:1.8; font-size:1rem; }
+    .selection-note { padding:24px 26px; border-radius:var(--radius); background:rgba(30,50,86,.26); border:1px solid var(--border); display:grid; gap:10px; }
+    .selection-note-title { margin:0; color:var(--gold-light); font-family:"Cormorant Garamond", serif; font-size:1.9rem; font-style:italic; font-weight:300; }
+    .history-card { display:grid; gap:14px; padding:20px; border-radius:22px; background:linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02)); border:1px solid rgba(201,168,76,0.14); box-shadow:0 12px 28px rgba(0,0,0,0.12); }
+    .history-top { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; }
+    .history-date { color:var(--text-soft); font-size:0.92rem; }
+    .history-summary { margin:0; font-size:1.08rem; font-weight:700; color:var(--text); }
+    .history-meta { margin:0; color:var(--text-soft); line-height:1.7; }
+    .history-actions { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .status-tag { display:inline-flex; align-items:center; padding:7px 12px; border-radius:999px; border:1px solid rgba(201,168,76,0.18); background:rgba(255,255,255,0.03); color:var(--gold-light); font-size:0.8rem; font-weight:700; }
+    .status-tag.muted { color:var(--text-soft); border-color:rgba(255,255,255,0.10); }
+    .empty-state { display:grid; gap:14px; text-align:left; max-width:520px; }
+    @media (max-width: 960px) { .product-grid { grid-template-columns:1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <div class="reports-intro">
+                {% if dashboard_user %}
+                <div class="chip-row">
+                    <span class="chip">{{ "Full" if plan_features.label == "Premium" else plan_features.label }} Plan</span>
+                    <span class="chip">{{ dashboard_user.email }}</span>
+                </div>
+                {% else %}
+                <div class="chip-row">
+                    <span class="chip">Focus Astrology</span>
+                    <span class="chip">{{ t("reports.guest_chip") }}</span>
+                </div>
+                {% endif %}
+                <h1 class="hero-title" style="margin-top:18px;">{{ t("reports.title") if dashboard_user else t("reports.catalog_title") }}</h1>
+                <p class="section-text">{{ t("reports.intro") }}</p>
+                <div class="decision-guidance" aria-label="report-decision-guidance">
+                    <h2 class="decision-guidance-title">{{ t("reports.decision_title") }}</h2>
+                    <p class="decision-guidance-copy">{{ t("reports.decision_personal") }}</p>
+                    <p class="decision-guidance-copy">{{ t("reports.decision_child") }}</p>
+                </div>
+            </div>
+            <div class="product-grid">
+                <div class="product-card">
+                    <span class="status-tag">{{ t("reports.personal_title") }}</span>
+                    <p class="product-subtitle">{{ t("reports.personal_subtitle") }}</p>
+                    <ul class="product-bullets">
+                        <li>{{ t("reports.personal_bullet_1") }}</li>
+                        <li>{{ t("reports.personal_bullet_2") }}</li>
+                        <li>{{ t("reports.personal_bullet_3") }}</li>
+                        <li>{{ t("reports.personal_bullet_4") }}</li>
+                    </ul>
+                    <p class="product-reassurance">{{ t("reports.personal_reassurance") }}</p>
+                    <div class="history-actions">
+                        <a class="btn btn-secondary" href="/calculator">{{ t("reports.personal_cta") }}</a>
+                    </div>
+                </div>
+                <div class="product-card">
+                    <span class="status-tag">{{ t("reports.child_title") }}</span>
+                    <p class="product-subtitle">{{ t("reports.child_subtitle") }}</p>
+                    <ul class="product-bullets">
+                        <li>{{ t("reports.child_bullet_1") }}</li>
+                        <li>{{ t("reports.child_bullet_2") }}</li>
+                        <li>{{ t("reports.child_bullet_3") }}</li>
+                        <li>{{ t("reports.child_bullet_4") }}</li>
+                    </ul>
+                    <p class="product-reassurance">{{ t("reports.child_reassurance") }}</p>
+                    <div class="history-actions">
+                        <a class="btn btn-primary" href="/reports/parent-child">{{ t("reports.child_cta") }}</a>
+                    </div>
+                </div>
+            </div>
+            <div class="selection-note">
+                <h2 class="selection-note-title">{{ t("reports.bundle_title") }}</h2>
+                <p class="history-meta">{{ t("reports.bundle_copy_1") }}</p>
+                <p class="product-reassurance">{{ t("reports.bundle_copy_2") }}</p>
+            </div>
+
+            {% if dashboard_user and reports %}
+            <div class="history-shell" style="margin-top:24px;">
+                {% for report in reports %}
+                <div class="history-card">
+                    <div class="history-top">
+                        <div>
+                            <div class="history-date">{{ report.created_at or "-" }}</div>
+                            <p class="history-summary">{{ report.summary }}</p>
+                            <p class="history-meta">
+                                {{ report.normalized_birth_place or report.birth_city or t("reports.saved_location_unavailable") }}
+                                {% if report.timezone %} • {{ report.timezone }}{% endif %}
+                            </p>
+                        </div>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                            <span class="status-tag">{{ report.status_tag }}</span>
+                            {% if report.engagement_tag %}
+                            <span class="status-tag muted">{{ report.engagement_tag }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="history-actions">
+                        <a class="btn btn-secondary" href="/reports/{{ report.id }}">{% if report.can_view_full_report %}{{ t("reports.view_full_report") }}{% else %}{{ t("reports.view_preview") }}{% endif %}</a>
+                        {% if report.result_payload_json and report.can_download_pdf %}
+                        <form action="/report/pdf" method="post" target="_blank" style="margin:0;">
+                            <textarea name="payload_json" style="display:none;">{{ report.result_payload_json }}</textarea>
+                            <button class="btn btn-secondary" type="submit">{{ t("reports.download_pdf") }}</button>
+                        </form>
+                        {% elif report.result_payload_json %}
+                        <form action="/report/pdf-preview" method="post" target="_blank" style="margin:0;">
+                            <textarea name="payload_json" style="display:none;">{{ report.result_payload_json }}</textarea>
+                            <button class="btn btn-secondary" type="submit">{{ t("reports.preview_pdf") }}</button>
+                        </form>
+                        {% endif %}
+                        {% if report.pending_followups %}
+                        <span class="chip">{{ report.pending_followups }} {{ t("reports.revisit_ready_one") if report.pending_followups == 1 else t("reports.revisit_ready_many") }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% elif dashboard_user %}
+            <div class="empty-state" style="margin-top:24px;">
+                <p class="section-text">{{ t("reports.empty") }}</p>
+                <a class="btn btn-primary" href="/calculator">{{ t("reports.empty_cta") }}</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endblock %}

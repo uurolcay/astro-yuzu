@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Jyotish | Admin Users{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <div class="row-between">
+                <h1 class="hero-title" style="font-size:2.3rem;">Users</h1>
+                <a class="chip" href="/admin">Admin Home</a>
+            </div>
+            <form method="get" style="display:grid; grid-template-columns:2fr 1fr 1fr auto; gap:12px; margin-top:20px;">
+                <input type="text" name="q" placeholder="Search email" value="{{ filters.q }}">
+                <input type="text" name="plan" placeholder="Plan" value="{{ filters.plan }}">
+                <input type="text" name="status" placeholder="Status" value="{{ filters.status }}">
+                <button class="btn btn-secondary" type="submit">Filter</button>
+            </form>
+            <div style="display:grid; gap:14px; margin-top:24px;">
+                {% for user in users %}
+                <div class="metric-card">
+                    <div class="row-between">
+                        <div>
+                            <div class="metric-value"><a href="/admin/users/{{ user.id }}">#{{ user.id }} • {{ user.email }}</a></div>
+                            <div class="muted">{{ user.name }} • {{ user.plan_code|title }} • {{ user.subscription_status }} • Reports: {{ user.report_count }}</div>
+                        </div>
+                        <div class="muted">{{ user.created_at }}</div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

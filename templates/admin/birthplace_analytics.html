@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Focus Astrology | Birthplace Analytics{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <h1 class="hero-title" style="font-size:2.3rem;">Birthplace Analytics</h1>
+            <p class="muted">These metrics help diagnose birthplace input quality, autocomplete usage, and location-resolution accuracy.</p>
+            <div class="chip-row" style="margin-top:16px;">
+                <a class="chip" href="/admin">Admin</a>
+                <a class="chip" href="/admin/birthplace-analytics?period=all">All Time</a>
+                <a class="chip" href="/admin/birthplace-analytics?period=7d">Last 7 Days</a>
+                <a class="chip" href="/admin/birthplace-analytics?period=30d">Last 30 Days</a>
+            </div>
+            <p class="muted" style="margin-top:14px;">Window: {{ selected_period }} | Updated: {{ summary.generated_at }}</p>
+        </div>
+    </div>
+</section>
+
+<section class="page-section">
+    <div class="container">
+        <div class="grid-3">
+            <div class="glass-card card-pad">
+                <h2 class="section-title">Birthplace Suggestion Funnel</h2>
+                <div class="metric-card" style="margin-top:16px;"><div class="metric-label">Total Suggestion Queries</div><div class="metric-value">{{ summary.metrics.total_suggestion_queries }}</div></div>
+                <div class="metric-card" style="margin-top:16px;"><div class="metric-label">Empty Suggestion Results</div><div class="metric-value">{{ summary.metrics.empty_suggestion_result_count }}</div></div>
+                <div class="metric-card" style="margin-top:16px;"><div class="metric-label">Average Suggestion Count</div><div class="metric-value">{{ summary.metrics.average_suggestion_count if summary.metrics.average_suggestion_count is not none else "N/A" }}</div></div>
+                <div class="metric-card" style="margin-top:16px;"><div class="metric-label">Suggestion Selected</div><div class="metric-value">{{ summary.metrics.suggestion_selected_count }}</div></div>
+                <div class="metric-card" style="margin-top:16px;"><div class="metric-label">Submit With Suggestion</div><div class="metric-value">{{ summary.metrics.submit_with_selected_suggestion }}</div></div>
+                <div class="metric-card" style="margin-top:16px;"><div class="metric-label">Submit Without Suggestion</div><div class="metric-value">{{ summary.metrics.submit_without_selected_suggestion }}</div></div>
+            </div>
+
+            <div class="glass-card card-pad">
+                <h2 class="section-title">Resolution Outcomes</h2>
+                <div class="metric-card" style="margin-top:16px;"><div class="metric-label">Resolved Success</div><div class="metric-value">{{ summary.metrics.resolved_birthplace_success_count }}</div></div>
+                <div class="metric-card" style="margin-top:16px;"><div class="metric-label">Resolved Failure</div><div class="metric-value">{{ summary.metrics.resolved_birthplace_failure_count }}</div></div>
+                <div class="metric-card" style="margin-top:16px;"><div class="metric-label">Suggestion Selection Rate</div><div class="metric-value">{% if summary.metrics.suggestion_selection_rate is not none %}{{ (summary.metrics.suggestion_selection_rate * 100)|round(2) }}%{% else %}N/A{% endif %}</div></div>
+                <div class="metric-card" style="margin-top:16px;"><div class="metric-label">Resolution Success Rate</div><div class="metric-value">{% if summary.metrics.resolution_success_rate is not none %}{{ (summary.metrics.resolution_success_rate * 100)|round(2) }}%{% else %}N/A{% endif %}</div></div>
+                <div class="metric-card" style="margin-top:16px;"><div class="metric-label">Fallback Rate</div><div class="metric-value">{% if summary.metrics.fallback_rate is not none %}{{ (summary.metrics.fallback_rate * 100)|round(2) }}%{% else %}N/A{% endif %}</div></div>
+            </div>
+
+            <div class="glass-card card-pad">
+                <h2 class="section-title">Accuracy / Integrity Signals</h2>
+                <div class="metric-card" style="margin-top:16px;"><div class="metric-label">Ambiguous / Low Confidence</div><div class="metric-value">{{ summary.metrics.ambiguous_or_low_confidence_birthplace_count }}</div></div>
+                <div class="metric-card" style="margin-top:16px;"><div class="metric-label">Stale Payload Discarded</div><div class="metric-value">{{ summary.metrics.stale_resolved_payload_discarded_count }}</div></div>
+                <div class="metric-card" style="margin-top:16px;"><div class="metric-label">Confidence High</div><div class="metric-value">{{ summary.confidence_buckets.high }}</div></div>
+                <div class="metric-card" style="margin-top:16px;"><div class="metric-label">Confidence Medium</div><div class="metric-value">{{ summary.confidence_buckets.medium }}</div></div>
+                <div class="metric-card" style="margin-top:16px;"><div class="metric-label">Confidence Low</div><div class="metric-value">{{ summary.confidence_buckets.low }}</div></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <h2 class="section-title">Recent Birthplace Events</h2>
+            {% if summary.recent_events %}
+            <div class="table-wrap" style="margin-top:20px;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Event</th>
+                            <th>Provider</th>
+                            <th>Outcome</th>
+                            <th>Location Source</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in summary.recent_events %}
+                        <tr>
+                            <td>{{ item.created_at or "-" }}</td>
+                            <td>{{ item.event_name or "-" }}</td>
+                            <td>{{ item.provider or "-" }}</td>
+                            <td>{{ item.outcome or "-" }}</td>
+                            <td>{{ item.location_source or "-" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="muted" style="margin-top:16px;">No birthplace analytics events have been captured yet.</p>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endblock %}

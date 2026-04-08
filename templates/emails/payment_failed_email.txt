@@ -1,0 +1,8 @@
+Payment issue on your account
+
+Hello {{ user_name }},
+
+We could not complete a payment for your {{ plan_label }} plan.
+Invoice: {{ invoice_id }}
+
+Resolve billing issue: {{ recovery_url }}

@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}Jyotish | Admin Insights{% endblock %}
+
+{% block extra_head %}
+<style>
+    .insight-card {
+        border-left: 4px solid rgba(201, 168, 76, 0.35);
+    }
+
+    .insight-card.success {
+        border-left-color: rgba(141, 200, 145, 0.9);
+    }
+
+    .insight-card.info {
+        border-left-color: rgba(201, 168, 76, 0.9);
+    }
+
+    .insight-card.warning {
+        border-left-color: rgba(240, 192, 96, 0.9);
+    }
+
+    .insight-card.critical {
+        border-left-color: rgba(217, 123, 123, 0.95);
+    }
+
+    .insight-meta {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+    }
+
+    .insight-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 0.76rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        border: 1px solid rgba(201, 168, 76, 0.2);
+        background: rgba(255, 255, 255, 0.03);
+        color: var(--text-soft);
+    }
+
+    .metrics-list {
+        margin: 14px 0 0;
+        padding-left: 18px;
+        color: var(--text-soft);
+        line-height: 1.7;
+    }
+
+    .mini-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 18px;
+    }
+
+    .mini-table th,
+    .mini-table td {
+        padding: 12px 10px;
+        text-align: left;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        vertical-align: top;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <h1 class="hero-title" style="font-size:2.4rem;">Growth Insights</h1>
+            <p class="hero-text">
+                Deterministic admin intelligence built from existing user, report, and email signals.
+            </p>
+            <div class="chip-row" style="margin-top:16px;">
+                <a class="chip" href="/admin">Admin Home</a>
+                <a class="chip" href="/admin/summary">Summary</a>
+                <a class="chip" href="/admin/revenue">Revenue</a>
+                <a class="chip" href="/admin/analytics">Analytics</a>
+                <a class="chip" href="/admin/billing">Billing</a>
+                <a class="chip" href="/admin/segments">Segments</a>
+            </div>
+
+            <div class="grid-4" style="margin-top:24px;">
+                <div class="metric-card"><div class="metric-label">Total Users</div><div class="metric-value">{{ headline_kpis.total_users }}</div></div>
+                <div class="metric-card"><div class="metric-label">Paid Users</div><div class="metric-value">{{ headline_kpis.paid_users }}</div></div>
+                <div class="metric-card"><div class="metric-label">Conversion Rate</div><div class="metric-value">{{ headline_kpis.conversion_rate_pct }}%</div></div>
+                <div class="metric-card"><div class="metric-label">Returning Rate</div><div class="metric-value">{{ headline_kpis.returning_rate_pct }}%</div></div>
+            </div>
+
+            <div class="grid-2" style="margin-top:20px;">
+                <div class="metric-card">
+                    <div class="metric-label">Active Users Last 30d</div>
+                    <div class="metric-value">{{ headline_kpis.active_users_last_30_days }}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Upsell Candidates</div>
+                    <div class="metric-value">{{ headline_kpis.upsell_candidates }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="page-section">
+    <div class="container">
+        <div class="grid-2">
+            {% for insight in insights %}
+            <div class="glass-card card-pad insight-card {{ insight.severity }}">
+                <div class="insight-meta">
+                    <span class="insight-badge">{{ insight.severity }}</span>
+                    <span class="insight-badge">{{ insight.category }}</span>
+                </div>
+                <h2 class="section-title" style="font-size:1.35rem;">{{ insight.title }}</h2>
+                <p class="muted">{{ insight.summary }}</p>
+                <ul class="metrics-list">
+                    {% for key, value in insight.supporting_metrics.items() %}
+                    <li><strong>{{ key.replace('_', ' ')|title }}</strong>: {{ value }}</li>
+                    {% endfor %}
+                </ul>
+                <p class="muted" style="margin-top:16px;"><strong>Recommended action:</strong> {{ insight.recommended_action }}</p>
+            </div>
+            {% else %}
+            <div class="glass-card card-pad">
+                <p class="muted">No admin insights available yet.</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+
+<section class="page-section">
+    <div class="container">
+        <div class="grid-2">
+            <div class="glass-card card-pad">
+                <h2 class="section-title">Top Upsell Candidates</h2>
+                {% if upsell_candidates %}
+                <table class="mini-table">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Plan</th>
+                            <th>Reports</th>
+                            <th>Fit</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in upsell_candidates %}
+                        <tr>
+                            <td><a href="/admin/users/{{ item.user_id }}">{{ item.email }}</a></td>
+                            <td>{{ item.current_plan|title }}</td>
+                            <td>{{ item.report_count }}</td>
+                            <td>{{ item.target_plan|title }} — {{ item.reason }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="muted">No strong upsell candidates detected from current usage patterns.</p>
+                {% endif %}
+            </div>
+
+            <div class="glass-card card-pad">
+                <h2 class="section-title">Billing / Churn Watchlist</h2>
+                {% if billing_watchlist %}
+                <table class="mini-table">
+                    <thead>
+                        <tr>
+                            <th>When</th>
+                            <th>Type</th>
+                            <th>Recipient</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in billing_watchlist %}
+                        <tr>
+                            <td>{{ item.created_at }}</td>
+                            <td>{{ item.email_type }}</td>
+                            <td>{{ item.recipient_email }}</td>
+                            <td>{{ item.status }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="muted">No recent billing watchlist events.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <h2 class="section-title">Quick Metric Summary</h2>
+            <div class="grid-4" style="margin-top:20px;">
+                {% for key, value in quick_metrics.items() %}
+                <div class="metric-card">
+                    <div class="metric-label">{{ key.replace('_', ' ')|title }}</div>
+                    <div class="metric-value">{{ value }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

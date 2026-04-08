@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Jyotish | Admin User Detail{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <h1 class="hero-title" style="font-size:2.2rem;">{{ user_detail.email }}</h1>
+            <div class="grid-4" style="margin-top:20px;">
+                <div class="metric-card"><div class="metric-label">Plan</div><div class="metric-value">{{ user_detail.plan_code|title }}</div></div>
+                <div class="metric-card"><div class="metric-label">Subscription</div><div class="metric-value">{{ user_detail.subscription_status }}</div></div>
+                <div class="metric-card"><div class="metric-label">Reports</div><div class="metric-value">{{ user_detail.report_count }}</div></div>
+                <div class="metric-card"><div class="metric-label">Admin</div><div class="metric-value">{{ "Yes" if user_detail.is_admin else "No" }}</div></div>
+            </div>
+            <div class="grid-2" style="margin-top:24px;">
+                <div class="metric-card">
+                    <div class="metric-label">Created</div>
+                    <div class="metric-value">{{ user_detail.created_at or "-" }}</div>
+                    <div class="muted" style="margin-top:10px;">Plan started: {{ user_detail.plan_started_at or "-" }}</div>
+                    <div class="muted">Plan expires: {{ user_detail.plan_expires_at or "-" }}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Stripe</div>
+                    <div class="metric-value">{{ user_detail.stripe_customer_id or "-" }}</div>
+                    <div class="muted" style="margin-top:10px;">Subscription: {{ user_detail.stripe_subscription_id or "-" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="page-section">
+    <div class="container">
+        <div class="grid-2">
+            <div class="glass-card card-pad">
+                <h2 class="section-title">Recent Reports</h2>
+                {% for report in recent_reports %}
+                <div class="metric-card" style="margin-top:14px;">
+                    <div class="metric-value"><a href="/admin/reports/{{ report.id }}">{{ report.title or "Vedic Report" }}</a></div>
+                    <div class="muted">{{ report.report_type|title }} • {{ report.created_at }}</div>
+                </div>
+                {% else %}
+                <p class="muted">No reports found.</p>
+                {% endfor %}
+            </div>
+            <div class="glass-card card-pad">
+                <h2 class="section-title">Recent Email Logs</h2>
+                {% for log in recent_emails %}
+                <div class="metric-card" style="margin-top:14px;">
+                    <div class="metric-value">{{ log.email_type }} • {{ log.status }}</div>
+                    <div class="muted">{{ log.related_event_type or "-" }} • {{ log.created_at }}</div>
+                </div>
+                {% else %}
+                <p class="muted">No email logs found.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

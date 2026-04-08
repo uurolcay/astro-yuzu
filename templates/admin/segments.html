@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block title %}Jyotish | Admin Segments{% endblock %}
+
+{% block extra_head %}
+<style>
+    .segment-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 18px;
+    }
+
+    .segment-table th,
+    .segment-table td {
+        padding: 12px 10px;
+        text-align: left;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        vertical-align: top;
+    }
+
+    .segment-section + .segment-section {
+        margin-top: 24px;
+    }
+
+    .playbook-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 14px;
+    }
+
+    .priority-badge,
+    .urgency-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 0.76rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        border: 1px solid rgba(201, 168, 76, 0.2);
+        background: rgba(255, 255, 255, 0.03);
+        color: var(--text-soft);
+    }
+
+    @media (max-width: 960px) {
+        .playbook-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <h1 class="hero-title" style="font-size:2.4rem;">Lifecycle Segments</h1>
+            <p class="hero-text">
+                Read-only operational segments for CRM, retention, and upsell planning.
+            </p>
+            <div class="chip-row" style="margin-top:16px;">
+                <a class="chip" href="/admin">Admin Home</a>
+                <a class="chip" href="/admin/insights">Insights</a>
+                <a class="chip" href="/admin/revenue">Revenue</a>
+                <a class="chip" href="/admin/segments/export?view={{ filters.view }}{% if filters.segment %}&segment={{ filters.segment }}{% endif %}{% if filters.group %}&group={{ filters.group }}{% endif %}{% if filters.priority %}&priority={{ filters.priority }}{% endif %}{% if filters.channel %}&channel={{ filters.channel }}{% endif %}{% if filters.message_type %}&message_type={{ filters.message_type }}{% endif %}">Export {{ filters.view|upper }} CSV</a>
+            </div>
+
+            <div class="grid-4" style="margin-top:24px;">
+                {% for name, count in summary.items() %}
+                <div class="metric-card">
+                    <div class="metric-label">{{ name.replace('_', ' ')|title }}</div>
+                    <div class="metric-value">{{ count }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="page-section">
+    <div class="container">
+        {% for group_name, group_segments in groups.items() %}
+            {% set ns = namespace(has_visible=false) %}
+            {% for segment_name in group_segments %}
+                {% if segment_name in segments %}
+                    {% set ns.has_visible = true %}
+                {% endif %}
+            {% endfor %}
+            {% if ns.has_visible %}
+            <div class="glass-card card-pad segment-section">
+                <h2 class="section-title">{{ group_name.replace('_', ' ')|title }}</h2>
+                {% for segment_name in group_segments %}
+                {% if segment_name in segments %}
+                <div style="margin-top:22px;">
+                    <div class="row-between" style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;">
+                        <h3 class="card-title" style="margin:0;">{{ segment_name.replace('_', ' ')|title }}</h3>
+                        <div class="chip-row">
+                            <a class="chip" href="/admin/segments/export?segment={{ segment_name }}&view=crm">Export CRM CSV</a>
+                            <a class="chip" href="/admin/segments/export?segment={{ segment_name }}&view=email">Export Email CSV</a>
+                            <a class="chip" href="/admin/segments/export?segment={{ segment_name }}&view=support">Export Support CSV</a>
+                            <a class="chip" href="/admin/segments/export?segment={{ segment_name }}&view=minimal">Export Minimal CSV</a>
+                        </div>
+                    </div>
+                    {% set meta = segment_meta.get(segment_name, {}) %}
+                    {% set brief = campaign_briefs.get(segment_name, {}) %}
+                    <div class="playbook-grid">
+                        <div class="metric-card">
+                            <div class="metric-label">Segment Count</div>
+                            <div class="metric-value">{{ meta.count or 0 }}</div>
+                            <p class="muted" style="margin-top:10px;">{{ meta.description or "-" }}</p>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Business Goal</div>
+                            <div class="metric-value">{{ meta.business_goal or "-" }}</div>
+                            <p class="muted" style="margin-top:10px;">{{ meta.notes_for_admin or "-" }}</p>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Campaign Summary</div>
+                            <div class="metric-value">{{ meta.campaign_summary or "-" }}</div>
+                            <p class="muted" style="margin-top:10px;">CTA: {{ meta.suggested_cta or "-" }}</p>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Playbook Meta</div>
+                            <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
+                                <span class="priority-badge">{{ meta.priority or "-" }}</span>
+                                <span class="urgency-badge">{{ meta.urgency or "-" }}</span>
+                                <span class="priority-badge">{{ meta.recommended_channel or "-" }}</span>
+                            </div>
+                            <p class="muted" style="margin-top:10px;">Tag: {{ meta.campaign_tag or "-" }}</p>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Campaign Name</div>
+                            <div class="metric-value">{{ brief.campaign_name or "-" }}</div>
+                            <p class="muted" style="margin-top:10px;">{{ brief.campaign_objective or "-" }}</p>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Value Angle</div>
+                            <div class="metric-value">{{ brief.key_value_angle or "-" }}</div>
+                            <p class="muted" style="margin-top:10px;">Tone: {{ brief.suggested_tone or "-" }}</p>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Copy Brief</div>
+                            <p class="muted" style="margin:10px 0 0;"><strong>Subject angle:</strong> {{ brief.subject_line_angle or "-" }}</p>
+                            <p class="muted" style="margin:8px 0 0;"><strong>Opening angle:</strong> {{ brief.opening_angle or "-" }}</p>
+                            <p class="muted" style="margin:8px 0 0;"><strong>Focus:</strong> {{ brief.message_focus or "-" }}</p>
+                            <p class="muted" style="margin:8px 0 0;"><strong>CTA focus:</strong> {{ brief.cta_focus or "-" }}</p>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">CTA & Follow-Up</div>
+                            <p class="muted" style="margin:10px 0 0;"><strong>Primary:</strong> {{ brief.primary_cta or "-" }}</p>
+                            <p class="muted" style="margin:8px 0 0;"><strong>Secondary:</strong> {{ brief.secondary_cta or "-" }}</p>
+                            <p class="muted" style="margin:8px 0 0;"><strong>Follow-up:</strong> {{ brief.recommended_followup_window or "-" }}</p>
+                            <p class="muted" style="margin:8px 0 0;"><strong>Caution:</strong> {{ brief.caution_note or "-" }}</p>
+                        </div>
+                    </div>
+                    {% if segments[segment_name] %}
+                    <table class="segment-table">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Plan</th>
+                                <th>Reports</th>
+                                <th>Last Activity</th>
+                                <th>Subscription</th>
+                                <th>Campaign Tag</th>
+                                <th>Message Type</th>
+                                <th>Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in segments[segment_name] %}
+                            <tr>
+                                <td><a href="/admin/users/{{ row.user_id }}">{{ row.email }}</a></td>
+                                <td>{{ row.plan_code|title }}</td>
+                                <td>{{ row.report_count }}</td>
+                                <td>{{ row.last_report_at or "-" }}</td>
+                                <td>{{ row.subscription_status or "-" }}</td>
+                                <td>{{ row.campaign_tag }}</td>
+                                <td>{{ row.recommended_message_type }}</td>
+                                <td>{{ row.segment_reason }}{% if row.playbook_hint %}<div class="muted" style="margin-top:6px;">{{ row.playbook_hint }}</div>{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <p class="muted" style="margin-top:14px;">No users currently match this segment.</p>
+                    {% endif %}
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

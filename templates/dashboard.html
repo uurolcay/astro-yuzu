@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Jyotish | Dashboard{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <h1 class="hero-title" style="font-size:2.6rem;">Dashboard</h1>
+            <p class="hero-text">{{ dashboard_user.name or dashboard_user.email }} • {{ plan_features.label }} Plan</p>
+            <div class="grid-3" style="margin-top:24px;">
+                <div class="metric-card">
+                    <div class="metric-label">Plan</div>
+                    <div class="metric-value">{{ plan_features.label }}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Kayitli Profiller</div>
+                    <div class="metric-value">{{ profile_count }}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Kayitli Raporlar</div>
+                    <div class="metric-value">{{ report_count }}</div>
+                </div>
+            </div>
+            <div class="chip-row" style="margin-top:18px;">
+                <a class="chip" href="/">Yeni Rapor Olustur</a>
+                <a class="chip" href="/reports">Rapor Gecmisi</a>
+                <a class="chip" href="/account">Plan ve Hesap</a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <h2 class="section-title">Son Raporlar</h2>
+            {% if recent_reports %}
+            <div class="grid-2" style="margin-top:20px;">
+                {% for report in recent_reports %}
+                <div class="metric-card">
+                    <div class="metric-label">{{ report.report_type|title }} • {{ report.created_at or '-' }}</div>
+                    <div class="metric-value">{{ report.title or "Vedic Report" }}</div>
+                    <p class="muted">{{ report.birth_date }} • {{ report.birth_city }}</p>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="muted" style="margin-top:18px;">Henuz kayitli raporun yok. Bir rapor olusturdugunda burada gorunecek.</p>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endblock %}

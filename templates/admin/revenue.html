@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Jyotish | Admin Revenue{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <h1 class="hero-title" style="font-size:2.4rem;">Revenue & Conversion</h1>
+            <div class="chip-row" style="margin-top:16px;">
+                <a class="chip" href="/admin">Admin Home</a>
+                <a class="chip" href="/admin/summary">Summary</a>
+                <a class="chip" href="/admin/analytics">Analytics</a>
+                <a class="chip" href="/admin/billing">Billing</a>
+                <a class="chip" href="/admin/insights">Insights</a>
+            </div>
+
+            <div class="grid-4" style="margin-top:24px;">
+                <div class="metric-card"><div class="metric-label">Total Users</div><div class="metric-value">{{ metrics.total_users }}</div></div>
+                <div class="metric-card"><div class="metric-label">Free Users</div><div class="metric-value">{{ metrics.free_users }}</div></div>
+                <div class="metric-card"><div class="metric-label">Paid Users</div><div class="metric-value">{{ metrics.paid_users }}</div></div>
+                <div class="metric-card"><div class="metric-label">Conversion Rate</div><div class="metric-value">{{ metrics.conversion_rate }}%</div></div>
+            </div>
+
+            <div class="grid-4" style="margin-top:20px;">
+                <div class="metric-card"><div class="metric-label">Total Reports</div><div class="metric-value">{{ metrics.total_reports }}</div></div>
+                <div class="metric-card"><div class="metric-label">Reports 30d</div><div class="metric-value">{{ metrics.reports_last_30_days }}</div></div>
+                <div class="metric-card"><div class="metric-label">Paid Reports 30d</div><div class="metric-value">{{ metrics.paid_reports_last_30_days }}</div></div>
+                <div class="metric-card"><div class="metric-label">Avg Reports / User</div><div class="metric-value">{{ metrics.avg_reports_per_user }}</div></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="page-section">
+    <div class="container">
+        <div class="grid-2">
+            <div class="glass-card card-pad">
+                <h2 class="section-title">Revenue Proxy</h2>
+                <div class="metric-card" style="margin-top:18px;">
+                    <div class="metric-label">Plan Distribution</div>
+                    <pre style="white-space:pre-wrap;">{{ plan_distribution }}</pre>
+                </div>
+                <div class="metric-card" style="margin-top:18px;">
+                    <div class="metric-label">Reports by Type</div>
+                    <pre style="white-space:pre-wrap;">{{ reports_by_type }}</pre>
+                </div>
+            </div>
+            <div class="glass-card card-pad">
+                <h2 class="section-title">Engagement Signals</h2>
+                <div class="metric-card" style="margin-top:18px;">
+                    <div class="metric-label">Avg Reports / Paid User (30d)</div>
+                    <div class="metric-value">{{ metrics.avg_reports_per_paid_user }}</div>
+                </div>
+                <div class="metric-card" style="margin-top:18px;">
+                    <div class="metric-label">Avg Reports / Free User (30d)</div>
+                    <div class="metric-value">{{ metrics.avg_reports_per_free_user }}</div>
+                </div>
+                <div class="metric-card" style="margin-top:18px;">
+                    <div class="metric-label">Billing Email Stats (30d)</div>
+                    <pre style="white-space:pre-wrap;">{{ billing_email_stats }}</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="page-section">
+    <div class="container">
+        <div class="grid-2">
+            <div class="glass-card card-pad">
+                <h2 class="section-title">Recent Paid Users</h2>
+                {% for user in recent_paid_users %}
+                <div class="metric-card" style="margin-top:14px;">
+                    <div class="metric-value"><a href="/admin/users/{{ user.id }}">{{ user.email }}</a></div>
+                    <div class="muted">{{ user.plan_code|title }} • {{ user.plan_started_at or user.created_at }} • Reports: {{ user.report_count }}</div>
+                </div>
+                {% else %}
+                <p class="muted">No paid users found.</p>
+                {% endfor %}
+            </div>
+            <div class="glass-card card-pad">
+                <h2 class="section-title">Recent Revenue Signals</h2>
+                {% for log in recent_revenue_signals %}
+                <div class="metric-card" style="margin-top:14px;">
+                    <div class="metric-value">{{ log.email_type }} • {{ log.status }}</div>
+                    <div class="muted">{{ log.recipient_email }} • {{ log.related_event_type or "-" }} • {{ log.created_at }}</div>
+                </div>
+                {% else %}
+                <p class="muted">No recent revenue signals.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

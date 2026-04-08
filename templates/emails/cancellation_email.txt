@@ -1,0 +1,7 @@
+Your plan has changed
+
+Hello {{ user_name }},
+
+Your access changed from {{ previous_plan_label }} to {{ current_plan_label }}.
+
+Account: {{ account_url }}

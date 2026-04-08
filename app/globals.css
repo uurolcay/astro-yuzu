@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+:root {
+  --background: #050a18;
+  --foreground: #f3e7c7;
+  --font-display: "Cinzel", "Times New Roman", serif;
+  --font-body: "Cormorant Garamond", "Georgia", serif;
+  --font-accent: "Iowan Old Style", "Palatino Linotype", serif;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at top, rgba(197, 160, 89, 0.16), transparent 32%),
+    linear-gradient(180deg, #050a18 0%, #091226 48%, #020617 100%);
+  color: var(--foreground);
+  font-family: var(--font-body);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-display);
+}
+
+input,
+button,
+textarea,
+select {
+  font: inherit;
+}

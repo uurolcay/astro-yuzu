@@ -1,0 +1,8 @@
+Your {{ plan_label }} plan is active
+
+Hello {{ user_name }},
+
+Your plan has been updated from {{ previous_plan_label }} to {{ plan_label }}.
+Unlocked access: {{ feature_summary }}
+
+Account: {{ account_url }}

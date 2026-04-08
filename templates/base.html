@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+{% set ui_lang = lang if lang is defined else (language if language is defined else (request.state.lang if request is defined and request.state.lang is defined else 'en')) %}
+<html lang="{{ ui_lang }}">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}Focus Astrology{% endblock %}</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Cormorant+Garamond:wght@300;400;500;600;700&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg: #1a2a44;
+            --bg-deep: #0f1e34;
+            --bg-soft: rgba(30, 50, 86, 0.32);
+            --card: rgba(30, 50, 86, 0.34);
+            --card-strong: rgba(38, 61, 98, 0.44);
+            --border: rgba(223, 192, 112, 0.14);
+            --border-strong: rgba(223, 192, 112, 0.28);
+            --gold: #dfc070;
+            --gold-light: #f0dc95;
+            --text: #faf5e8;
+            --text-soft: rgba(250, 245, 232, 0.68);
+            --danger: #d97b7b;
+            --success: #8dc891;
+            --shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+            --radius: 24px;
+            --radius-sm: 18px;
+            --max-width: 1220px;
+            --nav-height: 76px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            margin: 0;
+            font-family: "Cormorant Garamond", serif;
+            background:
+                radial-gradient(circle at 58% 24%, rgba(38, 61, 98, 0.34), transparent 34%),
+                radial-gradient(circle at 16% 8%, rgba(223, 192, 112, 0.08), transparent 24%),
+                linear-gradient(180deg, #1a2a44 0%, #16243a 40%, #0f1e34 100%);
+            color: var(--text);
+            min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background-image:
+                radial-gradient(1px 1px at 8% 12%, rgba(255,255,220,.78), transparent),
+                radial-gradient(1px 1px at 92% 8%, rgba(223,192,112,.56), transparent),
+                radial-gradient(1.5px 1.5px at 75% 85%, rgba(255,255,220,.56), transparent),
+                radial-gradient(1px 1px at 18% 88%, rgba(223,192,112,.42), transparent),
+                radial-gradient(2px 2px at 44% 5%, rgba(223,192,112,.84), transparent),
+                radial-gradient(1px 1px at 55% 70%, rgba(255,255,220,.26), transparent);
+            animation: drift 20s linear infinite;
+            opacity: 0.3;
+        }
+
+        @keyframes drift {
+            from { transform: translateY(0); }
+            to { transform: translateY(20px); }
+        }
+
+        a { color: inherit; text-decoration: none; }
+
+        img {
+            max-width: 100%;
+            display: block;
+        }
+
+        .container {
+            width: min(var(--max-width), calc(100% - 32px));
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+
+        .page-section { padding: 76px 0; }
+
+        .site-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 20;
+            height: var(--nav-height);
+            backdrop-filter: blur(14px);
+            background: rgba(26, 42, 68, 0.94);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .site-header-inner {
+            min-height: var(--nav-height);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+        }
+
+        .brand {
+            display: inline-flex;
+            align-items: center;
+            padding: 8px 14px;
+            border: 1px solid rgba(223, 192, 112, 0.16);
+            background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(223,192,112,0.03));
+            box-shadow: 0 16px 34px rgba(0, 0, 0, 0.18);
+        }
+
+        .brand-logo {
+            width: 286px;
+            height: 82px;
+            object-fit: contain;
+            filter: brightness(1.08) contrast(1.12) saturate(1.06) drop-shadow(0 18px 34px rgba(0, 0, 0, 0.3));
+            flex-shrink: 0;
+        }
+
+        .nav-cluster {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+        }
+
+        .nav-utilities {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .auth-links {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 28px;
+            list-style: none;
+            flex-wrap: wrap;
+        }
+
+        .nav-links a {
+            font-family: "Cinzel", serif;
+            font-size: 10px;
+            letter-spacing: 3px;
+            color: rgba(223, 192, 112, 0.52);
+            text-transform: uppercase;
+            transition: color 0.3s ease;
+        }
+        .nav-links a:hover { color: var(--gold-light); }
+
+        .nav-pill {
+            font-family: "Cinzel", serif;
+            font-size: 8px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: var(--gold-light);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            padding: 8px 12px;
+            background: rgba(223, 192, 112, 0.06);
+        }
+
+        .hero-title,
+        .section-title,
+        .card-title {
+            font-family: "Cinzel", serif;
+            letter-spacing: 0.03em;
+        }
+
+        .hero-title {
+            font-family: "Cormorant Garamond", serif;
+            font-size: clamp(2.8rem, 6vw, 4.6rem);
+            font-weight: 300;
+            line-height: 1.08;
+            margin: 0 0 18px;
+        }
+
+        .hero-text,
+        .section-text,
+        .muted {
+            color: var(--text-soft);
+            line-height: 1.82;
+            font-size: 1.14rem;
+        }
+
+        .glass-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            backdrop-filter: blur(14px);
+            box-shadow: var(--shadow);
+        }
+
+        .glass-card.soft {
+            background: var(--bg-soft);
+        }
+
+        .card-pad { padding: 30px; }
+
+        .chip-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .chip {
+            padding: 8px 12px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: rgba(223, 192, 112, 0.05);
+            color: var(--text-soft);
+            font-size: 0.82rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            font-family: "Cinzel", serif;
+        }
+
+        .btn {
+            appearance: none;
+            border: none;
+            border-radius: 0;
+            padding: 13px 30px;
+            font-family: "Cinzel", serif;
+            font-size: 10px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: 0.25s ease;
+        }
+
+        .btn-primary {
+            color: #1a2a44;
+            background: var(--gold);
+            box-shadow: 0 8px 24px rgba(223, 192, 112, 0.16);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            background: var(--gold-light);
+            box-shadow: 0 12px 28px rgba(223, 192, 112, 0.22);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--gold);
+            border: 1px solid rgba(223,192,112,.35);
+        }
+        .btn-secondary:hover {
+            border-color: var(--gold-light);
+            background: rgba(223,192,112,.05);
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 20px;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 20px;
+        }
+
+        .grid-4 {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 20px;
+        }
+
+        .metric-card {
+            padding: 18px;
+            border-radius: var(--radius-sm);
+            background: rgba(30,50,86,.35);
+            border: 1px solid var(--border);
+        }
+
+        .metric-label {
+            font-size: 0.7rem;
+            color: var(--text-soft);
+            margin-bottom: 8px;
+            font-family: "Cinzel", serif;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+        }
+
+        .metric-value {
+            font-size: 1.12rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95rem;
+        }
+
+        th, td {
+            padding: 14px 12px;
+            text-align: left;
+        }
+
+        thead th {
+            color: var(--gold-light);
+            border-bottom: 1px solid var(--border);
+        }
+
+        tbody tr:nth-child(odd) {
+            background: rgba(255,255,255,0.025);
+        }
+
+        tbody tr:nth-child(even) {
+            background: rgba(255,255,255,0.01);
+        }
+
+        tbody td {
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .language-toggle {
+            display: inline-flex;
+            padding: 4px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: rgba(223,192,112,.05);
+            gap: 4px;
+        }
+
+        .language-btn {
+            min-width: 48px;
+            min-height: 34px;
+            padding: 0 12px;
+            border: none;
+            border-radius: 999px;
+            background: transparent;
+            color: var(--text-soft);
+            font-family: "Cinzel", serif;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            cursor: pointer;
+            text-transform: uppercase;
+        }
+
+        .language-btn.active {
+            color: #1a2a44;
+            background: var(--gold);
+        }
+
+        .site-footer {
+            padding: 56px 0 28px;
+            color: var(--text-soft);
+            border-top: 1px solid var(--border);
+            margin-top: 72px;
+            background: rgba(15, 26, 46, 0.84);
+        }
+
+        .footer-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            gap: 42px;
+            margin-bottom: 32px;
+            padding-bottom: 32px;
+            border-bottom: 1px solid rgba(223,192,112,.08);
+        }
+
+        .footer-title {
+            margin: 0 0 18px;
+            font-family: "Cinzel", serif;
+            font-size: 9px;
+            letter-spacing: 4px;
+            color: var(--gold);
+            text-transform: uppercase;
+            opacity: .7;
+        }
+
+        .footer-copy {
+            margin: 14px 0 0;
+            font-size: 1rem;
+            line-height: 1.8;
+            color: var(--text-soft);
+            max-width: 320px;
+        }
+
+        .footer-links {
+            display: grid;
+            gap: 10px;
+        }
+
+        .footer-links a {
+            font-size: 1rem;
+            color: var(--text-soft);
+        }
+
+        .footer-bottom {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .footer-small {
+            font-family: "Cinzel", serif;
+            font-size: 8px;
+            letter-spacing: 2px;
+            color: rgba(223,192,112,.32);
+            text-transform: uppercase;
+        }
+
+        main {
+            padding-top: var(--nav-height);
+        }
+
+        @media (max-width: 960px) {
+            .grid-4,
+            .grid-3,
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+
+            .site-header-inner {
+                align-items: flex-start;
+                padding: 10px 0;
+                flex-direction: column;
+            }
+
+            .brand-logo {
+                width: 232px;
+                height: 68px;
+            }
+
+            .nav-cluster,
+            .nav-links,
+            .footer-grid {
+                width: 100%;
+                grid-template-columns: 1fr;
+            }
+
+            .nav-links {
+                gap: 14px;
+            }
+
+            .nav-utilities,
+            .auth-links {
+                width: 100%;
+                justify-content: flex-start;
+                flex-wrap: wrap;
+            }
+        }
+    </style>
+
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <header class="site-header">
+        <div class="container site-header-inner">
+            <a href="/" class="brand" aria-label="Focus Astrology">
+                <img class="brand-logo" src="/static/focus-logo.png" alt="Focus Astrology logo">
+            </a>
+
+            <div class="nav-cluster">
+                <nav class="nav-links">
+                    <a href="/" data-i18n="nav_home">{{ t("common.nav_home") }}</a>
+                    <a href="/calculator" data-i18n="nav_calculator">{{ t("common.nav_calculator") }}</a>
+                    <a href="/reports" data-i18n="nav_reports">{{ t("common.nav_reports") }}</a>
+                    <a href="/articles" data-i18n="nav_articles">{{ t("common.nav_articles") }}</a>
+                    <a href="/#about-focus" data-i18n="nav_about">{{ t("common.nav_about") }}</a>
+                    {% if request.state.current_user %}
+                    <a href="/dashboard">{{ t("common.nav_dashboard") }}</a>
+                    <a href="/reports">{{ t("common.nav_my_reports") }}</a>
+                    <a href="/account">{{ t("common.nav_account") }}</a>
+                    {% if request.state.current_user.is_admin %}
+                    <a href="/admin">{{ t("common.nav_admin") }}</a>
+                    {% endif %}
+                    <span class="nav-pill">{{ "Full" if request.state.plan_code == "premium" else request.state.plan_code|title }}</span>
+                    <a href="/logout">{{ t("common.nav_logout") }}</a>
+                    {% endif %}
+                </nav>
+                <div class="nav-utilities">
+                    <div class="language-toggle" aria-label="Language toggle">
+                        <button class="language-btn" type="button" data-language-btn="tr">TR</button>
+                        <button class="language-btn" type="button" data-language-btn="en">EN</button>
+                    </div>
+                    {% if not request.state.current_user %}
+                    <div class="auth-links">
+                        <a href="/login" class="btn btn-secondary">{{ t("common.nav_login") }}</a>
+                        <a href="/signup" class="btn btn-primary">{{ t("common.nav_signup") }}</a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+        <div class="container">
+            <div class="footer-grid">
+                <div>
+                    <a href="/" class="brand" aria-label="Focus Astrology footer">
+                        <img class="brand-logo" src="/static/focus-logo.png" alt="Focus Astrology logo">
+                    </a>
+                    <p class="footer-copy" data-i18n="footer_tagline">{{ t("common.footer_tagline") }}</p>
+                </div>
+                <div>
+                    <h3 class="footer-title">{{ t("common.nav_reports") }}</h3>
+                    <div class="footer-links">
+                        <a href="/reports">{{ t("common.nav_reports") }}</a>
+                        <a href="/calculator">{{ t("common.nav_calculator") }}</a>
+                        <a href="/articles">{{ t("common.nav_articles") }}</a>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="footer-title">{{ t("common.nav_about") }}</h3>
+                    <div class="footer-links">
+                        <a href="/#about-focus">{{ t("common.nav_about") }}</a>
+                        {% if request.state.current_user %}
+                        <a href="/account">{{ t("common.nav_account") }}</a>
+                        {% else %}
+                        <a href="/login">{{ t("common.nav_login") }}</a>
+                        <a href="/signup">{{ t("common.nav_signup") }}</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <div class="footer-small">Focus Astrology</div>
+                <div class="footer-small">Private Beta</div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        window.APP_LANGUAGE = {
+            storageKey: "focus-astrology-language",
+            cookieName: "focus_astrology_language",
+            normalize(language) {
+                return language === "tr" ? "tr" : "en";
+            },
+            readCookie() {
+                const match = document.cookie.match(/(?:^|;\s*)focus_astrology_language=([^;]+)/);
+                return match ? decodeURIComponent(match[1]) : "";
+            },
+            get() {
+                const saved = localStorage.getItem(this.storageKey) || this.readCookie();
+                return this.normalize(saved);
+            },
+            persist(language) {
+                const nextLanguage = this.normalize(language);
+                localStorage.setItem(this.storageKey, nextLanguage);
+                document.cookie = `${this.cookieName}=${encodeURIComponent(nextLanguage)}; path=/; max-age=31536000; samesite=lax`;
+                return nextLanguage;
+            },
+            apply(language) {
+                const nextLanguage = this.normalize(language);
+                document.documentElement.lang = nextLanguage;
+                this.updateButtons(nextLanguage);
+                if (typeof window.applyPageTranslations === "function") {
+                    window.applyPageTranslations(nextLanguage);
+                }
+            },
+            updateButtons(language) {
+                document.querySelectorAll("[data-language-btn]").forEach((button) => {
+                    button.classList.toggle("active", button.dataset.languageBtn === language);
+                });
+            }
+        };
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const serverLanguage = "{{ ui_lang }}";
+            const preferredLanguage = window.APP_LANGUAGE.persist(window.APP_LANGUAGE.get() || serverLanguage);
+
+            if (preferredLanguage !== serverLanguage) {
+                window.location.reload();
+                return;
+            }
+
+            document.querySelectorAll("[data-language-btn]").forEach((button) => {
+                button.addEventListener("click", () => {
+                    const nextLanguage = window.APP_LANGUAGE.persist(button.dataset.languageBtn);
+                    if (nextLanguage !== document.documentElement.lang) {
+                        window.location.reload();
+                        return;
+                    }
+                    window.APP_LANGUAGE.apply(nextLanguage);
+                });
+            });
+
+            window.APP_LANGUAGE.apply(serverLanguage);
+        });
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

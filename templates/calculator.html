@@ -1,0 +1,401 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t("index.calculator_title") }} | Focus Astrology{% endblock %}
+
+{% block extra_head %}
+<style>
+    .calculator-page-shell {
+        display: grid;
+        gap: 28px;
+    }
+    .calculator-hero,
+    .calculator-shell,
+    .calculator-side {
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
+        background: rgba(30,50,86,.30);
+    }
+    .calculator-hero {
+        padding: 40px 34px;
+        display: grid;
+        gap: 18px;
+        background: radial-gradient(ellipse at 58% 38%, rgba(30,50,86,0.74) 0%, rgba(26,42,68,0.92) 55%, rgba(15,30,52,1) 100%);
+    }
+    .calculator-shell,
+    .calculator-side {
+        padding: 34px 30px;
+    }
+    .calculator-grid {
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 28px;
+    }
+    .eyebrow {
+        font-family: "Cinzel", serif;
+        text-transform: uppercase;
+        letter-spacing: 0.5em;
+        font-size: 0.68rem;
+        color: var(--gold);
+        opacity: .74;
+        display: inline-flex;
+        align-items: center;
+        gap: 14px;
+    }
+    .eyebrow::before {
+        content: "";
+        width: 28px;
+        height: 1px;
+        background: var(--gold);
+        opacity: .42;
+    }
+    .section-header {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 24px;
+        padding-bottom: 20px;
+        border-bottom: 1px solid var(--border);
+    }
+    .form-fields {
+        display:grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap:18px;
+        margin-top:24px;
+    }
+    .field-full { grid-column: 1 / -1; }
+    label { display:block; margin-bottom:10px; font-size:0.92rem; font-weight:600; }
+    input, select {
+        width:100%;
+        min-height:52px;
+        padding:0 16px;
+        border-radius:14px;
+        border:1px solid rgba(201,168,76,0.18);
+        background:rgba(255,255,255,0.03);
+        color:var(--text);
+        font:inherit;
+    }
+    .form-select {
+        appearance:none;
+        -webkit-appearance:none;
+        -moz-appearance:none;
+        padding-right:42px;
+        color-scheme:dark;
+        background-image: linear-gradient(45deg, transparent 50%, var(--gold-light) 50%), linear-gradient(135deg, var(--gold-light) 50%, transparent 50%);
+        background-position: calc(100% - 22px) calc(50% - 3px), calc(100% - 16px) calc(50% - 3px);
+        background-size: 6px 6px, 6px 6px;
+        background-repeat:no-repeat;
+    }
+    .form-select:focus, input:focus {
+        outline:none;
+        border-color:rgba(240,192,96,0.62);
+        box-shadow:0 0 0 3px rgba(201,168,76,0.16);
+        background-color:rgba(255,255,255,0.05);
+    }
+    .form-select option { background:#111522; color:var(--text); }
+    .autocomplete-shell { position:relative; }
+    .autocomplete-status { margin-top:8px; font-size:0.82rem; color:var(--text-soft); }
+    .autocomplete-status.warning { color:#f6d27a; }
+    .suggestion-list {
+        position:absolute;
+        top:calc(100% + 8px);
+        left:0;
+        right:0;
+        z-index:20;
+        margin:0;
+        padding:8px;
+        list-style:none;
+        border-radius:16px;
+        border:1px solid rgba(201,168,76,0.18);
+        background:rgba(12,12,16,0.96);
+        box-shadow:0 18px 48px rgba(0,0,0,0.35);
+        display:none;
+    }
+    .suggestion-list.active { display:block; }
+    .suggestion-item {
+        width:100%;
+        padding:12px 14px;
+        border:0;
+        border-radius:12px;
+        background:transparent;
+        color:var(--text);
+        text-align:left;
+        cursor:pointer;
+    }
+    .suggestion-item:hover, .suggestion-item.active, .suggestion-item:focus {
+        background:rgba(201,168,76,0.1);
+        outline:none;
+    }
+    .suggestion-main { display:block; font-weight:600; }
+    .suggestion-sub { display:block; margin-top:4px; font-size:0.82rem; color:var(--text-soft); }
+    .cta-row { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 16px; }
+    .signal-row { display: flex; flex-wrap: wrap; gap: 10px; }
+    .signal-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 13px;
+        border-radius: 999px;
+        border: 1px solid rgba(223,192,112,.18);
+        background: rgba(223,192,112,.05);
+        color: var(--text-soft);
+        font-size: 0.94rem;
+    }
+    .signal-chip::before {
+        content: "";
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: rgba(223,192,112,.92);
+        box-shadow: 0 0 0 4px rgba(223,192,112,.12);
+    }
+    @media (max-width: 960px) {
+        .calculator-grid,
+        .form-fields {
+            grid-template-columns:1fr;
+        }
+        .field-full { grid-column:auto; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="calculator-page-shell">
+            <section class="calculator-hero">
+                <div class="eyebrow">{{ t("index.calculator_eyebrow") }}</div>
+                <h1 class="hero-title">{{ t("index.calculator_title") }}</h1>
+                <p class="hero-text">{{ t("index.calculator_text") }}</p>
+                <div class="signal-row">
+                    <span class="signal-chip">{{ t("index.hero_signal_1") }}</span>
+                    <span class="signal-chip">{{ t("index.hero_signal_2") }}</span>
+                    <span class="signal-chip">{{ t("index.hero_signal_3") }}</span>
+                </div>
+            </section>
+
+            <section class="calculator-shell" id="calculator-entry">
+                <div class="calculator-grid">
+                    <div>
+                        <div class="section-header">
+                            <div class="eyebrow">{{ t("index.calculator_eyebrow") }}</div>
+                            <h2 class="section-title">{{ t("index.calculator_title") }}</h2>
+                            <p class="section-text">{{ t("index.calculator_text") }}</p>
+                        </div>
+                        <form action="/calculate" method="post">
+                            <input type="hidden" name="report_type" value="premium">
+                            <div class="form-fields">
+                                <div class="field-full">
+                                    <label for="full_name">{{ t("index.label_full_name") }}</label>
+                                    <input id="full_name" name="full_name" type="text" placeholder="{{ t("index.placeholder_full_name") }}" required>
+                                </div>
+                                <div>
+                                    <label for="birth_date">{{ t("index.label_birth_date") }}</label>
+                                    <input id="birth_date" name="birth_date" type="date" required>
+                                </div>
+                                <div>
+                                    <label for="birth_time">{{ t("index.label_birth_time") }}</label>
+                                    <input id="birth_time" name="birth_time" type="time" required>
+                                </div>
+                                <div class="field-full">
+                                    <label for="birth_city">{{ t("index.label_birth_place") }}</label>
+                                    <div class="autocomplete-shell">
+                                        <input id="birth_city" name="birth_city" type="text" autocomplete="off" aria-expanded="false" aria-controls="birthplace-suggestions" aria-autocomplete="list" placeholder="{{ t("index.placeholder_birth_place") }}" required>
+                                        <ul id="birthplace-suggestions" class="suggestion-list" role="listbox" aria-label="{{ t("index.birthplace_suggestions_label") }}"></ul>
+                                    </div>
+                                    <input id="country" name="country" type="hidden">
+                                    <input id="resolved_birth_place" name="resolved_birth_place" type="hidden">
+                                    <input id="resolved_latitude" name="resolved_latitude" type="hidden">
+                                    <input id="resolved_longitude" name="resolved_longitude" type="hidden">
+                                    <input id="resolved_timezone" name="resolved_timezone" type="hidden">
+                                    <input id="resolved_geocode_provider" name="resolved_geocode_provider" type="hidden">
+                                    <input id="resolved_geocode_confidence" name="resolved_geocode_confidence" type="hidden">
+                                    <div id="birthplace-status" class="autocomplete-status">{{ t("index.birthplace.form_help") }}</div>
+                                </div>
+                                <div class="field-full">
+                                    <label for="gender">{{ t("index.label_gender") }}</label>
+                                    <select id="gender" name="gender" class="form-select" data-testid="gender-select">
+                                        <option value="">{{ t("index.gender_unspecified") }}</option>
+                                        <option value="Kadin">{{ t("index.gender_female") }}</option>
+                                        <option value="Erkek">{{ t("index.gender_male") }}</option>
+                                        <option value="Diger">{{ t("index.gender_other") }}</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="cta-row">
+                                <button class="btn btn-primary" type="submit">{{ t("index.cta_start") }}</button>
+                                <a class="btn btn-secondary" href="/reports">{{ t("common.nav_reports") }}</a>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="calculator-side">
+                        <div class="section-header">
+                            <div class="eyebrow">{{ t("index.about_eyebrow") }}</div>
+                            <h3 class="card-title">{{ t("index.about_title") }}</h3>
+                            <p class="muted">{{ t("index.about_text") }}</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const indexTranslations = {{ translation_namespace("index.birthplace")|tojson }};
+
+    function indexText(key) {
+        const language = document.documentElement.lang === "tr" ? "tr" : "en";
+        const copy = indexTranslations[language] || indexTranslations.en || {};
+        return copy[key] || (indexTranslations.en && indexTranslations.en[key]) || key;
+    }
+
+    (() => {
+        const input = document.getElementById("birth_city");
+        const list = document.getElementById("birthplace-suggestions");
+        const status = document.getElementById("birthplace-status");
+        const resolvedFields = {
+            resolved_birth_place: document.getElementById("resolved_birth_place"),
+            resolved_latitude: document.getElementById("resolved_latitude"),
+            resolved_longitude: document.getElementById("resolved_longitude"),
+            resolved_timezone: document.getElementById("resolved_timezone"),
+            resolved_geocode_provider: document.getElementById("resolved_geocode_provider"),
+            resolved_geocode_confidence: document.getElementById("resolved_geocode_confidence"),
+            country: document.getElementById("country"),
+        };
+        if (!input || !list || !status) return;
+
+        let activeRequest = 0;
+        let debounceTimer = null;
+        let birthplaceSuggestionSelected = false;
+        let highlightedIndex = -1;
+        let suggestionItems = [];
+
+        function clearResolvedFields() {
+            Object.values(resolvedFields).forEach((field) => { if (field) field.value = ""; });
+            birthplaceSuggestionSelected = false;
+        }
+        function setStatus(message, tone = "") {
+            status.textContent = message;
+            status.classList.toggle("warning", tone === "warning");
+        }
+        function observeBirthplaceEvent(eventName, payload = {}) {
+            const params = new URLSearchParams({ event: eventName });
+            Object.entries(payload).forEach(([key, value]) => {
+                if (value !== undefined && value !== null && value !== "") params.set(key, String(value));
+            });
+            const url = `/api/v1/birthplace-observe?${params.toString()}`;
+            if (navigator.sendBeacon) { navigator.sendBeacon(url); return; }
+            fetch(url, { method: "GET", keepalive: true, headers: { "Accept": "application/json" } }).catch(() => {});
+        }
+        function closeSuggestions() {
+            list.innerHTML = "";
+            list.classList.remove("active");
+            input.setAttribute("aria-expanded", "false");
+            input.removeAttribute("aria-activedescendant");
+            highlightedIndex = -1;
+            suggestionItems = [];
+        }
+        function setHighlightedIndex(nextIndex) {
+            highlightedIndex = nextIndex;
+            suggestionItems.forEach((button, index) => {
+                const active = index === highlightedIndex;
+                button.classList.toggle("active", active);
+                button.setAttribute("aria-selected", active ? "true" : "false");
+                if (active) {
+                    input.setAttribute("aria-activedescendant", button.id);
+                    button.scrollIntoView({ block: "nearest" });
+                }
+            });
+            if (highlightedIndex < 0) input.removeAttribute("aria-activedescendant");
+        }
+        function applySuggestion(item) {
+            input.value = item.display_name;
+            resolvedFields.resolved_birth_place.value = item.normalized_place || "";
+            resolvedFields.resolved_latitude.value = item.latitude ?? "";
+            resolvedFields.resolved_longitude.value = item.longitude ?? "";
+            resolvedFields.resolved_timezone.value = item.timezone || "";
+            resolvedFields.resolved_geocode_provider.value = item.provider || "";
+            resolvedFields.resolved_geocode_confidence.value = item.confidence ?? "";
+            const displayParts = String(item.display_name || "").split(",").map((part) => part.trim()).filter(Boolean);
+            resolvedFields.country.value = displayParts[displayParts.length - 1] || "";
+            birthplaceSuggestionSelected = true;
+            closeSuggestions();
+            setStatus(item.normalized_place || item.display_name);
+            observeBirthplaceEvent("suggestion_selected", {
+                provider: item.provider || "suggestion",
+                location_source: "suggestion_selection",
+                outcome: "selected",
+                confidence: item.confidence ?? "",
+            });
+        }
+        function renderSuggestions(items) {
+            list.innerHTML = "";
+            if (!items.length) { closeSuggestions(); return; }
+            suggestionItems = [];
+            items.forEach((item) => {
+                const li = document.createElement("li");
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "suggestion-item";
+                button.id = `birthplace-option-${suggestionItems.length}`;
+                button.setAttribute("role", "option");
+                button.setAttribute("aria-selected", "false");
+                button._payload = item;
+                button.innerHTML = `<span class="suggestion-main">${item.display_name}</span><span class="suggestion-sub">${item.normalized_place}</span>`;
+                button.addEventListener("pointerdown", (event) => { event.preventDefault(); applySuggestion(item); });
+                button.addEventListener("mouseenter", () => { setHighlightedIndex(suggestionItems.indexOf(button)); });
+                li.appendChild(button);
+                list.appendChild(li);
+                suggestionItems.push(button);
+            });
+            list.classList.add("active");
+            input.setAttribute("aria-expanded", "true");
+            setHighlightedIndex(-1);
+        }
+        async function fetchSuggestions(query) {
+            activeRequest += 1;
+            const requestId = activeRequest;
+            try {
+                const response = await fetch(`/api/v1/birthplace-suggestions?q=${encodeURIComponent(query)}`, { headers: { "Accept": "application/json" } });
+                const results = response.ok ? await response.json() : [];
+                if (requestId !== activeRequest) return;
+                renderSuggestions(Array.isArray(results) ? results : []);
+                if (!results.length) setStatus(indexText("autocomplete_no_results"));
+            } catch (_error) {
+                if (requestId !== activeRequest) return;
+                closeSuggestions();
+                setStatus(indexText("autocomplete_unavailable"));
+            }
+        }
+        input.addEventListener("input", () => {
+            if (birthplaceSuggestionSelected) {
+                clearResolvedFields();
+                setStatus(indexText("autocomplete_reselect"), "warning");
+            } else {
+                clearResolvedFields();
+            }
+            closeSuggestions();
+            const query = input.value.trim();
+            if (debounceTimer) clearTimeout(debounceTimer);
+            if (query.length < 2) { setStatus(indexText("form_help")); return; }
+            setStatus(indexText("autocomplete_searching"));
+            debounceTimer = setTimeout(() => fetchSuggestions(query), 220);
+        });
+        input.addEventListener("keydown", (event) => {
+            if (!list.classList.contains("active") || !suggestionItems.length) {
+                if (event.key === "Escape") closeSuggestions();
+                return;
+            }
+            if (event.key === "ArrowDown") { event.preventDefault(); setHighlightedIndex(highlightedIndex < suggestionItems.length - 1 ? highlightedIndex + 1 : 0); return; }
+            if (event.key === "ArrowUp") { event.preventDefault(); setHighlightedIndex(highlightedIndex > 0 ? highlightedIndex - 1 : suggestionItems.length - 1); return; }
+            if (event.key === "Enter" && highlightedIndex >= 0) { event.preventDefault(); applySuggestion(suggestionItems[highlightedIndex]._payload); return; }
+            if (event.key === "Escape") { event.preventDefault(); closeSuggestions(); }
+        });
+        input.form?.addEventListener("submit", () => {
+            if (!birthplaceSuggestionSelected || !resolvedFields.resolved_birth_place.value) setStatus(indexText("autocomplete_submit_warning"), "warning");
+        });
+        document.addEventListener("pointerdown", (event) => { if (!list.contains(event.target) && event.target !== input) closeSuggestions(); });
+    })();
+</script>
+{% endblock %}

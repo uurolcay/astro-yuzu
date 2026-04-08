@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Jyotish | Admin Summary{% endblock %}
+
+{% block extra_head %}
+<style>
+    .scorecard.good {
+        border-left: 4px solid rgba(141, 200, 145, 0.95);
+    }
+
+    .scorecard.watch {
+        border-left: 4px solid rgba(240, 192, 96, 0.95);
+    }
+
+    .scorecard.risk {
+        border-left: 4px solid rgba(217, 123, 123, 0.95);
+    }
+
+    .trend-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 18px;
+    }
+
+    .trend-table th,
+    .trend-table td {
+        padding: 12px 10px;
+        text-align: left;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <h1 class="hero-title" style="font-size:2.4rem;">Executive Summary</h1>
+            <p class="hero-text">{{ weekly_summary.headline }}</p>
+            <div class="chip-row" style="margin-top:16px;">
+                <a class="chip" href="/admin">Admin Home</a>
+                <a class="chip" href="/admin/revenue">Revenue</a>
+                <a class="chip" href="/admin/insights">Insights</a>
+                <a class="chip" href="/admin/segments">Segments</a>
+                <a class="chip" href="/admin/emails">Emails</a>
+                <a class="chip" href="/admin/billing">Billing</a>
+                <a class="chip" href="/admin/users">Users</a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="page-section">
+    <div class="container">
+        <div class="grid-2">
+            <div class="glass-card card-pad">
+                <h2 class="section-title">Weekly Executive Summary</h2>
+                <p class="muted">{{ weekly_summary.growth_summary }}</p>
+                <p class="muted">{{ weekly_summary.revenue_summary }}</p>
+                <p class="muted">{{ weekly_summary.engagement_summary }}</p>
+                <p class="muted">{{ weekly_summary.risk_summary }}</p>
+                <h3 class="card-title" style="margin-top:20px;">Recommended Focus</h3>
+                <ul class="decision-list">
+                    {% for item in weekly_summary.recommended_focus %}
+                    <li>{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <div class="glass-card card-pad">
+                <h2 class="section-title">Core KPIs</h2>
+                <div class="grid-2" style="margin-top:18px;">
+                    <div class="metric-card"><div class="metric-label">Total Users</div><div class="metric-value">{{ kpis.total_users }}</div></div>
+                    <div class="metric-card"><div class="metric-label">New Users 7d</div><div class="metric-value">{{ kpis.new_users_last_7_days }}</div></div>
+                    <div class="metric-card"><div class="metric-label">Reports 7d</div><div class="metric-value">{{ kpis.reports_last_7_days }}</div></div>
+                    <div class="metric-card"><div class="metric-label">Active Users 30d</div><div class="metric-value">{{ kpis.active_users_last_30_days }}</div></div>
+                    <div class="metric-card"><div class="metric-label">Paid Users</div><div class="metric-value">{{ kpis.paid_users }}</div></div>
+                    <div class="metric-card"><div class="metric-label">Premium+ Users</div><div class="metric-value">{{ kpis.premium_plus_users }}</div></div>
+                    <div class="metric-card"><div class="metric-label">Returning Users</div><div class="metric-value">{{ kpis.returning_users }}</div></div>
+                    <div class="metric-card"><div class="metric-label">Estimated MRR Score</div><div class="metric-value">{{ kpis.estimated_mrr_score }}</div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <h2 class="section-title">KPI Scorecards</h2>
+            <div class="grid-3" style="margin-top:20px;">
+                {% for card in scorecards %}
+                <div class="metric-card scorecard {{ card.status }}">
+                    <div class="metric-label">{{ card.label }}</div>
+                    <div class="metric-value">{{ card.value }}</div>
+                    <div class="muted" style="margin-top:8px;">Status: {{ card.status|title }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="page-section">
+    <div class="container">
+        <div class="grid-2">
+            <div class="glass-card card-pad">
+                <h2 class="section-title">Trend Snapshots</h2>
+                <table class="trend-table">
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            <th>Current</th>
+                            <th>Previous</th>
+                            <th>Delta</th>
+                            <th>Direction</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for name, snapshot in trends.items() %}
+                        <tr>
+                            <td>{{ name.replace('_', ' ')|title }}</td>
+                            <td>{{ snapshot.current }}</td>
+                            <td>{{ snapshot.previous }}</td>
+                            <td>{{ snapshot.delta }}</td>
+                            <td>{{ snapshot.direction }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="glass-card card-pad">
+                <h2 class="section-title">Watchlist</h2>
+                {% for item in watchlist_items %}
+                <div class="metric-card" style="margin-top:14px;">
+                    <div class="metric-label">{{ item.severity|title }}</div>
+                    <div class="metric-value">{{ item.title }}</div>
+                    <p class="muted" style="margin-top:10px;">{{ item.reason }}</p>
+                    <p class="muted" style="margin-top:10px;"><a href="{{ item.next_link }}">Inspect next</a></p>
+                </div>
+                {% else %}
+                <p class="muted">No watchlist items right now.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
