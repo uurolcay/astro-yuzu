@@ -1,14 +1,19 @@
 import csv
+import copy
+import hmac
+import hashlib
 import json
 import logging
 import os
 import re
 import sys
 import time
+import secrets
 from functools import wraps
 from io import StringIO
 from datetime import timedelta
 from collections.abc import Mapping
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from unicodedata import normalize
 from datetime import date, datetime
 from pathlib import Path
@@ -23,7 +28,7 @@ from fastapi.requests import Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import inspect as sa_inspect
+from sqlalchemy import inspect as sa_inspect, or_
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -73,7 +78,11 @@ from services.geocoding import BirthPlaceResolutionError, search_birth_places
 from services import payments
 from engines import engines_dasha, engines_eclipses, engines_natal, engines_navamsa, engines_transits
 from engines.life_area_impact_engine import analyze_life_area_impact
-from engines.narrative_compression_engine import compress_ai_narratives
+from engines.narrative_compression_engine import (
+    compress_ai_narratives,
+    localize_narrative_analysis,
+    localize_narrative_text,
+)
 from engines.psychological_theme_engine import extract_psychological_themes
 from engines.timing_intelligence_engine import build_timing_intelligence
 
@@ -171,62 +180,345 @@ REPORT_TYPES = {
         "include_action_guidance": True,
     },
 }
+REPORT_ORDER_PRODUCTS = {
+    "birth_chart_karma": {
+        "title": "Doğum Haritası Karma’sı",
+        "label": "Temel harita",
+        "price": "₺1.900",
+        "summary": "Yaşam temalarınızı, doğal güçlü yönlerinizi ve tekrar eden karmik örüntüleri daha bütünlüklü anlamak için temel yazılı analiz.",
+        "draft_focus": "foundational birth chart, karmic patterns, strengths, challenges, broader life direction",
+    },
+    "annual_transit": {
+        "title": "Yıllık Transit",
+        "label": "Zamanlama",
+        "price": "₺1.490",
+        "summary": "Önümüzdeki dönemin ana vurgularını, fırsat pencerelerini ve dikkat isteyen zamanlarını daha bilinçli planlamak için odak raporu.",
+        "draft_focus": "annual timing, transitions, upcoming periods, opportunity and pressure windows",
+    },
+    "career": {
+        "title": "Kariyer",
+        "label": "Kariyer yönü",
+        "price": "₺1.690",
+        "summary": "Doğal çalışma biçiminizi, mesleki potansiyelinizi ve uzun vadeli büyüme yönünüzü anlamak için stratejik kariyer analizi.",
+        "draft_focus": "career direction, professional strengths, work rhythm, vocational decisions",
+    },
+    "parent_child": {
+        "title": "Ebeveyn-Çocuk",
+        "label": "Aile dinamiği",
+        "price": "₺1.790",
+        "summary": "Çocuğun doğasını, ebeveyn-çocuk iletişimini ve daha bilinçli destek biçimlerini anlamaya yönelik hassas analiz.",
+        "draft_focus": "parent-child relationship, temperament, emotional needs, communication dynamics",
+    },
+}
+CONSULTATION_PRODUCT = {
+    "service_type": "consultation",
+    "product_type": "consultation_60_min",
+    "title": "60 dk Birebir Astroloji Danışmanlığı",
+    "label": "Birebir danışmanlık",
+    "price": "₺4.900",
+    "summary": "Haritanızı kişisel sorularınızla birlikte ele alan, doğrudan yanıt ve stratejik sentez odaklı 60 dakikalık birebir danışmanlık.",
+}
+REPORT_BUNDLE_PRODUCTS = {
+    "life_path_bundle": {
+        "bundle_type": "life_path_bundle",
+        "title": "Life Path Bundle",
+        "label": "Yaşam yönü paketi",
+        "price": "₺3.290",
+        "summary": "Doğum Haritası Karma’sı ve Kariyer raporlarını birlikte ele alarak kişisel yapı, doğal yetenekler ve uzun vadeli yön arasında daha net bağ kurar.",
+        "included_products": ["birth_chart_karma", "career"],
+        "draft_focus": "life path synthesis, birth chart karma, career direction, natural strengths",
+    },
+    "full_year_insight_bundle": {
+        "bundle_type": "full_year_insight_bundle",
+        "title": "Full Year Insight Bundle",
+        "label": "Yıl ve kariyer yönü paketi",
+        "price": "₺2.890",
+        "summary": "Yıllık Transit ve Kariyer raporlarını birleştirerek profesyonel kararları dönemsel zamanlama ile birlikte okur.",
+        "included_products": ["annual_transit", "career"],
+        "draft_focus": "annual timing, career direction, transition windows, professional planning",
+    },
+    "deep_family_insight_bundle": {
+        "bundle_type": "deep_family_insight_bundle",
+        "title": "Deep Family Insight",
+        "label": "Aile içgörüsü paketi",
+        "price": "₺3.390",
+        "summary": "Ebeveyn-Çocuk ve Doğum Haritası Karma’sı perspektifini birlikte düşünerek ilişki dinamiğini daha geniş bir kişisel yapı içinde değerlendirir.",
+        "included_products": ["parent_child", "birth_chart_karma"],
+        "draft_focus": "parent-child relationship, birth chart foundation, family dynamics, conscious support",
+    },
+    "astrology_deep_dive": {
+        "bundle_type": "astrology_deep_dive",
+        "title": "Astrology Deep Dive",
+        "label": "En bütünlüklü deneyim",
+        "price": "₺7.900",
+        "summary": "İki odak raporu ve 60 dk birebir danışmanlığı birleştiren, yaşam yönünüzü en kapsamlı biçimde anlamaya yönelik premium çalışma.",
+        "included_products": ["birth_chart_karma", "career", "consultation_60_min"],
+        "draft_focus": "complete chart synthesis, life direction, career path, personal consultation preparation",
+        "includes_consultation": True,
+    },
+}
 ARTICLE_CATEGORY_LABELS = {
     "foundations": "Foundations",
     "timing": "Timing",
     "chart-reading": "Chart Reading",
     "life-guidance": "Life Guidance",
 }
+LEGACY_ARTICLE_SEED_TITLES = {
+    "What Is Vedic Astrology",
+    "Understanding Mahadasha Timing",
+    "Jupiter in the First House",
+    "How to Read Career Patterns in a Chart",
+    "Saturn Periods and Life Pressure",
+    "Timing vs Free Will in Vedic Astrology",
+    "Venus: Iliskiler, Cekim ve Deger Algisi",
+    "Merkur: Zihin, Iletisim ve Ogrenme Dili",
+    "Jupiter Transiti: Acele Etme",
+    "Venüs Transiti",
+    "Merkür Transiti",
+}
 ARTICLE_SEED_CONTENT = [
     {
-        "title": "What Is Vedic Astrology",
-        "category": "foundations",
-        "excerpt": "A calm introduction to how Vedic astrology reads pattern, timing, and life cycles.",
-        "body": "Vedic astrology is less useful as spectacle and more useful as pattern recognition.\n\nIt reads the structure of your chart, the timing behind change, and the areas of life that ask for steadier attention.\n\nA good reading should not feel like noise. It should help you understand what kind of season you are in and how to respond to it with more clarity.",
-        "author_name": "Focus Astrology",
-        "reading_time": 4,
-    },
-    {
-        "title": "Understanding Mahadasha Timing",
-        "category": "timing",
-        "excerpt": "Why planetary periods matter and how they shape the tone of longer chapters in life.",
-        "body": "Mahadasha timing explains why some periods feel materially different even when your external life looks similar.\n\nA planetary period changes the emphasis of your life. It does not force one outcome, but it changes where pressure, growth, and visibility tend to gather.\n\nUnderstanding timing makes interpretation calmer. Instead of reacting to every event, you can read the larger chapter you are moving through.",
-        "author_name": "Focus Astrology",
-        "reading_time": 5,
-    },
-    {
-        "title": "Jupiter in the First House",
-        "category": "chart-reading",
-        "excerpt": "A premium reading of presence, expansion, and how identity becomes a life theme.",
-        "body": "Jupiter in the first house often amplifies identity, confidence, and the way life growth becomes visible through the self.\n\nThis does not mean life is always easy. It means your development is often tied to how you carry meaning, perspective, and trust in your own path.\n\nIn practice, this placement becomes most useful when it is read alongside timing and supporting chart themes.",
-        "author_name": "Focus Astrology",
-        "reading_time": 4,
-    },
-    {
-        "title": "How to Read Career Patterns in a Chart",
+        "title": "Venüs Transiti: Değişim Kaçınılmaz",
+        "legacy_titles": ["Venüs Transiti", "Venus: Iliskiler, Cekim ve Deger Algisi"],
         "category": "life-guidance",
-        "excerpt": "A practical look at how chart themes become useful when reading vocation and professional timing.",
-        "body": "Career astrology is rarely about one placement giving one job title.\n\nA stronger reading looks at recurring themes: visibility, responsibility, timing windows, pressure periods, and where sustained effort is likely to compound.\n\nThe goal is not to label a person. The goal is to understand how work, status, and direction are being shaped in the current cycle.",
+        "excerpt": "Kova burcundaki Venüs transiti; ilişkilerde, sevgide ve değer verdiğimiz alanlarda özgürlük ihtiyacını daha görünür hale getiriyor.",
+        "body": "VENÜS TRANSİTİ\n\nKova burcu 5 Şubat'ta Venüs transitine ev sahipliği yapacak. İlişkilere, paraya ve sevgiye bakış açımızı değiştirdiğimiz; değişimden korkmayacağımız bir ay bizi bekliyor.\n\nDEĞİŞİM KAÇINILMAZ\n\nVenüs bu ay Kova burcunda ilerlerken ilişkilerde, iletişimde ve keyif aldığımız alanlarda yeni bir düzen arayışını öne çıkarıyor. Maddi manevi değer verdiğimiz her şeyi sorgularken şu sorular gündeme geliyor: İçinde olduğumuz ilişkilerde gerçekten kendimiz olabilir miyiz? Kariyerimizde ve toplum önünde daha özgün bir biçimde var olabilir miyiz? Değişime ihtiyacımız var mı?\n\nKova burcunun tabiatı ile uyumlu ilerleyen Venüs, radikal ama özgün çıkış yolları sunuyor. Değişimden korkmadan; sevdiğimiz ve değer verdiğimiz her şeyin hayatımızdaki karşılığını daha net görüp yeni adımlar atabileceğimiz bir dönem.\n\nYÜKSELEN BURÇLARINIZA GÖRE ŞUBAT AYINDA VENÜS TRANSİTİ\n\nKOÇ\n\nBu ay özel ve iş ilişkilerinde tutumunuz özgürlük ve hayalleriniz yönünde olacak. Kariyerinizle ilgili parladığınız bu dönemde kazançlarınızı artırma ihtimali var. Gelirlerinizi nasıl harcayacağınızla ilgili planlar yapabilirsiniz. Sosyal ortamlarda yeni arkadaşlıklar kazanabilir, yeni bir ilişki içindeyseniz ilişkinin değerlerini ve yaşanma biçimini sorgulayabilirsiniz.\n\nBOĞA\n\nVenüs transiti kariyer evinizi etkiliyor. Nasıl göründüğünüzle daha çok ilgileneceğiniz bir dönemdesiniz. Fiziksel görünümünüzde değişiklikler yapabilir, özellikle iş ortamındaki ilişkilerinizi gözden geçirebilirsiniz. Günlük rutinlerinizi kendinizi merkeze alarak yeniden düzenlemek ve hedeflerinize daha yüksek motivasyonla ilerlemek mümkün.\n\nİKİZLER\n\nBu ay odağınız hem gezmekte hem öğrenmekte. Enerjiniz yüksek. Eğer öğretmenseniz öğrencileriniz hızınıza yetişmekte zorlanabilir. Aynı anda birçok şeyi yapmak isteyebilirsiniz. Uzak ülkelere seyahat planları gündeme gelebilir. Romantik ilişkilerde denge kurmak ve sosyalleşme ihtiyacınızı hobilerle desteklemek önemli olacak. Yaratıcılık gerektiren bir mesleğiniz varsa ilhamınız daha güçlü akabilir.\n\nYENGEÇ\n\nHayallerinizi ve sizi mutlu eden şeyleri tekrar hatırlayacağınız bu ay, ertelediğiniz istekler bir kriz veya içsel farkındalıkla yeniden gündeme gelebilir. Hep hayalini kurduğunuz bir gelişmenin gerçekleşmesi olası. Maddi tarafta ani bir kazanım yaşanabilir. Bu transit, hayatta sizi mutlu eden ve yoran şeyleri daha görünür kılıyor.\n\nASLAN\n\nBu ay ikili ilişkiler ön planda. Özel hayatınızda ve iş hayatınızda dikkatleri üzerinize çekebilirsiniz. Venüs Kova'da ilerlediği için ilişkilerde özgürlük teması baskın. Sosyal ortamlarda yaratıcı ve gösterişli tarzınızla öne çıkabilirsiniz. Partnerinize hediyeler almak veya mutluluğunuzu görünür kılmak isteyebilirsiniz; ancak ölçüyü kaçırmamaya dikkat edin.\n\nBAŞAK\n\nGünlük rutinleriniz, düzeniniz ve sağlığınız ön planda. Hem iş akışınızı hem de bedeninizin verdiği sinyalleri daha dikkatle dinlemeniz gereken bir dönem. Küçük ama düzenli değişiklikler daha iyi hissettirebilir.\n\nTERAZİ\n\nVenüs'ün Kova transiti aşk, romantik ilişkiler ve hobileri öne çıkarıyor. Daha çok eğlenmek isteyeceğiniz bu dönemde ilişkilerde bunalmış hissediyorsanız biraz alan açma ihtiyacı duyabilirsiniz. Kendinize ne kadar zaman ayırdığınız, kazancınızı nereye harcadığınız ve keyif kavramını nasıl yaşadığınız içsel muhasebe konusu olabilir. Çocuklarınız varsa onların isteklerine ve hobilerine daha çok önem verebilirsiniz.\n\nAKREP\n\nBu ay Venüs transiti içsel huzurunuza, zihninize ve yaşadığınız yere dair temaları yoğunlaştırıyor. Aileyle ilgili eski konular yeniden gündeme gelebilir. Kalabalık ortamlara girmek yerine kendinizle baş başa kalmak isteyebilirsiniz. İç dünyanızı dinlemek ve eski duyguları fark etmek önemli olabilir.\n\nYAY\n\nYakın çevrenizle kısa yolculuklar ve sosyal planlar gündeme gelebilir. Neşenizin arttığı bu dönemde yakın çevrenizden biriyle ilişkiniz farklı bir boyut kazanabilir. Hayallerinizi anlatırken daha heyecanlı ve motive hissedebilirsiniz. İş arkadaşlarıyla yapılan paylaşımlar yeni fırsatlar getirebilir.\n\nOĞLAK\n\nGelir-gider dengenizin öne çıktığı bu ay, kariyeriniz ve kazançlarınız gündemde. Kazançlarınızı artırmakla ilgili ciddi planlar yapabilirsiniz. Hobilerden ya da sosyal çevreden gelen değer artışı mümkün. Dengeyi iyi kurmak ve savurganlıktan kaçınmak önemli.\n\nKOVA\n\nVenüs bu ay sizin burcunuzdan transit ediyor ve dikkat çekiciliğinizi yükseltiyor. Özellikle ailenizle olan bağlarınızı, mutluluğunuzu ve özgürlük ihtiyacınızı yeniden sorgulayabilirsiniz. Fiziksel görünümünüzde ya da yaşadığınız yerde değişiklik yapmak isteyebilirsiniz. Yurtdışı bağlantılı işlerde veya görünürlük gerektiren alanlarda artış olabilir.\n\nBALIK\n\nKendinizle kalmak isteyeceğiniz, bazı içsel sıkışmaları çözmek için çaba göstereceğiniz bir dönem. Yakın çevrenizden saklanan bir konuyu öğrenebilirsiniz. Venüs transitinin daha içsel ve sorgulayıcı çalıştığı bu süreçte rüyalar ve sezgiler daha güçlü mesajlar taşıyabilir.",
         "author_name": "Focus Astrology",
-        "reading_time": 5,
+        "reading_time": 9,
+        "language": "tr",
+        "published_at": datetime(2026, 2, 1),
     },
     {
-        "title": "Saturn Periods and Life Pressure",
+        "title": "Merkür Transiti: Planla ve Harekete Geç",
+        "legacy_titles": ["Merkür Transiti", "Merkur: Zihin, Iletisim ve Ogrenme Dili"],
+        "category": "chart-reading",
+        "excerpt": "Merkür bu yıl düşünme biçimimizi, iletişim dilimizi ve karar alma hızımızı sık sık yeniden düzenlemeye çağırıyor.",
+        "body": "MERKÜR TRANSİTİ\n\nOcak ayının ilk günlerinde kendimizi daha çok hayal kurarken, düşünürken ve konuşurken bulabiliriz. Gökyüzünün enerjisi zihinsel olarak hepimize mesaj taşıyan tohumlar ekiyor. Bu yıl Merkür transitinde bizi neler bekliyor?\n\nPLANLA VE HAREKETE GEÇ\n\nYılın ilk 7 gününde Yay burcunda transit eden Merkür bizi daha derin düşüncelere itiyor. Ardından Oğlak burcuna geçerek ayaklarımızın yere daha sağlam basmasını istiyor. Oğlak doğası gereği sorumluluk alacağımız bu dönem; hayattan ne istediğimizi, neyi düşündüğümüz halde yapamadığımızı ve hangi planların sonuç vermediğini daha net görmemizi sağlıyor.\n\nMerkür bu yıl öyle etkiler bırakacak ki olmayanı oldurmak, başaramadığımızı farklı yollarla denemek ve yeni fırsatları daha akılcı değerlendirmek isteyeceğiz. Mantık, pratik düşünme ve akılcı yaklaşım; kafamıza koyduğumuzu gerçekleştirmek için daha güçlü bir zemin sunuyor.\n\nMERKÜR RETRO NELER YAŞATACAK?\n\nBir yıl boyunca her burçta transit edecek olan Merkür, 4 defa retro hareket yapacak. İlk retro 26 Şubat'ta Kova burcunda başlıyor. Bu dönem teknolojik aksaklıklar, internet ve sosyal medya kaynaklı kopukluklar yaratabilir.\n\n29 Haziran'da Yengeç burcundaki retro Merkür; aile, yaşadığınız yer ve geçmiş konuları yeniden gündeme getirebilir. Duyguların kontrolden çıkması, yanlış anlaşılmalar ve tepkisel cevaplar artabilir. Ayrıca elektronik aletlerde ya da araçlarda teknik sorunlar yaşanabilir.\n\n7 Temmuz'da İkizler burcundaki retro Merkür en güçlü etkilerden biri. İletişimde acele, yanlış anlaşılma, yanlış kişiye giden mesajlar, adres karışıklıkları ve bilgi kirliliği öne çıkabilir. Telefon, tablet ve bilgisayar gibi iletişim araçları da daha hassas çalışabilir.\n\n24 Eylül'de Terazi burcundaki retro Merkür ise adalet, ortaklıklar, ilişkiler, hukuki ve diplomatik süreçlerde gecikmeler getirebilir. Bu dönem ortak hesaplaşmalar ve hassas yazışmalar daha dikkatli yürütülmeli.\n\nBU AY MERKÜR TRANSİTİNİN YÜKSELEN BURCUNUZA ETKİLERİ\n\nKOÇ\n\nYılın ilk günleri eğitim ve inançlarla ilgili merakınızı artırabilir. Daha çok şey öğrenmek ya da öğretmek isteyebilirsiniz. Yurtdışı bağlantılı eğitim konularında netleşmeler olabilir. Ayın sonlarına doğru fikirleriniz netleşirken kariyerinizle ilgili daha sağlam adımlar atabilirsiniz. Özellikle iş ortamındaki konuşmalarda kelimelerinizi özenle seçmek faydalı olur.\n\nBOĞA\n\nMaddi kaynaklarınızı artırmakla ilgili düşünceler zihninizi meşgul edebilir. Ayın sonuna doğru uzun süredir kafanızda dönen planlar daha netleşir. Ani borçlanmalar yerine uzun vadeli ve düşük riskli kararlar vermek daha sağlıklı olur.\n\nİKİZLER\n\nMerkür sizin yönetici gezegeniniz olduğu için bu transiti çok güçlü hissedeceğiniz bir dönem. İlişkilerinizle ilgili içsel hesaplaşmalar yaşayabilirsiniz. İş ortaklarınız ya da partnerinizle yapılacak konuşmalarda acele karar vermemek önemli.\n\nYENGEÇ\n\nGünlük hayat temponuz, çalışma düzeniniz ve sağlık konuları zihninizi meşgul ederken ilişkilerinizde daha ciddi kararlar almak isteyebilirsiniz. Bu süreçte sınırlarınızı yeniden tanımlayıp kendinizi daha net ifade etmeniz mümkün.\n\nASLAN\n\nYılın ilk günlerinde romantik ilişkiler, hobiler ve keyif alanları öne çıkıyor. Ay ortasından sonra hayatınızdaki sorumluluklar daha fazla görünür olabilir. Bu ay bitmeden kendinize yeni bir rutin belirlemek iyi gelebilir.\n\nBAŞAK\n\nEv, içsel huzur ve aile temaları ön planda. Çocuklarınız ya da romantik ilişkileriniz gündemde olabilir. Kendinizi daha rahat ifade etmeye başladığınız bu süreçte yaratıcı projelere yönelmek verimli olur.\n\nTERAZİ\n\nKardeşleriniz ve yakın çevrenizle iletişiminiz artıyor. Kısa yolculuk planları gündeme gelebilir. Ay ortasından sonra annenizle, ailenizle ya da yaşadığınız yerle ilgili yeni kararlar alabilirsiniz.\n\nAKREP\n\nYılın ilk günlerinde para ve değer konularında hareketlilik olabilir. Maddi ve manevi değerlere bakışınız değişiyor. Harcamalarda daha disiplinli davranmak ve kaynakları dikkatle yönetmek öncelik kazanıyor.\n\nYAY\n\nMerkür sizin burcunuzda olduğu için fikirlerinizi anlatma isteğiniz çok yüksek. Ay ortasından itibaren para kazanma ve harcama biçiminizle ilgili daha emin adımlar atabilirsiniz.\n\nOĞLAK\n\nAyın başında zihniniz biraz dağınık olabilir. Merkür kısa süre sonra sizin burcunuza geçerek kendinizle ilgili daha net kararlar almanızı sağlar. Öncesinde kısa bir dinlenme molası, zihinsel toparlanmaya yardımcı olabilir.\n\nKOVA\n\nArkadaşlarınız, hayalleriniz ve kazançlarınızla ilgili bir süreçten geçiyorsunuz. Kafanız karışmış hissedebilirsiniz. Karar almadan önce biraz yalnız kalmak ve kendi iç sesinizi dinlemek daha doğru olur.\n\nBALIK\n\nYılın ilk günlerinde iş ve kariyer odaklı düşünceler çok yoğun olabilir. Belki de yabancı ülkelerde kazanç sağlama hayalleri kuruyorsunuz. Ayın sonlarına doğru hayalleri daha somut adımlara dönüştürmek mümkün olacak.",
+        "author_name": "Focus Astrology",
+        "reading_time": 10,
+        "language": "tr",
+        "published_at": datetime(2026, 1, 3),
+    },
+    {
+        "title": "Jüpiter Transiti: Jüpiter \"Acele Etme\" Diyor",
+        "legacy_titles": ["Jupiter Transiti: Acele Etme"],
         "category": "timing",
-        "excerpt": "Why Saturn phases can feel heavy, and how pressure can become structure instead of fear.",
-        "body": "Saturn periods often feel slower, denser, and less forgiving.\n\nThat pressure does not automatically mean loss. More often, it means reality is asking for discipline, responsibility, and cleaner boundaries.\n\nWhen read well, a Saturn phase becomes a period of structural work. It asks what can be made stronger, not just what feels difficult.",
+        "excerpt": "İkizler burcundaki Jüpiter retrosu, hızdan çok gözlem ve yeniden değerlendirme çağrısı yapıyor.",
+        "body": "JÜPİTER TRANSİTİ: JÜPİTER \"ACELE ETME\" DİYOR\n\nGökyüzünün en iyicil gezegeni olan Jüpiter 5 Aralık'ta retro hareketine başlıyor. İkizler burcunda retro olan Jüpiter 11 Mart'a kadar bu hareketini sürdürüyor. Peki Jüpiter'in İkizler burcundaki ziyareti bize ne anlatmak istiyor?\n\nRETRO VE PUNARVASU ETKİLERİ\n\nRetro Jüpiter İkizler burcundayken geçmişten gelen kişiler, olaylar ve gündemler tekrar karşımıza çıkabilir. Bu süreçte olabildiğince gözlemci kalmak yararımıza olacaktır. Jüpiter'in ilk bakışta fırsat gibi görünen bazı vaatleri, acele edildiğinde yanıltıcı olabilir. Gezegen retro konumda gücünü içe çeker; ödül etkisi ise daha çok retro çıkışında belirginleşir.\n\nİkizler burcunun takıntılı ve zihinsel olarak dağılmaya açık yapısı da bu süreçte devrede olabilir. Punarvasu etkisi ise yeniden doğuşu, affetmeyi ve hayatımızda yeni bir düzen kurmayı anlatır. Bu yüzden bazen fırtınanın dinmesini beklemek, en doğru büyüme stratejisi olur.\n\nJÜPİTER'İN YÜKSELEN BURÇLARA GÖRE ETKİLERİ\n\nKOÇ\n\nYurtdışı, kısa-uzun yolculuklar ve yabancılarla bağlantılı konular gündeme gelebilir. Planlarınızı tekrar gözden geçirmek isteyebilirsiniz. Eğitim konusu öne çıkabilir. İletişimde daha dikkatli olmanız gereken bir süreç olabilir.\n\nBOĞA\n\nGelir kaynaklarınızla ilgili sıkıntılar veya yeniden yapılandırma ihtiyacı oluşabilir. Nasıl para kazanacağınız sorusu daha çok gündeme gelir. Maddi gelirlerde gecikmeler, beklenmedik ödemeler ya da kredi-vergi başlıkları zihni meşgul edebilir. Sosyal çevrenizden destek almak çözüm sağlayabilir.\n\nİKİZLER\n\nJüpiter sizin birinci evinizde retro yaparken kendinizle ilgili önemli farkındalıklar yaşayabilirsiniz. Fiziksel görünümünüzde değişiklik yapma isteği doğabilir. Kendinize zaman ayırmanız gereken bir dönem.\n\nYENGEÇ\n\nİçe dönme, yalnız kalma ve kendinizle baş başa kalma ihtiyacı hissedebilirsiniz. Geçmişten gelen bazı konular yeniden gündeme gelebilir. Ruhsal çalışmalar için uygun bir dönem.\n\nASLAN\n\nYaratıcılık, aşk, çocuklar ve sosyal çevreyle ilgili konular öne çıkabilir. Eski arkadaşlarla karşılaşmalar ve geçmişten gelen ilişkiler gündeme gelebilir. Geçmişte sevdiğiniz bir hobiye yeniden dönmek de mümkün.\n\nBAŞAK\n\nKariyer, aile hayatı ve ilişkilerde geçmiş gündemler önünüze geliyor. Beklediğiniz bir teklif gecikebilir ya da eski işinizle ilgili yeni bir değerlendirme alanı doğabilir.\n\nTERAZİ\n\nYurtdışı bağlantılı tatil, eğitim veya kazanç planlarında gecikmeler olabilir. İçsel enerjinizi ve inançlarınızı daha çok sorgulayabilirsiniz. Eğer evliyseniz eşinizle ilgili gündemler de öne çıkabilir.\n\nAKREP\n\nİlk çocukluk anıları, maddi-manevi değerler ve bilinçaltı temalar gündeme gelebilir. Özellikle bu dönemde sizi zorlayan meselelerle yüzleşmek gerekebilir.\n\nYAY\n\nJüpiter retrosu size ihmal ettiğiniz kişisel sorunları çözmenizi hatırlatıyor. Yakın çevre, kardeşler ve iletişim başlıkları öne çıkabilir. İlişkilerde ve ortaklıklarda eski meseleler yeniden gündeme gelebilir.\n\nOĞLAK\n\nGünlük hayat düzeniniz, iş temponuz, sağlığınız ve varsa evcil hayvanlarınız daha fazla dikkat isteyebilir. Yaşam düzenini sadeleştirmek iyi gelebilir.\n\nKOVA\n\nYatırım yapmak istediğiniz bir proje varsa retro döneminde acele adım atmak yerine planı biraz daha geliştirmek iyi olur. Sosyal çevreyle şekillenen projelerde tekrar değerlendirme gerekli olabilir.\n\nBALIK\n\nJüpiter'in dördüncü evinizdeki retro hareketi aile, ev ve geçmişle ilgili konuları yeniden hatırlatabilir. Aileyle ilgili gelişmeler ya da ev içi meseleler tekrar gündeme gelebilir.",
         "author_name": "Focus Astrology",
-        "reading_time": 4,
-    },
-    {
-        "title": "Timing vs Free Will in Vedic Astrology",
-        "category": "foundations",
-        "excerpt": "How timing and agency work together in a more mature astrological framework.",
-        "body": "Timing matters, but it is not the same as fatalism.\n\nAstrology can show concentration, momentum, openings, and pressure. What it does not do is remove the importance of judgment, pacing, and response.\n\nThe strongest use of astrology is not surrendering agency. It is improving the quality of your choices inside the timing you are already living.",
-        "author_name": "Focus Astrology",
-        "reading_time": 4,
+        "reading_time": 9,
+        "language": "tr",
+        "published_at": datetime(2025, 12, 3),
     },
 ]
+
+ARTICLE_LOCALIZED_CONTENT = {
+    "venus-transiti-degisim-kacinilmaz": {
+        "en": {
+            "title": "Venus Transit: Change Is Unavoidable",
+            "excerpt": "Venus moving through Aquarius brings freedom, honesty, and a new relationship with what you truly value.",
+            "body": """VENUS TRANSIT
+
+Aquarius becomes the host of Venus on February 5. It is a month that asks us to change the way we relate to love, money, beauty, and emotional value without being afraid of what must evolve.
+
+CHANGE IS UNAVOIDABLE
+
+As Venus travels through Aquarius, relationships, communication, and the parts of life we enjoy begin asking for a new order. We may question what we value emotionally and materially: can we really be ourselves in the relationships we are in, and can we show up more honestly in our public and professional life? This transit invites change where authenticity has been missing.
+
+Aquarius gives Venus a more independent and future-facing tone. It is not change for the sake of disruption. It is change that helps you see more clearly what still has value, what needs distance, and what is ready for a more truthful form.
+
+VENUS TRANSIT IN FEBRUARY BY RISING SIGN
+
+ARIES
+
+This month, both personal and professional relationships may revolve around freedom and long-term hopes. Career visibility can rise, and you may begin making plans about how to use growing income more wisely. Social circles can bring new connections, and if you are in a new relationship, you may start questioning the real values that hold it together.
+
+TAURUS
+
+Venus activates your career house. You may care more about how you are perceived and may want to refresh your appearance or public image. Work relationships can come under review. Reorganizing daily routines around your own priorities can help you move toward goals with stronger motivation.
+
+GEMINI
+
+This month your attention turns toward travel, learning, and curiosity. Energy is high, and you may want to do many things at once. Long-distance plans can become more exciting. In relationships, balance matters; hobbies and social life can help you stay centered. If your work is creative, inspiration may flow more easily.
+
+CANCER
+
+This is a month of remembering what truly makes you happy. Desires that were postponed may return through a crisis or awakening. A long-imagined development may finally begin to move. Financially, sudden support or gain is possible. Venus helps you see more clearly both what nourishes you and what drains you.
+
+LEO
+
+Partnerships are emphasized. In both love and work, you may draw attention easily. Since Venus is moving through Aquarius, freedom becomes a central relationship theme. In social settings your creative and expressive side can shine, but avoid overdoing spending or dramatic gestures just to prove affection.
+
+VIRGO
+
+Daily routines, order, and well-being come into focus. It is a period to listen more carefully to both workflow and the signals of your body. Small but steady changes can improve how you feel. Better structure brings more ease than intense effort.
+
+LIBRA
+
+Venus in Aquarius highlights romance, creativity, pleasure, and hobbies. You may want more joy and more room to breathe. If relationships have begun to feel confining, you may need distance in order to feel sincere again. Questions about where your money, time, and pleasure go can become more visible.
+
+SCORPIO
+
+This transit intensifies themes around inner peace, the home, and emotional foundations. Old family topics may return. Instead of entering crowded or noisy environments, you may prefer privacy and reflection. Listening to your inner world can reveal what still needs tenderness or release.
+
+SAGITTARIUS
+
+Short trips, nearby connections, and social plans become more active. Your mood may feel lighter, and someone from your close environment could begin to matter in a new way. Conversations about your dreams can be more inspiring now, and exchanges with colleagues may open practical opportunities.
+
+CAPRICORN
+
+Income, spending, and self-worth come into focus. Career and financial planning can become more serious. There may be chances to increase what you earn, especially through social networks or personal talents. The key is balance: grow your resources, but stay clear of unnecessary excess.
+
+AQUARIUS
+
+Venus moves through your sign this month, increasing your magnetism and visibility. You may question happiness, freedom, family ties, and the life shape that really suits you. Changes to your appearance or living environment may appeal to you. International or highly visible work can gain momentum.
+
+PISCES
+
+This is a more inward period. You may want time alone to process emotional tension or quiet realizations. Something hidden in your environment may become clear. Dreams, intuition, and subtle emotional signals can carry stronger messages now if you slow down enough to hear them.""",
+        }
+    },
+    "merkur-transiti-planla-ve-harekete-gec": {
+        "en": {
+            "title": "Mercury Transit: Plan and Take Action",
+            "excerpt": "Mercury asks us to rethink how we think, speak, organize, and act so our plans can finally become real.",
+            "body": """MERCURY TRANSIT
+
+In the first days of January, many of us may find ourselves thinking, imagining, and speaking more than usual. The sky is planting mental seeds that will shape how we plan, communicate, and move through the year. So what does Mercury's journey ask from us now?
+
+PLAN AND TAKE ACTION
+
+Mercury begins the month in Sagittarius, encouraging broader thought, meaning, and perspective. Soon after, it moves into Capricorn and asks us to become more grounded. This shift helps us see what we truly want, what we have postponed for too long, and which plans have not delivered real results.
+
+Mercury this year encourages practical intelligence. We may want to make the impossible more manageable, try again with better methods, and approach opportunities with more reason and structure. Logic, timing, and realistic execution become the strongest allies.
+
+WHAT WILL MERCURY RETRO BRING?
+
+Mercury will move through every sign over the course of the year and will turn retrograde four times. The first retrograde begins on February 26 in Aquarius. This period may bring technological issues, internet disruptions, and communication gaps in social or digital spaces.
+
+On June 29, Mercury retrograde in Cancer can reactivate family matters, home concerns, or the emotional past. Feelings may become harder to regulate, misunderstandings may increase, and technical problems involving vehicles or electronics are more likely.
+
+On July 7, Mercury retrograde in Gemini becomes one of the most noticeable periods: rushed speech, mixed messages, confusion of addresses or information, and communication overload can all rise. Phones, tablets, and computers may also feel more fragile.
+
+On September 24, Mercury retrograde in Libra may delay justice-related matters, partnerships, negotiations, and delicate written exchanges. This is a time to move carefully in agreements and not rush diplomatic or legal decisions.
+
+THIS MONTH'S MERCURY TRANSIT BY RISING SIGN
+
+ARIES
+
+The first days of the year may increase your interest in education, belief systems, and expanding your horizon. International or academic matters can become clearer. By the end of the month, your ideas may settle into stronger career decisions. Choose your words carefully in professional settings.
+
+TAURUS
+
+Thoughts around money, security, and how to improve your resources can take up more mental space. By the end of the month, plans that have been circling in your mind may begin to take clearer form. Avoid impulsive debt or risky financial moves; steady thinking serves you better.
+
+GEMINI
+
+Because Mercury is your ruling planet, you may feel this transit strongly. Relationship dynamics may bring internal questioning. Conversations with a partner or business ally require patience. The right words matter more than quick conclusions.
+
+CANCER
+
+Your schedule, work flow, and health concerns may occupy your mind more than usual. At the same time, relationships may require more mature decisions. This is a useful period for redefining boundaries and expressing yourself with more clarity.
+
+LEO
+
+Romance, pleasure, hobbies, and personal joy stand out at the beginning of the month. Later on, responsibilities may grow more visible. Before the month ends, setting a new routine can help you channel your energy more effectively.
+
+VIRGO
+
+Home, family, and emotional foundations become central themes. Children or romantic concerns may also draw attention. As self-expression becomes easier, creative projects can benefit from your renewed clarity and order.
+
+LIBRA
+
+Communication with siblings, neighbors, and your close environment may increase. Short trips and quick plans can arise. Later in the month, you may make fresh decisions regarding family, home, or the place you live.
+
+SCORPIO
+
+Money, value, and self-worth may feel more active in the first days of the year. Your relationship with material and emotional resources is changing. Greater discipline around spending and clearer resource management become important.
+
+SAGITTARIUS
+
+With Mercury moving through your sign early in the month, your urge to speak, explain, and define your point of view is strong. From mid-month onward, you may begin making more confident decisions around income, value, and how you use your energy.
+
+CAPRICORN
+
+At the beginning of the month, the mind may feel slightly scattered. Soon Mercury enters your sign and helps you think more clearly about yourself and your direction. Before that, a short pause for rest and mental reset can be especially helpful.
+
+AQUARIUS
+
+You may be moving through a period focused on friends, long-term hopes, and income. Confusion is possible. Before forcing decisions, it may be wiser to spend time alone and listen for your own inner signal rather than everyone else's noise.
+
+PISCES
+
+Work and career thoughts may dominate the first days of the year. You may be imagining opportunities connected to international income or a wider audience. By the end of the month, it becomes easier to turn those dreams into practical steps.""",
+        }
+    },
+    "jupiter-transiti-jupiter-acele-etme-diyor": {
+        "en": {
+            "title": "Jupiter Transit: Jupiter Says \"Don't Rush\"",
+            "excerpt": "Jupiter retrograde in Gemini asks for observation, review, and wiser timing instead of immediate expansion.",
+            "body": """JUPITER TRANSIT: JUPITER SAYS "DON'T RUSH"
+
+Jupiter, the most benefic planet in the sky, begins its retrograde motion on December 5. It remains retrograde in Gemini until March 11. So what is Jupiter trying to teach us through this slower, more reflective passage?
+
+RETROGRADE AND PUNARVASU THEMES
+
+While Jupiter is retrograde in Gemini, people, events, and unfinished questions from the past may return. It is wiser to stay observant than reactive. Some promises that look like opportunities at first glance may prove misleading if handled too quickly. In retrograde, Jupiter pulls its strength inward; the reward often becomes more visible after the retrograde has completed.
+
+Gemini can scatter the mind or create over-analysis, and that quality may be amplified now. Punarvasu, however, carries the symbolism of renewal, forgiveness, and rebuilding life with more integrity. Sometimes the most intelligent growth strategy is to wait for the storm to settle before acting.
+
+JUPITER'S EFFECTS BY RISING SIGN
+
+ARIES
+
+Topics related to travel, foreign connections, and both short and long journeys can become active. You may want to revisit plans or educational choices. Communication deserves more care during this period, especially when expectations are moving faster than facts.
+
+TAURUS
+
+Questions around income, stability, and financial restructuring may become more urgent. Delays, unexpected expenses, taxes, or credit matters may demand attention. Support from friends or your wider network can be part of the solution, but patience remains essential.
+
+GEMINI
+
+With Jupiter retrograding through your first house, important personal realizations may arise. You may want to change your appearance or the way you present yourself. This is a period to spend more time on your own development instead of trying to prove forward movement too quickly.
+
+CANCER
+
+You may feel the need to withdraw, reflect, and spend time with yourself. Topics from the past can return for emotional review. This is a supportive period for spiritual practices, rest, and deeper inner listening.
+
+LEO
+
+Creativity, romance, children, and social connections can become more visible. Encounters with old friends or past relationships are possible. You may also return to a hobby or passion that once brought genuine joy.
+
+VIRGO
+
+Career matters, family matters, and relationship dynamics may bring old themes back to the surface. A proposal you were waiting for could be delayed, or a previous professional issue may need to be reassessed. Retrograde motion asks for evaluation before expansion.
+
+LIBRA
+
+Travel, international plans, education, and long-range goals may slow down or require revision. You may question your beliefs or your inner motivation more deeply. If you are married or closely partnered, your partner's situation may also become part of the story.
+
+SCORPIO
+
+Early life memories, shared resources, deeper emotional material, and unconscious patterns may become more visible. This period can require honest confrontation with what has been avoided, especially in matters of trust and control.
+
+SAGITTARIUS
+
+Jupiter retrograde reminds you to address personal issues you may have postponed. Relationships, communication, siblings, or close-environment matters can move back to the foreground. Old topics in partnership may return for resolution rather than repetition.
+
+CAPRICORN
+
+Your daily schedule, work pace, health habits, and even responsibilities involving pets may require more care. Simplifying your routine can be more effective now than taking on additional complexity.
+
+AQUARIUS
+
+If there is a project or investment you want to launch, it may be wiser to refine the plan than to rush the move while Jupiter is retrograde. Projects shaped by social circles or group dynamics may need reevaluation before they can grow well.
+
+PISCES
+
+Jupiter retrograde in your fourth house can bring attention back to home, family, and the emotional past. Family developments or domestic matters may reappear. The lesson is not to force resolution, but to understand what your inner foundation truly needs.""",
+        }
+    },
+}
 ALLOWED_BIRTHPLACE_EVENTS = {
     "suggestion_results_returned",
     "suggestion_selected",
@@ -287,6 +579,22 @@ PREVIEW_CONTENT_LIMITS = {
 }
 _ADMIN_ALLOWLIST_CACHE = None
 _ADMIN_ALLOWLIST_LOGGED = False
+ARTICLE_SLUG_CHAR_MAP = str.maketrans(
+    {
+        "ç": "c",
+        "Ç": "c",
+        "ğ": "g",
+        "Ğ": "g",
+        "ı": "i",
+        "İ": "i",
+        "ö": "o",
+        "Ö": "o",
+        "ş": "s",
+        "Ş": "s",
+        "ü": "u",
+        "Ü": "u",
+    }
+)
 
 
 def get_db():
@@ -408,6 +716,37 @@ def _checkout_redirect_url(path, **query):
     return f"{base}{path}{suffix}"
 
 
+def _generate_order_token(prefix):
+    return f"{prefix}_{secrets.token_urlsafe(18)}"
+
+
+def _amount_decimal(value):
+    raw = str(value or "").strip()
+    raw = raw.replace("₺", "").replace("TRY", "").replace("TL", "").replace(" ", "")
+    if "," in raw:
+        raw = raw.replace(".", "").replace(",", ".")
+    elif "." in raw and len(raw.rsplit(".", 1)[-1]) == 3:
+        raw = raw.replace(".", "")
+    else:
+        raw = raw.replace(",", "")
+    try:
+        amount = Decimal(raw)
+    except (InvalidOperation, ValueError):
+        amount = Decimal("0")
+    return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _order_amount(order):
+    amount = getattr(order, "amount", None)
+    if amount not in (None, ""):
+        return _amount_decimal(amount)
+    return _amount_decimal(getattr(order, "amount_label", ""))
+
+
+def _order_public_token(order):
+    return getattr(order, "public_token", None) or getattr(order, "order_token", "")
+
+
 def can_use_beta_free_unlock(user):
     return payments.can_use_beta_free_unlock(user)
 
@@ -440,7 +779,9 @@ def can_save_more_reports(user, db):
 
 def _highest_allowed_report_type(user):
     allowed = get_plan_features(user).get("allowed_report_types", ["preview"])
-    return normalize_report_type(allowed[-1] if allowed else "preview")
+    tier_order = ["preview", "basic", "premium", "elite"]
+    allowed_tiers = [report_type for report_type in tier_order if report_type in allowed]
+    return normalize_report_type(allowed_tiers[-1] if allowed_tiers else "preview")
 
 
 def resolve_report_type_for_user(user, requested_report_type):
@@ -754,6 +1095,141 @@ def _report_checkout_urls(report, request=None):
         success_url = f"{base}/checkout/success?report_id={report.id}&session_id={{CHECKOUT_SESSION_ID}}"
         cancel_url = f"{base}/checkout/cancel?report_id={report.id}"
     return success_url, cancel_url
+
+
+def _service_order_by_token_or_404(db, order_token):
+    order = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.order_token == str(order_token or "")).first()
+    if not order:
+        _public_error("Sipariş bulunamadı.", 404)
+    return order
+
+
+def _service_order_payload(order):
+    payload = _safe_json_loads(getattr(order, "payload_json", None), {})
+    return payload if isinstance(payload, dict) else {}
+
+
+def _service_order_product(order):
+    if getattr(order, "service_type", "") == "consultation":
+        return dict(CONSULTATION_PRODUCT)
+    bundle_type = normalize_report_bundle_type(getattr(order, "bundle_type", "") or getattr(order, "product_type", ""))
+    if bundle_type:
+        product = dict(REPORT_BUNDLE_PRODUCTS[bundle_type])
+        product["is_bundle"] = True
+        return product
+    product_type = normalize_report_order_type(getattr(order, "product_type", ""))
+    if product_type:
+        return dict(REPORT_ORDER_PRODUCTS[product_type])
+    return {"title": getattr(order, "product_type", "Sipariş"), "price": getattr(order, "amount_label", ""), "summary": ""}
+
+
+def _checkout_upsell_context(order=None, service_kind=None):
+    service_type = service_kind or getattr(order, "service_type", "")
+    product_type = getattr(order, "product_type", "")
+    bundle_type = normalize_report_bundle_type(getattr(order, "bundle_type", "") or product_type)
+    if service_type == "consultation":
+        return {
+            "eyebrow": "Seansa hazırlık",
+            "title": "Doğum Haritası Karma’sı raporunu seans öncesi ekleyebilirsiniz.",
+            "text": "Temel harita raporu, birebir görüşmede sorularınızı daha hızlı ve derin bir zeminde ele almaya yardımcı olur.",
+            "primary_label": "Bu Raporu Al",
+            "primary_href": "/reports/order/birth_chart_karma",
+        }
+    if bundle_type:
+        return {
+            "eyebrow": "Sipariş kapsamı",
+            "title": "Bu paket birden fazla içgörüyü tek siparişte toplar.",
+            "text": "Ödeme sonrası paket içeriği birlikte hazırlanır; AI destekli taslak yine yalnızca yönetici incelemesine gider ve teslim insan değerlendirmesi sonrası yapılır.",
+            "primary_label": "Paketleri Karşılaştır",
+            "primary_href": "/reports#paketler",
+        }
+    if product_type == "birth_chart_karma":
+        return {
+            "eyebrow": "Zamanlama katmanı",
+            "title": "Yıllık Transit ile bu temel haritayı zamana yerleştirin.",
+            "text": "Doğum Haritası Karma’sı kişisel yapıyı gösterir; Yıllık Transit ise önünüzdeki dönemlerde bu yapının nasıl çalışabileceğini netleştirir.",
+            "primary_label": "Bu Analizle Devam Et",
+            "primary_href": "/reports/order/annual_transit",
+            "secondary_label": "Life Path Bundle",
+            "secondary_href": "/reports/order/bundle/life_path_bundle",
+        }
+    if product_type == "career":
+        return {
+            "eyebrow": "Daha derin kariyer yönü",
+            "title": "Kariyer kararlarını birebir danışmanlıkla derinleştirin.",
+            "text": "Kariyer raporu yönü açar; danışmanlık ise bu yönü gerçek kararlarınız ve zamanlama sorularınızla birlikte ele alır.",
+            "primary_label": "Danışmanlıkla Derinleştir",
+            "primary_href": "/personal-consultation",
+            "secondary_label": "Full Year Insight Bundle",
+            "secondary_href": "/reports/order/bundle/full_year_insight_bundle",
+        }
+    if product_type == "parent_child":
+        return {
+            "eyebrow": "Aile içgörüsü",
+            "title": "İkinci çocuk veya aile dinamiği için kapsamı genişletebilirsiniz.",
+            "text": "Ebeveyn-Çocuk raporu tek ilişkiyi hassas biçimde okur; daha geniş aile bağlamı için ek rapor veya danışmanlık daha doğru olabilir.",
+            "primary_label": "Danışmanlıkla Derinleştir",
+            "primary_href": "/personal-consultation",
+        }
+    return {
+        "eyebrow": "Zamanlama katmanı",
+        "title": "Yıllık Transit ile bu analizi dönemsel bağlama taşıyın.",
+        "text": "Odak raporunuz netlik sağlar; yıllık zamanlama katmanı, hangi dönemde nasıl ilerleyeceğinizi daha görünür kılar.",
+        "primary_label": "Bu Analizle Devam Et",
+        "primary_href": "/reports/order/annual_transit",
+    }
+
+
+def _service_checkout_urls(order, request=None):
+    if order.service_type == "consultation":
+        success_path = "/checkout/consultation/success"
+        cancel_path = "/checkout/consultation/cancel"
+    else:
+        success_path = f"/checkout/report/{order.order_token}/success"
+        cancel_path = f"/checkout/report/{order.order_token}/cancel"
+    base = _app_base_url(request)
+    success_url = f"{base}{success_path}?order_token={order.order_token}&session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{base}{cancel_path}?order_token={order.order_token}"
+    return success_url, cancel_url
+
+
+def _iyzico_callback_url(order, request=None):
+    callback_path = (
+        "/payments/iyzico/callback/consultation"
+        if order.service_type == "consultation"
+        else "/payments/iyzico/callback/report"
+    )
+    return f"{_app_base_url(request)}{callback_path}"
+
+
+def initialize_payment_for_order(order, request=None):
+    provider = payments.get_payment_provider()
+    if getattr(provider, "provider_name", "") != "iyzico":
+        raise payments.PaymentConfigurationError("Service orders currently require iyzico checkout form.")
+    if not hasattr(provider, "initialize_payment_for_order"):
+        raise payments.PaymentConfigurationError("Iyzico checkout form initialization is not configured.")
+    callback_url = _iyzico_callback_url(order, request=request)
+    session = provider.initialize_payment_for_order(order, callback_url)
+    order.provider_name = "iyzico"
+    order.payment_provider = "iyzico"
+    order.provider_token = session.get("provider_token") or session.get("session_id")
+    order.payment_session_id = order.provider_token
+    order.provider_conversation_id = session.get("provider_conversation_id") or _order_public_token(order)
+    return session
+
+
+def _create_service_checkout_session(order, request=None):
+    if not payments.payments_enabled():
+        raise payments.PaymentConfigurationError("Online ödeme şu anda aktif değil.")
+    return initialize_payment_for_order(order, request=request)
+
+
+def create_report_payment_session(order, request=None):
+    return _create_service_checkout_session(order, request=request)
+
+
+def create_consultation_payment_session(order, request=None):
+    return _create_service_checkout_session(order, request=request)
 
 
 def _finalize_report_purchase(report, payment_data):
@@ -2513,6 +2989,528 @@ def safe_send_template_email(db, *, user, email_type, template_name, subject, ev
     return {"status": result.status, "ok": result.ok, "email_log_id": log_entry.id}
 
 
+def _report_order_admin_email():
+    configured = str(os.getenv("REPORT_ORDER_ADMIN_EMAIL", "")).strip()
+    if configured:
+        return configured
+    config = email_utils.get_email_config()
+    for candidate in (
+        config.get("support_email"),
+        config.get("billing_email"),
+        config.get("from_address"),
+    ):
+        if candidate:
+            return candidate
+    allowlist = sorted(_admin_email_allowlist())
+    return allowlist[0] if allowlist else ""
+
+
+def _build_report_order_payload(order_data, product):
+    return {
+        "workflow": "report_order_admin_review",
+        "language": "tr",
+        "report_order_type": order_data["report_type"],
+        "bundle_type": order_data.get("bundle_type") or "",
+        "included_products": order_data.get("included_products") or [],
+        "report_product_title": product["title"],
+        "report_product_focus": product["draft_focus"],
+        "customer": {
+            "full_name": order_data["full_name"],
+            "email": order_data["email"],
+        },
+        "birth_data": {
+            "birth_date": order_data["birth_date"],
+            "birth_time": order_data["birth_time"],
+            "birth_place": order_data["birth_city"],
+        },
+        "customer_note": order_data.get("optional_note") or "",
+        "service_model": {
+            "delivery": "Raporlar, hazırlık sürecinin ardından en geç 7 gün içinde e-posta ile teslim edilir.",
+            "review_step": "AI destekli taslak önce yöneticiye iletilir; müşteriye otomatik gönderilmez.",
+            "human_review_required": True,
+        },
+        "requested_at": datetime.now(pytz.UTC).isoformat(),
+    }
+
+
+def _generate_report_order_draft(order_payload):
+    try:
+        return ai_logic.generate_interpretation(order_payload), "generated"
+    except (ai_logic.AIConfigurationError, ai_logic.AIServiceError):
+        logger.exception("Report order AI draft generation degraded")
+    except Exception:
+        logger.exception("Unexpected report order AI draft generation error")
+    fallback = (
+        "AI destekli taslak bu ortamda otomatik üretilemedi. "
+        "Müşteri bilgileri ve rapor talebi manuel inceleme için aşağıdadır."
+    )
+    return fallback, "draft_unavailable"
+
+
+def send_report_draft_to_admin(db, *, order_data, product, draft_text, draft_status):
+    admin_email = _report_order_admin_email()
+    if not admin_email:
+        logger.warning("Report order admin email skipped because no admin email is configured")
+        return {"status": "skipped", "reason": "missing_admin_email"}
+
+    event_key = "report_order:{email}:{report_type}:{submitted_at}".format(
+        email=order_data["email"].strip().lower(),
+        report_type=order_data["report_type"],
+        submitted_at=order_data["submitted_at"],
+    )
+    subject = f"Yeni rapor talebi: {product['title']} - {order_data['full_name']}"
+    return safe_send_template_email(
+        db,
+        user=None,
+        to_email=admin_email,
+        email_type="report_order_admin_draft",
+        template_name="report_order_admin_draft",
+        subject=subject,
+        event_type="report_order",
+        event_key=event_key,
+        order=order_data,
+        product=product,
+        draft_text=draft_text,
+        draft_status=draft_status,
+    )
+
+
+def _order_data_from_service_order(order):
+    payload = _service_order_payload(order)
+    return {
+        "full_name": order.customer_name or payload.get("full_name") or "",
+        "email": order.customer_email or payload.get("email") or "",
+        "birth_date": order.birth_date or payload.get("birth_date") or "",
+        "birth_time": order.birth_time or payload.get("birth_time") or "",
+        "birth_city": order.birth_place or payload.get("birth_city") or "",
+        "optional_note": order.optional_note or payload.get("optional_note") or "",
+        "report_type": order.product_type,
+        "report_title": payload.get("report_title") or _service_order_product(order).get("title", ""),
+        "submitted_at": payload.get("submitted_at") or (order.created_at.isoformat() if order.created_at else datetime.now(pytz.UTC).isoformat()),
+        "source": payload.get("source") or "paid_report_order",
+    }
+
+
+def finalize_report_order_after_payment(db, order, payment_data=None):
+    payment_data = payment_data or {}
+    if order.status == "draft_sent_to_admin":
+        return {"status": "skipped", "reason": "already_sent"}
+    product = _service_order_product(order)
+    order.status = "draft_pending"
+    order.payment_provider = payment_data.get("provider") or order.payment_provider
+    order.payment_session_id = payment_data.get("session_id") or order.payment_session_id
+    order.payment_reference = payment_data.get("payment_reference") or order.payment_reference
+    order_data = _order_data_from_service_order(order)
+    order_payload = _build_report_order_payload(order_data, product)
+    draft_text, draft_status = _generate_report_order_draft(order_payload)
+    order.ai_draft_text = draft_text
+    order.ai_draft_created_at = datetime.utcnow()
+    order.ai_draft_version = (getattr(order, "ai_draft_version", None) or 0) + 1
+    admin_delivery = send_report_draft_to_admin(
+        db,
+        order_data=order_data,
+        product=product,
+        draft_text=draft_text,
+        draft_status=draft_status,
+    )
+    order.draft_status = draft_status
+    order.status = "draft_ready" if admin_delivery.get("status") in {"sent", "skipped"} else "draft_pending"
+    order.draft_sent_at = datetime.utcnow() if admin_delivery.get("status") == "sent" else order.draft_sent_at
+    db.commit()
+    return admin_delivery
+
+
+def send_report_customer_confirmation(db, order):
+    order_data = _order_data_from_service_order(order)
+    if not order_data.get("email"):
+        return {"status": "skipped", "reason": "missing_customer_email"}
+    return safe_send_template_email(
+        db,
+        user=None,
+        to_email=order_data["email"],
+        email_type="report_order_customer_confirmation",
+        template_name="report_order_customer_confirmation",
+        subject=f"Rapor talebiniz alındı: {_service_order_product(order).get('title', '')}",
+        event_type="report_order_paid",
+        event_key=f"report_customer_confirmation:{order.order_token}",
+        order=order_data,
+        product=_service_order_product(order),
+    )
+
+
+def send_consultation_confirmation(db, order):
+    if not getattr(order, "customer_email", None):
+        return {"status": "skipped", "reason": "missing_customer_email"}
+    return safe_send_template_email(
+        db,
+        user=None,
+        to_email=order.customer_email,
+        email_type="consultation_payment_confirmation",
+        template_name="consultation_payment_confirmation",
+        subject="Danışmanlık ödemeniz alındı",
+        event_type="consultation_paid",
+        event_key=f"consultation_confirmation:{order.order_token}",
+        order=order,
+        product=_service_order_product(order),
+    )
+
+
+def _iyzico_payload_value(payload, key):
+    if isinstance(payload, dict):
+        return payload.get(key)
+    return None
+
+
+def _validate_iyzico_retrieve_payload(order, retrieve_payload):
+    status = str(_iyzico_payload_value(retrieve_payload, "status") or "").lower()
+    payment_status = str(_iyzico_payload_value(retrieve_payload, "paymentStatus") or "").lower()
+    conversation_id = str(_iyzico_payload_value(retrieve_payload, "conversationId") or "")
+    basket_id = str(_iyzico_payload_value(retrieve_payload, "basketId") or "")
+    paid_price = _amount_decimal(_iyzico_payload_value(retrieve_payload, "paidPrice"))
+    currency = str(_iyzico_payload_value(retrieve_payload, "currency") or "").upper()
+    fraud_status = str(_iyzico_payload_value(retrieve_payload, "fraudStatus") or "")
+    expected_amount = _order_amount(order)
+    expected_currency = str(getattr(order, "currency", None) or "TRY").upper()
+    errors = []
+    if status != "success":
+        errors.append("status")
+    if payment_status != "success":
+        errors.append("paymentStatus")
+    if conversation_id != str(getattr(order, "provider_conversation_id", None) or _order_public_token(order)):
+        errors.append("conversationId")
+    if basket_id != str(order.id):
+        errors.append("basketId")
+    if paid_price != expected_amount:
+        errors.append("paidPrice")
+    if currency != expected_currency:
+        errors.append("currency")
+    if fraud_status != "1":
+        errors.append("fraudStatus")
+    payment_id = str(_iyzico_payload_value(retrieve_payload, "paymentId") or "")
+    if not payment_id:
+        errors.append("paymentId")
+    transactions = retrieve_payload.get("itemTransactions") if isinstance(retrieve_payload, dict) else []
+    transaction_id = ""
+    if isinstance(transactions, list) and transactions:
+        transaction_id = str((transactions[0] or {}).get("paymentTransactionId") or "")
+    if errors:
+        raise payments.PaymentVerificationError("Iyzico verification failed: " + ", ".join(errors))
+    return {
+        "provider": "iyzico",
+        "session_id": getattr(order, "provider_token", None),
+        "payment_reference": payment_id,
+        "payment_id": payment_id,
+        "payment_transaction_id": transaction_id,
+        "payment_status": payment_status,
+        "fraud_status": fraud_status,
+        "completed_at": datetime.utcnow(),
+        "raw": retrieve_payload,
+    }
+
+
+def finalize_paid_order_if_valid(db, order, retrieve_payload):
+    payment_data = _validate_iyzico_retrieve_payload(order, retrieve_payload)
+    payment_id = payment_data["payment_id"]
+    if getattr(order, "provider_payment_id", None) == payment_id and getattr(order, "status", None) in {"paid", "draft_sent_to_admin", "completed"}:
+        return {"changed": False, "payment_data": payment_data}
+    existing = db.query(db_mod.ServiceOrder).filter(
+        db_mod.ServiceOrder.provider_payment_id == payment_id,
+        db_mod.ServiceOrder.id != order.id,
+    ).first()
+    if existing:
+        raise payments.PaymentVerificationError("Iyzico paymentId is already linked to another order.")
+    now = datetime.utcnow()
+    order.status = "paid"
+    order.provider_name = "iyzico"
+    order.payment_provider = "iyzico"
+    order.provider_payment_id = payment_id
+    order.provider_transaction_id = payment_data.get("payment_transaction_id") or order.provider_transaction_id
+    order.payment_reference = payment_id
+    order.payment_verified_at = now
+    order.paid_at = now
+    order.fraud_status = payment_data["fraud_status"]
+    db.commit()
+    return {"changed": True, "payment_data": payment_data}
+
+
+def mark_payment_under_review(db, order, retrieve_payload, actor="iyzico"):
+    fraud_status = str(_iyzico_payload_value(retrieve_payload, "fraudStatus") or "")
+    order.status = "payment_under_review"
+    order.fraud_status = fraud_status or order.fraud_status
+    order.payment_verified_at = datetime.utcnow()
+    log_admin_action(db, order, "payment_under_review", actor=actor, metadata={"fraud_status": fraud_status})
+    db.commit()
+    return {"status": "payment_under_review", "fraud_status": fraud_status}
+
+
+def run_post_payment_triggers(db, order, payment_data):
+    if order.service_type == "report":
+        admin_delivery = finalize_report_order_after_payment(db, order, payment_data=payment_data)
+        customer_delivery = send_report_customer_confirmation(db, order)
+        return {"admin_delivery": admin_delivery, "customer_delivery": customer_delivery}
+    if order.service_type == "consultation":
+        confirmation = send_consultation_confirmation(db, order)
+        return {"consultation_confirmation": confirmation}
+    return {"status": "skipped", "reason": "unknown_service_type"}
+
+
+def process_verified_service_payment(db, order, retrieve_payload):
+    result = finalize_paid_order_if_valid(db, order, retrieve_payload)
+    if result["changed"]:
+        result["post_payment"] = run_post_payment_triggers(db, order, result["payment_data"])
+    return result
+
+
+def expire_unpaid_consultations(db=None):
+    owns_session = db is None
+    db = db or db_mod.SessionLocal()
+    try:
+        cutoff = datetime.utcnow() - timedelta(minutes=30)
+        orders = db.query(db_mod.ServiceOrder).filter(
+            db_mod.ServiceOrder.service_type == "consultation",
+            db_mod.ServiceOrder.status == "booking_pending_payment",
+            db_mod.ServiceOrder.created_at < cutoff,
+        ).all()
+        for order in orders:
+            order.status = "booking_expired"
+        db.commit()
+        return len(orders)
+    finally:
+        if owns_session:
+            db.close()
+
+
+REPORT_ADMIN_TRANSITIONS = {
+    "mark_draft_ready": {"from": {"paid", "draft_pending", "draft_ready"}, "to": "draft_ready", "timestamp": "ai_draft_created_at"},
+    "mark_under_review": {"from": {"draft_ready", "under_review"}, "to": "under_review", "timestamp": "review_started_at"},
+    "mark_ready_to_send": {"from": {"under_review", "ready_to_send"}, "to": "ready_to_send", "timestamp": "ready_to_send_at"},
+    "mark_delivered": {"from": {"ready_to_send", "delivered"}, "to": "delivered", "timestamp": "delivered_at"},
+}
+CONSULTATION_ADMIN_TRANSITIONS = {
+    "mark_confirmed": {"from": {"paid", "confirmed"}, "to": "confirmed", "timestamp": "confirmed_at"},
+    "mark_prepared": {"from": {"confirmed", "prepared"}, "to": "prepared", "timestamp": "prepared_at"},
+    "mark_completed": {"from": {"prepared", "completed"}, "to": "completed", "timestamp": "completed_at"},
+}
+TERMINAL_ADMIN_STATUSES = {"refunded", "cancelled", "no_show"}
+
+
+def _admin_actor(request):
+    user = getattr(request.state, "admin_user", None) or getattr(request.state, "current_user", None) or {}
+    if isinstance(user, dict):
+        return user.get("email") or user.get("name") or "admin"
+    return getattr(user, "email", None) or "admin"
+
+
+def log_admin_action(db, order, action, actor=None, metadata=None):
+    log = db_mod.AdminActionLog(
+        order_id=order.id,
+        action=action,
+        actor=actor or "admin",
+        metadata_json=json.dumps(metadata or {}, ensure_ascii=False, default=str),
+    )
+    db.add(log)
+    return log
+
+
+def _validate_order_paid(order):
+    if getattr(order, "status", "") in {"awaiting_payment", "booking_pending_payment", "booking_expired", "initiated"} or not getattr(order, "paid_at", None):
+        raise ValueError("Order must be paid before this admin action.")
+
+
+def apply_admin_order_transition(db, order, action, actor=None):
+    transitions = REPORT_ADMIN_TRANSITIONS if order.service_type == "report" else CONSULTATION_ADMIN_TRANSITIONS
+    rule = transitions.get(action)
+    if not rule:
+        raise ValueError("Invalid admin action.")
+    _validate_order_paid(order)
+    if order.status not in rule["from"]:
+        raise ValueError(f"Invalid state transition from {order.status}.")
+    now = datetime.utcnow()
+    order.status = rule["to"]
+    timestamp_field = rule.get("timestamp")
+    if timestamp_field and not getattr(order, timestamp_field, None):
+        setattr(order, timestamp_field, now)
+    log_admin_action(db, order, action, actor=actor, metadata={"to": rule["to"]})
+    db.commit()
+    return order
+
+
+def _refund_amount_decimal(order, refund_amount=None):
+    amount = _amount_decimal(refund_amount) if refund_amount not in {None, ""} else _order_amount(order)
+    if amount <= Decimal("0"):
+        raise ValueError("Refund amount must be greater than zero.")
+    order_amount = _order_amount(order)
+    if order_amount and amount > order_amount:
+        raise ValueError("Refund amount cannot exceed order amount.")
+    return amount
+
+
+def refund_service_order_payment(order, refund_amount, reason):
+    provider = payments.get_payment_provider()
+    if getattr(provider, "provider_name", "") != "iyzico" or not hasattr(provider, "refund_order_payment"):
+        raise payments.PaymentConfigurationError("Provider refund API is not configured.")
+    return provider.refund_order_payment(order, refund_amount, reason=reason)
+
+
+def send_refund_confirmation_email(db, order, refund_amount):
+    if not getattr(order, "customer_email", None):
+        return {"status": "skipped", "reason": "missing_customer_email"}
+    return safe_send_template_email(
+        db,
+        user=None,
+        to_email=order.customer_email,
+        email_type="refund_confirmation",
+        template_name="refund_confirmation",
+        subject="İade işleminiz kaydedildi",
+        event_type="order_refund",
+        event_key=f"refund_confirmation:{order.order_token}:{order.refunded_at.isoformat() if order.refunded_at else ''}",
+        order=order,
+        product=_service_order_product(order),
+        refund_amount=str(refund_amount),
+    )
+
+
+def send_cancellation_confirmation_email(db, order):
+    if not getattr(order, "customer_email", None):
+        return {"status": "skipped", "reason": "missing_customer_email"}
+    return safe_send_template_email(
+        db,
+        user=None,
+        to_email=order.customer_email,
+        email_type="cancellation_confirmation",
+        template_name="order_cancellation_confirmation",
+        subject="Talebiniz iptal edildi",
+        event_type="order_cancelled",
+        event_key=f"order_cancelled:{order.order_token}:{order.cancelled_at.isoformat() if order.cancelled_at else ''}",
+        order=order,
+        product=_service_order_product(order),
+    )
+
+
+def request_order_refund(db, order, refund_amount=None, reason="", actor=None, refund_mode="provider"):
+    _validate_order_paid(order)
+    if order.status in {"refunded"} or getattr(order, "refund_status", None) == "refunded":
+        raise ValueError("Order has already been fully refunded.")
+    amount = _refund_amount_decimal(order, refund_amount)
+    mode = str(refund_mode or "provider").strip().lower()
+    provider_result = {"status": "manual_refund_recorded"} if mode == "manual" else refund_service_order_payment(order, amount, reason)
+    now = datetime.utcnow()
+    order.refund_amount = amount
+    order.refund_reason = str(reason or "").strip()
+    order.refunded_at = now
+    full_refund = amount == _order_amount(order)
+    order.refund_status = "refunded" if full_refund else "partially_refunded"
+    order.status = order.refund_status
+    log_admin_action(db, order, "refund", actor=actor, metadata={"amount": str(amount), "mode": mode, "provider_result": provider_result})
+    db.commit()
+    send_refund_confirmation_email(db, order, amount)
+    return provider_result
+
+
+def _consultation_can_cancel_free(order, now=None):
+    scheduled_start = getattr(order, "scheduled_start", None)
+    if not scheduled_start:
+        return False
+    now = now or datetime.utcnow()
+    return scheduled_start - now >= timedelta(hours=24)
+
+
+def cancel_service_order(db, order, reason="", actor=None, admin_override=False):
+    _validate_order_paid(order)
+    if order.status in {"cancelled", "refunded", "no_show"}:
+        raise ValueError("Order is already in a terminal state.")
+    free_window = True
+    if order.service_type == "consultation":
+        free_window = _consultation_can_cancel_free(order)
+        if not free_window and not admin_override:
+            raise ValueError("Consultation cancellation is inside the 24-hour window. Admin override is required.")
+    order.status = "cancelled"
+    order.cancelled_at = datetime.utcnow()
+    order.cancellation_reason = str(reason or "").strip()
+    log_admin_action(db, order, "cancel", actor=actor, metadata={"admin_override": bool(admin_override), "free_window": bool(free_window)})
+    db.commit()
+    send_cancellation_confirmation_email(db, order)
+    return {"status": "cancelled", "free_window": free_window}
+
+
+def mark_consultation_no_show(db, order, reason="", actor=None):
+    if order.service_type != "consultation":
+        raise ValueError("Only consultation orders can be marked no_show.")
+    _validate_order_paid(order)
+    if order.status in {"refunded", "cancelled", "no_show"}:
+        raise ValueError("Consultation is already in a terminal state.")
+    order.status = "no_show"
+    order.no_show_at = datetime.utcnow()
+    if reason:
+        order.internal_notes = ((order.internal_notes or "").rstrip() + f"\nNo-show note: {reason}").strip()
+    log_admin_action(db, order, "mark_no_show", actor=actor, metadata={"reason": reason})
+    db.commit()
+    return order
+
+
+def reconcile_order_payment(db, order, token="", conversation_id="", actor=None):
+    token = str(token or getattr(order, "provider_token", "") or "").strip()
+    if not token:
+        raise ValueError("Payment token is required for iyzico reconciliation.")
+    provider = payments.get_payment_provider()
+    if getattr(provider, "provider_name", "") != "iyzico" or not hasattr(provider, "retrieve_checkout_form"):
+        raise payments.PaymentConfigurationError("Iyzico retrieve API is not configured.")
+    conversation_id = str(conversation_id or getattr(order, "provider_conversation_id", None) or _order_public_token(order))
+    retrieve_payload = provider.retrieve_checkout_form(token, conversation_id)
+    try:
+        result = process_verified_service_payment(db, order, retrieve_payload)
+    except payments.PaymentVerificationError as exc:
+        if "fraudStatus" in str(exc):
+            result = mark_payment_under_review(db, order, retrieve_payload, actor=actor or "admin_reconcile")
+        else:
+            raise
+    order.reconciliation_notes = f"Manual reconciliation by {actor or 'admin'} at {datetime.utcnow().isoformat()}"
+    log_admin_action(db, order, "reconcile_payment", actor=actor, metadata={"token": token, "conversation_id": conversation_id, "result": result})
+    db.commit()
+    return result
+
+
+def save_order_internal_notes(db, order, notes, actor=None):
+    order.internal_notes = str(notes or "").strip()
+    log_admin_action(db, order, "save_internal_notes", actor=actor)
+    db.commit()
+    return order
+
+
+def send_final_report_delivery_email(db, order, actor=None):
+    if order.service_type != "report":
+        raise ValueError("Only report orders can be delivered by report email.")
+    _validate_order_paid(order)
+    if order.status == "delivered":
+        raise ValueError("Report has already been delivered.")
+    if order.status != "ready_to_send":
+        raise ValueError("Report must be ready_to_send before delivery.")
+    order_data = _order_data_from_service_order(order)
+    if not order_data.get("email"):
+        raise ValueError("Customer email is missing.")
+    result = safe_send_template_email(
+        db,
+        user=None,
+        to_email=order_data["email"],
+        email_type="final_report_delivery",
+        template_name="final_report_delivery",
+        subject=f"Raporunuz hazır: {_service_order_product(order).get('title', '')}",
+        event_type="report_delivered",
+        event_key=f"final_report_delivery:{order.order_token}",
+        order=order_data,
+        product=_service_order_product(order),
+        final_report_text=order.ai_draft_text or "",
+    )
+    if result.get("status") != "sent":
+        raise ValueError("Delivery email could not be sent.")
+    now = datetime.utcnow()
+    order.status = "delivered"
+    order.delivered_at = now
+    log_admin_action(db, order, "send_final_report", actor=actor, metadata={"email_log_id": result.get("email_log_id")})
+    db.commit()
+    return result
+
+
 def maybe_send_welcome_email(db, user):
     logger.info("Welcome email trigger evaluated user_id=%s", user.id)
     return safe_send_template_email(
@@ -3095,8 +4093,253 @@ def _focus_label(value, language="tr"):
     return str(value or "")
 
 
+def _result_language(request, user=None):
+    language = getattr(getattr(request, "state", None), "lang", None) or get_preferred_language(request, user)
+    language = str(language or "tr").lower()
+    return language if language in {"tr", "en"} else "tr"
+
+
 def _labelize(value):
     return str(value or "").replace("_", " ").strip().title()
+
+
+_RESULT_DOMAIN_LABELS_TR = {
+    "career": "kariyer",
+    "money": "finans",
+    "finances": "finans",
+    "relationships": "ilişkiler",
+    "inner_state": "iç dünya",
+    "growth": "büyüme",
+    "personal_growth": "kişisel gelişim",
+    "home": "ev ve iç denge",
+    "health": "sağlık",
+    "social_network": "sosyal çevre",
+    "education": "öğrenme",
+    "spirituality": "anlam arayışı",
+}
+
+_RESULT_PHRASE_LOCALIZATION_TR = {
+    "Prioritize deliberate career positioning": "Kariyer yönünüzü bilinçli şekilde önceliklendirin",
+    "Delay major financial commitments": "Büyük finansal taahhütleri yavaşlatın",
+    "Have important conversations with more clarity": "Önemli konuşmaları daha net bir çerçeveyle yapın",
+    "Rebuild routine and inner steadiness": "Rutini ve iç dengeyi yeniden kurun",
+    "Use the current opening for targeted growth": "Mevcut açılımı hedefli büyüme için kullanın",
+    "This recommendation is driven by current dasha emphasis and reinforced by chart themes around structured progress in work decisions.": "Bu öneri, mevcut dasha vurgusu ve iş kararlarında daha yapılandırılmış ilerleme ihtiyacını gösteren harita temalarıyla desteklenir.",
+    "This recommendation is driven by current dasha emphasis and reinforced by chart themes around caution in money decisions.": "Bu öneri, mevcut dasha vurgusu ve finansal kararlarda daha temkinli ilerleme ihtiyacını gösteren harita temalarıyla desteklenir.",
+    "This recommendation is driven by the current chart emphasis on relational honesty and cleaner emotional boundaries.": "Bu öneri, ilişkilerde dürüstlük ve daha temiz duygusal sınırlar gerektiren mevcut harita vurgusundan gelir.",
+    "This recommendation is driven by a concentration of signals that reward steadier pacing, reflection, and better emotional regulation.": "Bu öneri, daha dengeli tempo, düşünerek hareket etme ve duygusal düzenleme isteyen güçlü sinyal yoğunluğuna dayanır.",
+    "This recommendation is driven by the current dasha opening and reinforced by broader chart themes around visible expansion.": "Bu öneri, mevcut dasha açılımı ve görünür büyümeyi destekleyen daha geniş harita temalarıyla güçlenir.",
+    "Inner expansion under invisible pressure": "Görünmeyen baskı altında içsel genişleme",
+    "Career ambition with material consequences": "Maddi sonuçları olan kariyer odağı",
+    "Emotional independence in relationships": "İlişkilerde duygusal bağımsızlık",
+    "Growth path with public consequence": "Görünür sonuçları olan büyüme yolu",
+    "Security rebuilding through restraint": "Ölçülülükle güvenliği yeniden kurma",
+    "A smaller but still useful supporting theme remains active.": "Daha küçük ama yine de anlamlı bir destek teması aktif kalıyor.",
+    "This anchor preserves narrative completeness when the chart compresses into fewer dominant clusters.": "Bu odak, harita daha az sayıda güçlü kümeye sıkıştığında anlatının bütünlüğünü korur.",
+    "Current dasha emphasis is centered on {planet}, so timing-sensitive guidance is weighted more heavily.": "Mevcut dasha vurgusu {planet} üzerinde toplandığı için zamanlamaya duyarlı rehberlik daha fazla ağırlık taşır.",
+    "Slightly prioritized due to stronger user response to clear_direct guidance.": "Daha net ve doğrudan rehberliğe verilen güçlü kullanıcı tepkisi nedeniyle hafifçe önceliklendirildi.",
+    "Slightly softened because this domain has recently been rated as too generic.": "Bu alan yakın zamanda fazla genel bulunduğu için hafifçe yumuşatıldı.",
+    "Recommendation wording stays more direct because recent feedback favored clearer guidance.": "Son geri bildirimler daha net rehberliği öne çıkardığı için öneri dili daha doğrudan tutuldu.",
+    "Recent recommendation feedback suggests users respond well to direct, action-oriented guidance.": "Son öneri geri bildirimleri, doğrudan ve eyleme dönük rehberliğin daha iyi karşılandığını gösteriyor.",
+    "Maturity, meaningful expansion, and stronger long-range vision.": "Olgunlaşma, anlamlı genişleme ve daha güçlü uzun vadeli vizyon.",
+    "Strategic positioning, earned credibility, and visible progress.": "Stratejik konumlanma, kazanılmış güvenilirlik ve görünür ilerleme.",
+    "Cleaner standards, better reciprocity, and emotional clarity.": "Daha temiz standartlar, daha iyi karşılıklılık ve duygusal netlik.",
+    "Inner steadiness, self-awareness, and better energetic boundaries.": "İçsel denge, öz farkındalık ve daha sağlıklı sınırlar.",
+    "Better prioritization, cleaner value decisions, and resource discipline.": "Daha iyi önceliklendirme, daha temiz değer kararları ve kaynak disiplini.",
+    "Inflation, drift, or chasing meaning without grounded follow-through.": "Abartı, dağılma veya somut takip olmadan anlam peşinde koşma.",
+    "Pressure fatigue, over-control, or mistaking delay for failure.": "Baskı yorgunluğu, aşırı kontrol veya gecikmeyi başarısızlık sanma.",
+    "Mixed signals, over-accommodation, or avoidable emotional repetition.": "Karışık sinyaller, aşırı uyumlanma veya önlenebilir duygusal tekrar.",
+    "Withdrawal, overload, or losing clarity through internal noise.": "Geri çekilme, aşırı yüklenme veya iç gürültüyle netliği kaybetme.",
+    "Leakage, reactive decisions, or comfort spending under pressure.": "Sızıntı, tepkisel kararlar veya baskı altında rahatlama harcamaları.",
+}
+
+_NARRATIVE_LABELS_TR = {
+    "career_transition": "Kariyer geçişi",
+    "relationship_transition": "İlişki geçişi",
+    "financial_restructuring": "Finansal yeniden yapılanma",
+    "identity_reinvention": "Kimlik yenilenmesi",
+    "emotional_healing": "Duygusal iyileşme",
+    "responsibility_cycle": "Sorumluluk döngüsü",
+    "growth_opportunity": "Büyüme fırsatı",
+    "life_redirection": "Yaşam yönünün yeniden belirlenmesi",
+    "inner_transformation": "İçsel dönüşüm",
+    "stability_building": "İstikrar inşası",
+    "release_and_closure": "Bırakma ve kapanış",
+    "expansion_period": "Genişleme dönemi",
+    "pressure_test_phase": "Baskı ve sınav dönemi",
+}
+
+_PRIORITY_LABELS_TR = {
+    "high": "Yüksek öncelik",
+    "medium": "Orta öncelik",
+    "low": "Düşük öncelik",
+}
+
+_RECOMMENDATION_TYPE_LABELS_TR = {
+    "action": "Önerilen adım",
+    "avoidance": "Şimdilik yavaşlat",
+    "timing": "Zamanlama önemli",
+    "focus": "Odak alanı",
+}
+
+
+def _localized_result_phrase(value, language):
+    text = str(value or "")
+    if language != "tr" or not text:
+        return text
+    narrative_text = localize_narrative_text(text, language)
+    if narrative_text != text:
+        return narrative_text
+    if text in _RESULT_PHRASE_LOCALIZATION_TR:
+        return _RESULT_PHRASE_LOCALIZATION_TR[text]
+    if ". This cluster lands most strongly across " in text:
+        lead, cluster = text.split(". This cluster lands most strongly across ", 1)
+        lead_text = localize_narrative_text(f"{lead}.", language)
+        parts = [part.strip() for part in cluster.rstrip(".").split(" and ")]
+        localized = [_RESULT_DOMAIN_LABELS_TR.get(part.replace(" ", "_"), part) for part in parts]
+        return f"{lead_text} Bu küme en güçlü şekilde {' ve '.join(localized)} alanlarında görünür."
+    if text.startswith("This cluster lands most strongly across "):
+        domain_text = text.split(" across ", 1)[1].rstrip(".")
+        parts = [part.strip() for part in domain_text.split(" and ")]
+        localized = [_RESULT_DOMAIN_LABELS_TR.get(part.replace(" ", "_"), part) for part in parts]
+        return f"Bu küme en güçlü şekilde {' ve '.join(localized)} alanlarında görünür."
+    if text.startswith("This cluster concentrates the chart's strongest weight across "):
+        domain_text = text.split(" across ", 1)[1].rstrip(".")
+        parts = [part.strip() for part in domain_text.split(" and ")]
+        localized = [_RESULT_DOMAIN_LABELS_TR.get(part.replace(" ", "_"), part) for part in parts]
+        return f"Bu küme haritadaki en güçlü ağırlığı {' ve '.join(localized)} alanlarında toplar."
+    if text.startswith("This anchor shapes decision quality, emotional orientation, and timing across "):
+        domain_text = text.split(" across ", 1)[1].rstrip(".")
+        parts = [part.strip() for part in domain_text.split(", ")]
+        localized = [_RESULT_DOMAIN_LABELS_TR.get(part.replace(" ", "_"), part) for part in parts]
+        return f"Bu odak, {' ve '.join(localized)} alanlarında karar kalitesini, duygusal yönelimi ve zamanlama hissini etkiler."
+    if text.startswith("Supporting emphasis ") and " around " in text:
+        prefix, subject = text.split(" around ", 1)
+        return f"Destekleyici vurgu {prefix.replace('Supporting emphasis ', '')}: {subject}"
+    if text.startswith("during the current ") and text.endswith(" phase"):
+        planet = text.replace("during the current ", "", 1).replace(" phase", "")
+        return f"mevcut {planet} döneminde"
+    if text == "next 4-6 weeks":
+        return "önümüzdeki 4-6 hafta"
+    if text == "next 4-8 weeks":
+        return "önümüzdeki 4-8 hafta"
+    if text == "next 2-3 months":
+        return "önümüzdeki 2-3 ay"
+    if text.startswith("Current dasha emphasis is centered on ") and text.endswith(", so timing-sensitive guidance is weighted more heavily."):
+        planet = text.replace("Current dasha emphasis is centered on ", "", 1).replace(", so timing-sensitive guidance is weighted more heavily.", "")
+        return f"Mevcut dasha vurgusu {planet} üzerinde toplandığı için zamanlamaya duyarlı rehberlik daha fazla ağırlık taşır."
+    return text
+
+
+def _localized_result_label(value, language):
+    if language != "tr":
+        return _labelize(value)
+    key = str(value or "").strip().lower().replace(" ", "_")
+    return _NARRATIVE_LABELS_TR.get(key) or _focus_label(key, language) or _labelize(value)
+
+
+def _localize_window_rows_for_result(rows, language):
+    if language != "tr":
+        return rows or []
+    localized = []
+    for row in rows or []:
+        item = dict(row)
+        item["title"] = _localized_result_phrase(item.get("title"), language)
+        item["time_window"] = _localized_result_phrase(item.get("time_window"), language)
+        localized.append(item)
+    return localized
+
+
+def _localize_result_layer_text(interpretation_context, language):
+    if language != "tr" or not isinstance(interpretation_context, dict):
+        return interpretation_context or {}
+
+    context = copy.deepcopy(interpretation_context)
+    signal_layer = context.get("signal_layer")
+    if isinstance(signal_layer, dict):
+        for anchor in signal_layer.get("top_anchors") or []:
+            if not isinstance(anchor, dict):
+                continue
+            for field in ("title", "summary", "why_it_matters", "opportunity", "risk", "prompt_anchor"):
+                if field in anchor:
+                    anchor[field] = _localized_result_phrase(anchor.get(field), language)
+            for signal in anchor.get("supporting_signals") or []:
+                if isinstance(signal, dict) and "text" in signal:
+                    signal["text"] = _localized_result_phrase(signal.get("text"), language)
+
+        recommendation_layer = signal_layer.get("recommendation_layer")
+        if isinstance(recommendation_layer, dict):
+            _localize_recommendation_layer_for_result(recommendation_layer, language)
+            context["recommendation_layer"] = recommendation_layer
+        context["signal_layer"] = signal_layer
+
+    recommendation_layer = context.get("recommendation_layer") or {}
+    if isinstance(recommendation_layer, dict):
+        _localize_recommendation_layer_for_result(recommendation_layer, language)
+        context["recommendation_layer"] = recommendation_layer
+
+    narrative_analysis = localize_narrative_analysis(context.get("narrative_analysis") or {}, language)
+    if isinstance(narrative_analysis, dict):
+        narrative_analysis["life_period_summary"] = _localized_result_phrase(narrative_analysis.get("life_period_summary"), language)
+        for bucket in ("primary_narratives", "secondary_narratives", "emerging_narratives"):
+            narratives = narrative_analysis.get(bucket) or []
+            for narrative in narratives:
+                if not isinstance(narrative, dict):
+                    continue
+                for field in ("narrative_summary", "narrative_psychological_meaning", "narrative_external_manifestation", "recommended_focus", "risk_factor", "growth_potential", "intensity"):
+                    if field in narrative:
+                        narrative[field] = _localized_result_phrase(narrative.get(field), language)
+        context["narrative_analysis"] = narrative_analysis
+
+    for narrative in context.get("dominant_narrative_details") or []:
+        if not isinstance(narrative, dict):
+            continue
+        for field in ("narrative_summary", "narrative_psychological_meaning", "narrative_external_manifestation", "recommended_focus", "risk_factor", "growth_potential", "intensity"):
+            if field in narrative:
+                narrative[field] = _localized_result_phrase(narrative.get(field), language)
+
+    for section_name in ("growth_guidance", "timing_notes"):
+        section_value = context.get(section_name)
+        if isinstance(section_value, dict):
+            for key, value in list(section_value.items()):
+                if isinstance(value, str):
+                    section_value[key] = _localized_result_phrase(value, language)
+        elif isinstance(section_value, list):
+            for item in section_value:
+                if isinstance(item, dict):
+                    for key, value in list(item.items()):
+                        if isinstance(value, str):
+                            item[key] = _localized_result_phrase(value, language)
+
+    return context
+
+
+def _localize_recommendation_layer_for_result(recommendation_layer, language):
+    for item in recommendation_layer.get("top_recommendations") or []:
+        if not isinstance(item, dict):
+            continue
+        for field in ("title", "reasoning", "time_window", "calibration_note"):
+            if field in item:
+                item[field] = _localized_result_phrase(item.get(field), language)
+        item["priority_label"] = _PRIORITY_LABELS_TR.get(str(item.get("priority") or "").lower(), _localized_result_label(item.get("priority", "medium"), language))
+        item["type_label"] = _RECOMMENDATION_TYPE_LABELS_TR.get(str(item.get("type") or "").lower(), _localized_result_label(item.get("type", "focus"), language))
+        for anchor in item.get("linked_anchors") or []:
+            if isinstance(anchor, dict):
+                for field in ("title", "summary", "why_it_matters", "opportunity", "risk"):
+                    if field in anchor:
+                        anchor[field] = _localized_result_phrase(anchor.get(field), language)
+    recommendation_layer["opportunity_windows"] = _localize_window_rows_for_result(
+        recommendation_layer.get("opportunity_windows") or [],
+        language,
+    )
+    recommendation_layer["risk_windows"] = _localize_window_rows_for_result(
+        recommendation_layer.get("risk_windows") or [],
+        language,
+    )
+    recommendation_layer["recommendation_notes"] = [
+        _localized_result_phrase(note, language)
+        for note in recommendation_layer.get("recommendation_notes") or []
+    ]
 
 
 def _localized_methodology_value(value, language):
@@ -3115,6 +4358,16 @@ def _localized_methodology_value(value, language):
 def normalize_report_type(report_type):
     normalized = str(report_type or "").strip().lower()
     return normalized if normalized in REPORT_TYPES else "premium"
+
+
+def normalize_report_order_type(report_type):
+    normalized = str(report_type or "").strip().lower().replace("-", "_")
+    return normalized if normalized in REPORT_ORDER_PRODUCTS else None
+
+
+def normalize_report_bundle_type(bundle_type):
+    normalized = str(bundle_type or "").strip().lower().replace("-", "_")
+    return normalized if normalized in REPORT_BUNDLE_PRODUCTS else None
 
 
 def get_report_type_config(report_type):
@@ -3324,7 +4577,7 @@ def _prepare_report_context(payload):
     if language not in {"tr", "en"}:
         language = "tr"
     report_type, report_type_config = get_report_type_config(payload.get("report_type"))
-    interpretation_context = payload.get("interpretation_context") or {}
+    interpretation_context = _localize_result_layer_text(payload.get("interpretation_context") or {}, language)
     primary_focus = interpretation_context.get("primary_focus") or interpretation_context.get("primary_life_focus") or "general"
     secondary_focus = interpretation_context.get("secondary_focus") or interpretation_context.get("secondary_life_focus") or "general"
     dominant_narratives = interpretation_context.get("dominant_narratives") or []
@@ -3352,10 +4605,10 @@ def _prepare_report_context(payload):
     top_recommendations = [
         {
             "title": item.get("title"),
-            "type_label": _labelize(item.get("type", "focus")),
+            "type_label": item.get("type_label") or _localized_result_label(item.get("type", "focus"), language),
             "time_window": item.get("time_window"),
             "reasoning": item.get("reasoning"),
-            "priority_label": _labelize(item.get("priority", "medium")),
+            "priority_label": item.get("priority_label") or _localized_result_label(item.get("priority", "medium"), language),
             "linked_anchor_title": (item.get("linked_anchors") or [{}])[0].get("title"),
         }
         for item in (recommendation_layer.get("top_recommendations") or [])[:5]
@@ -3425,10 +4678,10 @@ def _prepare_report_context(payload):
         "methodology_notes": methodology_notes,
         "primary_focus_label": _focus_label(primary_focus, language),
         "secondary_focus_label": _focus_label(secondary_focus, language),
-        "confidence_label": _labelize(interpretation_context.get("confidence_level", "moderate")),
-        "decision_posture_label": _labelize(interpretation_context.get("decision_posture", "prepare")),
-        "timing_strategy_label": _labelize(interpretation_context.get("timing_strategy", "mixed")),
-        "dominant_narrative_label": _labelize(dominant_narratives[0]) if dominant_narratives else ("Current life cycle" if language == "en" else "Mevcut yasam dongusu"),
+        "confidence_label": _localized_result_label(interpretation_context.get("confidence_level", "moderate"), language),
+        "decision_posture_label": _localized_result_label(interpretation_context.get("decision_posture", "prepare"), language),
+        "timing_strategy_label": _localized_result_label(interpretation_context.get("timing_strategy", "mixed"), language),
+        "dominant_narrative_label": _localized_result_label(dominant_narratives[0], language) if dominant_narratives else ("Current life cycle" if language == "en" else "Mevcut yasam dongusu"),
         "dominant_life_area_label": _focus_label(dominant_life_areas[0], language) if dominant_life_areas else _focus_label(primary_focus, language),
         "peak_window": timing_windows.get("peak"),
         "opportunity_window": timing_windows.get("opportunity"),
@@ -3524,7 +4777,8 @@ def _auth_template_context(request, **extra):
 
 
 def slugify_article_title(value):
-    normalized = normalize("NFKD", str(value or "")).encode("ascii", "ignore").decode("ascii")
+    translated = str(value or "").translate(ARTICLE_SLUG_CHAR_MAP)
+    normalized = normalize("NFKD", translated).encode("ascii", "ignore").decode("ascii")
     slug = re.sub(r"[^a-zA-Z0-9]+", "-", normalized.lower()).strip("-")
     return slug or "article"
 
@@ -3552,13 +4806,47 @@ def _article_category_meta(category_slug):
 
 def _seed_articles(db):
     changed = False
+    legacy_articles = (
+        db.query(db_mod.Article)
+        .filter(db_mod.Article.title.in_(LEGACY_ARTICLE_SEED_TITLES), db_mod.Article.author_name == "Focus Astrology")
+        .all()
+    )
+    for article in legacy_articles:
+        if article.is_published:
+            article.is_published = False
+            changed = True
+
     for item in ARTICLE_SEED_CONTENT:
         slug = slugify_article_title(item["title"])
-        article = db.query(db_mod.Article).filter(db_mod.Article.slug == slug).first()
+        legacy_titles = [title for title in item.get("legacy_titles", []) if title]
+        article = (
+            db.query(db_mod.Article)
+            .filter(
+                or_(
+                    db_mod.Article.slug == slug,
+                    db_mod.Article.title == item["title"],
+                    db_mod.Article.title.in_(legacy_titles) if legacy_titles else False,
+                )
+            )
+            .first()
+        )
         if article:
-            if not article.is_published:
-                article.is_published = True
-                changed = True
+            updated_fields = {
+                "title": item["title"],
+                "slug": slug,
+                "category": item["category"],
+                "excerpt": item["excerpt"],
+                "body": item["body"],
+                "author_name": item.get("author_name") or "Focus Astrology",
+                "reading_time": item.get("reading_time") or 4,
+                "language": item.get("language") or "tr",
+                "is_published": True,
+                "published_at": item.get("published_at") or datetime.utcnow(),
+            }
+            for field_name, field_value in updated_fields.items():
+                if getattr(article, field_name) != field_value:
+                    setattr(article, field_name, field_value)
+                    changed = True
             continue
         db.add(
             db_mod.Article(
@@ -3568,10 +4856,10 @@ def _seed_articles(db):
                 excerpt=item["excerpt"],
                 body=item["body"],
                 is_published=True,
-                published_at=datetime.utcnow(),
+                published_at=item.get("published_at") or datetime.utcnow(),
                 author_name=item.get("author_name") or "Focus Astrology",
                 reading_time=item.get("reading_time") or 4,
-                language="en",
+                language=item.get("language") or "tr",
             )
         )
         changed = True
@@ -3579,17 +4867,32 @@ def _seed_articles(db):
         db.commit()
 
 
-def _article_view(article):
+def _localized_article_payload(article, language=None):
+    requested_language = str(language or article.language or "tr").lower()
+    localized = ARTICLE_LOCALIZED_CONTENT.get(article.slug, {}).get(requested_language, {})
+    title = localized.get("title") or article.title
+    excerpt = localized.get("excerpt") or article.excerpt or ""
+    body = localized.get("body") or article.body or ""
+    return {
+        "title": title,
+        "excerpt": excerpt,
+        "body": body,
+        "language": requested_language if localized else (article.language or requested_language or "en"),
+    }
+
+
+def _article_view(article, language=None):
     category = _article_category_meta(article.category) or {"slug": article.category, "label": _labelize(article.category)}
     published_at = article.published_at or article.created_at
-    body_paragraphs = [part.strip() for part in str(article.body or "").split("\n\n") if part.strip()]
+    localized_payload = _localized_article_payload(article, language=language)
+    body_paragraphs = [part.strip() for part in str(localized_payload["body"] or "").split("\n\n") if part.strip()]
     return {
         "id": article.id,
-        "title": article.title,
+        "title": localized_payload["title"],
         "slug": article.slug,
         "category": category,
-        "excerpt": article.excerpt or "",
-        "body": article.body or "",
+        "excerpt": localized_payload["excerpt"],
+        "body": localized_payload["body"],
         "body_paragraphs": body_paragraphs,
         "cover_image": article.cover_image,
         "is_published": bool(article.is_published),
@@ -3597,7 +4900,7 @@ def _article_view(article):
         "created_at": article.created_at.strftime("%Y-%m-%d") if article.created_at else None,
         "author_name": article.author_name or "Focus Astrology",
         "reading_time": int(article.reading_time or 4),
-        "language": article.language or "en",
+        "language": localized_payload["language"],
     }
 
 
@@ -3605,7 +4908,7 @@ def _published_articles_query(db):
     return db.query(db_mod.Article).filter(db_mod.Article.is_published.is_(True))
 
 
-def get_related_articles(db, article, limit=3):
+def get_related_articles(db, article, limit=3, language=None):
     if not article:
         return []
     related = (
@@ -3625,10 +4928,10 @@ def get_related_articles(db, article, limit=3):
             .all()
         )
         related.extend(fallback)
-    return [_article_view(item) for item in related[:limit]]
+    return [_article_view(item, language=language) for item in related[:limit]]
 
 
-def get_latest_articles(db, limit=3):
+def get_latest_articles(db, limit=3, language=None):
     _seed_articles(db)
     items = (
         _published_articles_query(db)
@@ -3636,13 +4939,13 @@ def get_latest_articles(db, limit=3):
         .limit(limit)
         .all()
     )
-    return [_article_view(item) for item in items]
+    return [_article_view(item, language=language) for item in items]
 
 
-def _match_related_articles_for_result(db, interpretation_context):
+def _match_related_articles_for_result(db, interpretation_context, language=None):
     _seed_articles(db)
     signal_layer = (interpretation_context or {}).get("signal_layer") or {}
-    articles = [_article_view(item) for item in _published_articles_query(db).all()]
+    articles = [_article_view(item, language=language) for item in _published_articles_query(db).all()]
     matched = match_articles_to_result(
         signal_layer.get("prioritized_signals") or [],
         signal_layer.get("top_anchors") or [],
@@ -3653,11 +4956,15 @@ def _match_related_articles_for_result(db, interpretation_context):
 
 
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
+async def index(request: Request, db: Session = Depends(get_db)):
+    current_language = getattr(getattr(request, "state", None), "lang", None) or "en"
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context=_auth_template_context(request),
+        context=_auth_template_context(
+            request,
+            latest_articles=get_latest_articles(db, limit=3, language=current_language),
+        ),
     )
 
 
@@ -3670,9 +4977,175 @@ async def calculator(request: Request):
     )
 
 
+@app.get("/about", response_class=HTMLResponse)
+async def about(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="about.html",
+        context=_auth_template_context(request),
+    )
+
+
+@app.get("/privacy", response_class=HTMLResponse)
+async def privacy(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="privacy.html",
+        context=_auth_template_context(request),
+    )
+
+
+@app.get("/terms", response_class=HTMLResponse)
+async def terms(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="terms.html",
+        context=_auth_template_context(request),
+    )
+
+
+@app.get("/disclaimer", response_class=HTMLResponse)
+async def disclaimer(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="disclaimer.html",
+        context=_auth_template_context(request),
+    )
+
+
+@app.get("/sales-terms", response_class=HTMLResponse)
+async def sales_terms(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="sales_terms.html",
+        context=_auth_template_context(request),
+    )
+
+
+@app.get("/appointment-policy", response_class=HTMLResponse)
+async def appointment_policy(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="appointment_policy.html",
+        context=_auth_template_context(request),
+    )
+
+
+@app.get("/personal-consultation", response_class=HTMLResponse)
+async def personal_consultation(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="personal_consultation.html",
+        context=_auth_template_context(request),
+    )
+
+
+@app.get("/personal-consultation/book")
+async def personal_consultation_book(request: Request):
+    calendly_url = str(os.getenv("CALENDLY_CONSULTATION_URL", "")).strip()
+    email_config = email_utils.get_email_config()
+    booking_contact_email = email_config.get("support_email") or email_config.get("from_address") or "hello@focusastrology.com"
+    return templates.TemplateResponse(
+        request=request,
+        name="personal_consultation_book.html",
+        context=_auth_template_context(
+            request,
+            calendly_url=calendly_url,
+            booking_contact_email=booking_contact_email,
+        ),
+    )
+
+
+@app.get("/checkout/consultation", response_class=HTMLResponse)
+async def consultation_checkout_step(request: Request):
+    notice = str(request.query_params.get("notice", "")).strip()
+    return templates.TemplateResponse(
+        request=request,
+        name="service_checkout.html",
+        context=_auth_template_context(
+            request,
+            order=None,
+            product=CONSULTATION_PRODUCT,
+            service_kind="consultation",
+            payments_enabled=payments.payments_enabled(),
+            provider_name=payments.payment_provider(),
+            checkout_notice=notice,
+            checkout_upsell=_checkout_upsell_context(service_kind="consultation"),
+        ),
+    )
+
+
+@app.post("/checkout/consultation")
+async def start_consultation_checkout(request: Request, db: Session = Depends(get_db)):
+    order = db_mod.ServiceOrder(
+        order_token=_generate_order_token("consult"),
+        service_type="consultation",
+        product_type=CONSULTATION_PRODUCT["product_type"],
+        status="booking_pending_payment",
+        public_token=None,
+        amount=_amount_decimal(CONSULTATION_PRODUCT["price"]),
+        amount_label=CONSULTATION_PRODUCT["price"],
+        currency="TRY",
+        payload_json=json.dumps(
+            {
+                "service_type": "consultation",
+                "product_type": CONSULTATION_PRODUCT["product_type"],
+                "submitted_at": datetime.now(pytz.UTC).isoformat(),
+                "service_model": {
+                    "duration": "60 dakika",
+                    "sequence": "Ödeme sonrası Calendly randevu seçimi",
+                    "cancellation": "Randevular, planlanan saatten en az 24 saat önce ücretsiz olarak iptal edilebilir veya yeniden planlanabilir.",
+                },
+            },
+            ensure_ascii=False,
+        ),
+    )
+    order.public_token = order.order_token
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+    try:
+        session = create_consultation_payment_session(order, request=request)
+    except payments.PaymentConfigurationError as exc:
+        logger.warning("Consultation checkout unavailable order_id=%s detail=%s", order.id, exc)
+        return RedirectResponse(url="/checkout/consultation?notice=payments_unavailable", status_code=303)
+    except payments.PaymentError as exc:
+        logger.warning("Consultation checkout failed order_id=%s detail=%s", order.id, exc)
+        return RedirectResponse(url="/checkout/consultation?notice=checkout_failed", status_code=303)
+    order.payment_provider = session.get("provider") or payments.payment_provider()
+    order.provider_name = session.get("provider") or payments.payment_provider()
+    order.provider_token = session.get("provider_token") or session.get("session_id")
+    order.provider_conversation_id = session.get("provider_conversation_id") or _order_public_token(order)
+    order.payment_session_id = session.get("session_id")
+    db.commit()
+    redirect_url = session.get("redirect_url")
+    if redirect_url:
+        return RedirectResponse(url=redirect_url, status_code=303)
+    return RedirectResponse(url="/checkout/consultation?notice=missing_redirect", status_code=303)
+
+
+@app.get("/checkout/consultation/success")
+async def consultation_checkout_success(order_token: str, session_id: str = "", db: Session = Depends(get_db)):
+    order = _service_order_by_token_or_404(db, order_token)
+    if order.service_type != "consultation":
+        _public_error("Bu ödeme adımı danışmanlık içindir.", 404)
+    return RedirectResponse(url="/checkout/consultation?notice=verification_pending", status_code=303)
+
+
+@app.get("/checkout/consultation/cancel")
+async def consultation_checkout_cancel(order_token: str = "", db: Session = Depends(get_db)):
+    if order_token:
+        order = _service_order_by_token_or_404(db, order_token)
+        if order.service_type == "consultation":
+            order.status = "booking_pending_payment"
+            db.commit()
+    return RedirectResponse(url="/checkout/consultation?notice=cancelled", status_code=303)
+
+
 @app.get("/articles", response_class=HTMLResponse)
 async def articles(request: Request, db: Session = Depends(get_db)):
-    articles_payload = get_latest_articles(db, limit=24)
+    current_language = getattr(getattr(request, "state", None), "lang", None) or "en"
+    articles_payload = get_latest_articles(db, limit=24, language=current_language)
     category_counts = {}
     for slug, label in ARTICLE_CATEGORY_LABELS.items():
         count = _published_articles_query(db).filter(db_mod.Article.category == slug).count()
@@ -3692,6 +5165,7 @@ async def articles(request: Request, db: Session = Depends(get_db)):
 @app.get("/articles/category/{category_slug}", response_class=HTMLResponse)
 async def article_category(request: Request, category_slug: str, db: Session = Depends(get_db)):
     _seed_articles(db)
+    current_language = getattr(getattr(request, "state", None), "lang", None) or "en"
     category = _article_category_meta(category_slug)
     if not category:
         _public_error("Kategori bulunamadi.", 404)
@@ -3714,7 +5188,7 @@ async def article_category(request: Request, category_slug: str, db: Session = D
         name="articles.html",
         context=_auth_template_context(
             request,
-            articles=[_article_view(item) for item in items],
+            articles=[_article_view(item, language=current_language) for item in items],
             active_category=category,
             category_links=category_links,
         ),
@@ -3724,17 +5198,18 @@ async def article_category(request: Request, category_slug: str, db: Session = D
 @app.get("/articles/{slug}", response_class=HTMLResponse)
 async def article_detail(request: Request, slug: str, db: Session = Depends(get_db)):
     _seed_articles(db)
+    current_language = getattr(getattr(request, "state", None), "lang", None) or "en"
     article = _published_articles_query(db).filter(db_mod.Article.slug == slug).first()
     if not article:
         _public_error("Makale bulunamadi.", 404)
-    article_payload = _article_view(article)
+    article_payload = _article_view(article, language=current_language)
     return templates.TemplateResponse(
         request=request,
         name="article_detail.html",
         context=_auth_template_context(
             request,
             article=article_payload,
-            related_articles=get_related_articles(db, article, limit=3),
+            related_articles=get_related_articles(db, article, limit=3, language=current_language),
         ),
     )
 
@@ -3888,6 +5363,409 @@ async def reports_history(request: Request, db: Session = Depends(get_db)):
     )
 
 
+@app.get("/reports/order/{report_type}", response_class=HTMLResponse)
+async def report_order_form(request: Request, report_type: str):
+    normalized = normalize_report_order_type(report_type)
+    if not normalized:
+        _public_error("Rapor türü bulunamadı.", 404)
+    if normalized == "parent_child":
+        return RedirectResponse(url="/reports/parent-child", status_code=303)
+    product = dict(REPORT_ORDER_PRODUCTS[normalized])
+    return templates.TemplateResponse(
+        request=request,
+        name="report_order.html",
+        context=_auth_template_context(
+            request,
+            product=product,
+            report_type=normalized,
+            order_action=f"/reports/order/{normalized}",
+            bundle_type="",
+            form_data={},
+            error_message="",
+        ),
+    )
+
+
+@app.post("/reports/order/{report_type}", response_class=HTMLResponse)
+async def submit_report_order(
+    request: Request,
+    report_type: str,
+    full_name: str = Form(default=""),
+    email: str = Form(default=""),
+    birth_date: str = Form(default=""),
+    birth_time: str = Form(default=""),
+    birth_city: str = Form(default=""),
+    selected_report_type: str = Form(default=""),
+    optional_note: str = Form(default=""),
+    db: Session = Depends(get_db),
+):
+    normalized = normalize_report_order_type(selected_report_type or report_type)
+    if not normalized:
+        _public_error("Rapor türü bulunamadı.", 404)
+    if normalized == "parent_child":
+        return RedirectResponse(url="/reports/parent-child", status_code=303)
+
+    product = dict(REPORT_ORDER_PRODUCTS[normalized])
+    form_data = {
+        "full_name": full_name.strip(),
+        "email": email.strip(),
+        "birth_date": birth_date.strip(),
+        "birth_time": birth_time.strip(),
+        "birth_city": birth_city.strip(),
+        "optional_note": optional_note.strip(),
+    }
+    required_missing = [
+        label for key, label in (
+            ("full_name", "Ad soyad"),
+            ("email", "E-posta"),
+            ("birth_date", "Doğum tarihi"),
+            ("birth_time", "Doğum saati"),
+            ("birth_city", "Doğum yeri"),
+        )
+        if not form_data[key]
+    ]
+    if required_missing:
+        return templates.TemplateResponse(
+            request=request,
+            name="report_order.html",
+            status_code=400,
+            context=_auth_template_context(
+                request,
+                product=product,
+                report_type=normalized,
+                order_action=f"/reports/order/{normalized}",
+                bundle_type="",
+                form_data=form_data,
+                error_message="Lütfen zorunlu alanları tamamlayın: " + ", ".join(required_missing),
+            ),
+        )
+
+    submitted_at = datetime.now(pytz.UTC).isoformat()
+    order_data = {
+        **form_data,
+        "report_type": normalized,
+        "report_title": product["title"],
+        "submitted_at": submitted_at,
+        "source": "reports_order_form",
+    }
+    order = db_mod.ServiceOrder(
+        order_token=_generate_order_token("report"),
+        service_type="report",
+        product_type=normalized,
+        status="awaiting_payment",
+        public_token=None,
+        customer_name=order_data["full_name"],
+        customer_email=order_data["email"],
+        birth_date=order_data["birth_date"],
+        birth_time=order_data["birth_time"],
+        birth_place=order_data["birth_city"],
+        optional_note=order_data["optional_note"],
+        amount=_amount_decimal(product["price"]),
+        amount_label=product["price"],
+        currency="TRY",
+        payload_json=json.dumps(order_data, ensure_ascii=False),
+    )
+    order.public_token = order.order_token
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+
+    return RedirectResponse(url=f"/checkout/report/{order.order_token}", status_code=303)
+
+
+@app.get("/reports/order/bundle/{bundle_type}", response_class=HTMLResponse)
+async def report_bundle_order_form(request: Request, bundle_type: str):
+    normalized = normalize_report_bundle_type(bundle_type)
+    if not normalized:
+        _public_error("Paket türü bulunamadı.", 404)
+    product = dict(REPORT_BUNDLE_PRODUCTS[normalized])
+    return templates.TemplateResponse(
+        request=request,
+        name="report_order.html",
+        context=_auth_template_context(
+            request,
+            product=product,
+            report_type=normalized,
+            bundle_type=normalized,
+            order_action=f"/reports/order/bundle/{normalized}",
+            form_data={},
+            error_message="",
+        ),
+    )
+
+
+@app.post("/reports/order/bundle/{bundle_type}", response_class=HTMLResponse)
+async def submit_report_bundle_order(
+    request: Request,
+    bundle_type: str,
+    full_name: str = Form(default=""),
+    email: str = Form(default=""),
+    birth_date: str = Form(default=""),
+    birth_time: str = Form(default=""),
+    birth_city: str = Form(default=""),
+    optional_note: str = Form(default=""),
+    db: Session = Depends(get_db),
+):
+    normalized = normalize_report_bundle_type(bundle_type)
+    if not normalized:
+        _public_error("Paket türü bulunamadı.", 404)
+    product = dict(REPORT_BUNDLE_PRODUCTS[normalized])
+    form_data = {
+        "full_name": full_name.strip(),
+        "email": email.strip(),
+        "birth_date": birth_date.strip(),
+        "birth_time": birth_time.strip(),
+        "birth_city": birth_city.strip(),
+        "optional_note": optional_note.strip(),
+    }
+    required_missing = [
+        label for key, label in (
+            ("full_name", "Ad soyad"),
+            ("email", "E-posta"),
+            ("birth_date", "Doğum tarihi"),
+            ("birth_time", "Doğum saati"),
+            ("birth_city", "Doğum yeri"),
+        )
+        if not form_data[key]
+    ]
+    if required_missing:
+        return templates.TemplateResponse(
+            request=request,
+            name="report_order.html",
+            status_code=400,
+            context=_auth_template_context(
+                request,
+                product=product,
+                report_type=normalized,
+                bundle_type=normalized,
+                order_action=f"/reports/order/bundle/{normalized}",
+                form_data=form_data,
+                error_message="Lütfen zorunlu alanları tamamlayın: " + ", ".join(required_missing),
+            ),
+        )
+
+    submitted_at = datetime.now(pytz.UTC).isoformat()
+    included_products = product.get("included_products", [])
+    order_data = {
+        **form_data,
+        "report_type": normalized,
+        "bundle_type": normalized,
+        "included_products": included_products,
+        "report_title": product["title"],
+        "submitted_at": submitted_at,
+        "source": "reports_bundle_order_form",
+    }
+    order = db_mod.ServiceOrder(
+        order_token=_generate_order_token("bundle"),
+        service_type="report",
+        product_type=normalized,
+        bundle_type=normalized,
+        included_products_json=json.dumps(included_products, ensure_ascii=False),
+        bundle_price=_amount_decimal(product["price"]),
+        status="awaiting_payment",
+        public_token=None,
+        customer_name=order_data["full_name"],
+        customer_email=order_data["email"],
+        birth_date=order_data["birth_date"],
+        birth_time=order_data["birth_time"],
+        birth_place=order_data["birth_city"],
+        optional_note=order_data["optional_note"],
+        amount=_amount_decimal(product["price"]),
+        amount_label=product["price"],
+        currency="TRY",
+        payload_json=json.dumps(order_data, ensure_ascii=False),
+    )
+    order.public_token = order.order_token
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+
+    return RedirectResponse(url=f"/checkout/report/{order.order_token}", status_code=303)
+
+
+@app.get("/checkout/report/{order_token}", response_class=HTMLResponse)
+async def report_checkout_step(request: Request, order_token: str, db: Session = Depends(get_db)):
+    order = _service_order_by_token_or_404(db, order_token)
+    if order.service_type != "report":
+        _public_error("Bu ödeme adımı rapor siparişleri içindir.", 404)
+    product = _service_order_product(order)
+    notice = str(request.query_params.get("notice", "")).strip()
+    return templates.TemplateResponse(
+        request=request,
+        name="service_checkout.html",
+        context=_auth_template_context(
+            request,
+            order=order,
+            product=product,
+            service_kind="report",
+            payments_enabled=payments.payments_enabled(),
+            provider_name=payments.payment_provider(),
+            checkout_notice=notice,
+            checkout_upsell=_checkout_upsell_context(order),
+        ),
+    )
+
+
+@app.post("/checkout/report/{order_token}")
+async def start_report_checkout(request: Request, order_token: str, db: Session = Depends(get_db)):
+    order = _service_order_by_token_or_404(db, order_token)
+    if order.service_type != "report":
+        _public_error("Bu ödeme adımı rapor siparişleri içindir.", 404)
+    try:
+        session = create_report_payment_session(order, request=request)
+    except payments.PaymentConfigurationError as exc:
+        logger.warning("Report service checkout unavailable order_id=%s detail=%s", order.id, exc)
+        return RedirectResponse(url=f"/checkout/report/{order.order_token}?notice=payments_unavailable", status_code=303)
+    except payments.PaymentError as exc:
+        logger.warning("Report service checkout failed order_id=%s detail=%s", order.id, exc)
+        return RedirectResponse(url=f"/checkout/report/{order.order_token}?notice=checkout_failed", status_code=303)
+    order.payment_provider = session.get("provider") or payments.payment_provider()
+    order.provider_name = session.get("provider") or payments.payment_provider()
+    order.provider_token = session.get("provider_token") or session.get("session_id")
+    order.provider_conversation_id = session.get("provider_conversation_id") or _order_public_token(order)
+    order.payment_session_id = session.get("session_id")
+    order.status = "awaiting_payment"
+    db.commit()
+    redirect_url = session.get("redirect_url")
+    if redirect_url:
+        return RedirectResponse(url=redirect_url, status_code=303)
+    return RedirectResponse(url=f"/checkout/report/{order.order_token}?notice=missing_redirect", status_code=303)
+
+
+@app.get("/checkout/report/{order_token}/success", response_class=HTMLResponse)
+async def report_checkout_success(
+    request: Request,
+    order_token: str,
+    session_id: str = "",
+    db: Session = Depends(get_db),
+):
+    order = _service_order_by_token_or_404(db, order_token)
+    if order.service_type != "report":
+        _public_error("Bu ödeme adımı rapor siparişleri içindir.", 404)
+    return RedirectResponse(url=f"/checkout/report/{order.order_token}?notice=verification_pending", status_code=303)
+
+
+@app.get("/checkout/report/{order_token}/cancel")
+async def report_checkout_cancel(order_token: str, db: Session = Depends(get_db)):
+    order = _service_order_by_token_or_404(db, order_token)
+    if order.service_type != "report":
+        _public_error("Bu ödeme adımı rapor siparişleri içindir.", 404)
+    order.status = "awaiting_payment"
+    db.commit()
+    return RedirectResponse(url=f"/checkout/report/{order.order_token}?notice=cancelled", status_code=303)
+
+
+async def _extract_payment_token(request):
+    token = str(request.query_params.get("token", "") or "").strip()
+    if token:
+        return token
+    content_type = str(request.headers.get("content-type", "")).lower()
+    if "application/json" in content_type:
+        try:
+            payload = await request.json()
+            return str((payload or {}).get("token", "") or "").strip()
+        except Exception:
+            return ""
+    try:
+        form = await request.form()
+        return str(form.get("token", "") or "").strip()
+    except Exception:
+        return ""
+
+
+def _order_by_provider_token_or_404(db, token, service_type=None):
+    query = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.provider_token == str(token or ""))
+    if service_type:
+        query = query.filter(db_mod.ServiceOrder.service_type == service_type)
+    order = query.first()
+    if not order:
+        _public_error("Ödeme oturumu bulunamadı.", 404)
+    return order
+
+
+def _retrieve_iyzico_payment_for_order(order, token):
+    provider = payments.get_payment_provider()
+    if getattr(provider, "provider_name", "") != "iyzico" or not hasattr(provider, "retrieve_checkout_form"):
+        raise payments.PaymentConfigurationError("Iyzico retrieve API is not configured.")
+    conversation_id = getattr(order, "provider_conversation_id", None) or _order_public_token(order)
+    return provider.retrieve_checkout_form(token, conversation_id)
+
+
+async def _handle_iyzico_callback(request, db, service_type):
+    token = await _extract_payment_token(request)
+    if not token:
+        _public_error("Iyzico callback token is missing.", 400)
+    order = _order_by_provider_token_or_404(db, token, service_type=service_type)
+    try:
+        retrieve_payload = _retrieve_iyzico_payment_for_order(order, token)
+        result = process_verified_service_payment(db, order, retrieve_payload)
+    except payments.PaymentError as exc:
+        logger.warning("Iyzico callback rejected order_id=%s detail=%s", getattr(order, "id", None), exc)
+        if "fraudStatus" in str(exc):
+            mark_payment_under_review(db, order, retrieve_payload if "retrieve_payload" in locals() else {}, actor="iyzico_callback")
+        if service_type == "report":
+            return RedirectResponse(url=f"/checkout/report/{order.order_token}?notice=verification_failed", status_code=303)
+        return RedirectResponse(url="/checkout/consultation?notice=verification_failed", status_code=303)
+    if service_type == "report":
+        payload = _order_data_from_service_order(order)
+        return templates.TemplateResponse(
+            request=request,
+            name="report_order_submitted.html",
+            context=_auth_template_context(
+                request,
+                product=_service_order_product(order),
+                order=payload,
+                admin_delivery=(result.get("post_payment") or {}).get("admin_delivery"),
+            ),
+        )
+    return RedirectResponse(url="/personal-consultation/book?paid=1", status_code=303)
+
+
+@app.post("/payments/iyzico/callback/report", response_class=HTMLResponse)
+async def iyzico_report_callback(request: Request, db: Session = Depends(get_db)):
+    return await _handle_iyzico_callback(request, db, "report")
+
+
+@app.post("/payments/iyzico/callback/consultation", response_class=HTMLResponse)
+async def iyzico_consultation_callback(request: Request, db: Session = Depends(get_db)):
+    return await _handle_iyzico_callback(request, db, "consultation")
+
+
+def _iyzico_webhook_signature_valid(body, signature):
+    signature = str(signature or "").strip()
+    if not signature:
+        return True
+    secret = str(os.getenv("IYZICO_WEBHOOK_SECRET", "") or os.getenv("IYZICO_SECRET_KEY", "")).strip()
+    if not secret:
+        return False
+    expected = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
+
+@app.post("/payments/iyzico/webhook")
+async def iyzico_webhook(request: Request, db: Session = Depends(get_db)):
+    body = await request.body()
+    if not _iyzico_webhook_signature_valid(body, request.headers.get("x-iyz-signature-v3", "")):
+        _public_error("Iyzico webhook signature rejected.", 400)
+    try:
+        payload = json.loads(body.decode("utf-8") or "{}")
+    except Exception:
+        payload = {}
+    token = str(payload.get("token") or request.query_params.get("token", "") or "").strip()
+    if not token:
+        _public_error("Iyzico webhook token is missing.", 400)
+    order = _order_by_provider_token_or_404(db, token)
+    retrieve_payload = _retrieve_iyzico_payment_for_order(order, token)
+    try:
+        result = process_verified_service_payment(db, order, retrieve_payload)
+    except payments.PaymentVerificationError as exc:
+        if "fraudStatus" in str(exc):
+            result = mark_payment_under_review(db, order, retrieve_payload, actor="iyzico_webhook")
+        else:
+            raise
+    return {"status": "ok", "changed": bool(result.get("changed")), "order_id": order.id}
+
+
 @app.get("/reports/parent-child", response_class=HTMLResponse)
 async def parent_child_report_form(request: Request):
     return templates.TemplateResponse(
@@ -3904,13 +5782,16 @@ async def report_revisit(request: Request, report_id: int, db: Session = Depends
         return RedirectResponse(url="/login", status_code=303)
 
     report = _owned_report_or_404(db, user, report_id)
+    current_language = _result_language(request, user)
 
     payload = _safe_json_loads(report.result_payload_json, {})
     if not isinstance(payload, dict):
         payload = {}
     interpretation_context = _safe_json_loads(report.interpretation_context_json, {})
+    interpretation_context = _localize_result_layer_text(interpretation_context or payload.get("interpretation_context") or {}, current_language)
+    payload["language"] = current_language
     payload["generated_report_id"] = report.id
-    payload["interpretation_context"] = interpretation_context or payload.get("interpretation_context") or {}
+    payload["interpretation_context"] = interpretation_context
     payload["full_name"] = payload.get("full_name") or report.full_name
     payload["birth_date"] = payload.get("birth_date") or report.birth_date
     payload["birth_time"] = payload.get("birth_time") or report.birth_time
@@ -3931,7 +5812,7 @@ async def report_revisit(request: Request, report_id: int, db: Session = Depends
         current_user=user,
         unlock_success=str(request.query_params.get("unlocked", "0")) == "1",
     )
-    payload["related_articles"] = [] if payload.get("report_type") == "parent_child" else _match_related_articles_for_result(db, interpretation_context)
+    payload["related_articles"] = [] if payload.get("report_type") == "parent_child" else _match_related_articles_for_result(db, interpretation_context, language=current_language)
     return templates.TemplateResponse(request=request, name="result.html", context=payload)
 
 
@@ -4118,6 +5999,185 @@ async def admin_home(request: Request, db: Session = Depends(get_db)):
     except Exception:
         logger.exception("Admin home failed")
         _public_error("Admin paneli yuklenemedi.", 500)
+
+
+@app.get("/admin/login", response_class=HTMLResponse)
+async def admin_login_page(request: Request):
+    return RedirectResponse(url="/login", status_code=303)
+
+
+@app.get("/admin/logout")
+async def admin_logout(request: Request):
+    if hasattr(request, "session"):
+        request.session.clear()
+    return RedirectResponse(url="/admin/login", status_code=303)
+
+
+def _admin_order_view(order):
+    return {
+        "id": order.id,
+        "created_at": order.created_at,
+        "customer_name": order.customer_name or "-",
+        "customer_email": order.customer_email or "-",
+        "service_type": order.service_type,
+        "product_type": order.product_type,
+        "status": order.status,
+        "amount": order.amount_label or order.amount or "-",
+        "paid_at": order.paid_at,
+    }
+
+
+@app.get("/admin/orders", response_class=HTMLResponse)
+@admin_required
+async def admin_orders(request: Request, db: Session = Depends(get_db), order_type: str = "", product_type: str = "", status: str = ""):
+    active_statuses = {
+        "paid", "draft_ready", "under_review", "ready_to_send", "delivered",
+        "confirmed", "prepared", "completed", "payment_under_review",
+        "cancelled", "no_show", "refunded", "partially_refunded",
+    }
+    query = db.query(db_mod.ServiceOrder)
+    if order_type.strip():
+        query = query.filter(db_mod.ServiceOrder.service_type == order_type.strip())
+    if not status.strip():
+        query = query.filter(db_mod.ServiceOrder.status.in_(active_statuses))
+    if product_type.strip():
+        query = query.filter(db_mod.ServiceOrder.product_type == product_type.strip())
+    if status.strip():
+        query = query.filter(db_mod.ServiceOrder.status == status.strip())
+    orders = query.order_by(db_mod.ServiceOrder.created_at.desc()).limit(200).all()
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/orders.html",
+        context=_auth_template_context(
+            request,
+            dashboard_user=request.state.admin_user,
+            orders=[_admin_order_view(order) for order in orders],
+            filters={"order_type": order_type, "product_type": product_type, "status": status},
+            statuses=sorted(active_statuses),
+            product_types=sorted(REPORT_ORDER_PRODUCTS.keys()) + sorted(REPORT_BUNDLE_PRODUCTS.keys()) + [CONSULTATION_PRODUCT["product_type"]],
+        ),
+    )
+
+
+@app.get("/admin/orders/{order_id}", response_class=HTMLResponse)
+@admin_required
+async def admin_order_detail(request: Request, order_id: int, db: Session = Depends(get_db), notice: str = "", error: str = ""):
+    order = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.id == order_id).first()
+    if not order:
+        _public_error("Order not found.", 404)
+    logs = db.query(db_mod.AdminActionLog).filter(db_mod.AdminActionLog.order_id == order.id).order_by(db_mod.AdminActionLog.created_at.desc()).all()
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/order_detail.html",
+        context=_auth_template_context(request, dashboard_user=request.state.admin_user, order=order, product=_service_order_product(order), payload=_service_order_payload(order), logs=logs, notice=notice, error=error),
+    )
+
+
+@app.post("/admin/orders/{order_id}/notes")
+@admin_required
+async def admin_order_save_notes(request: Request, order_id: int, internal_notes: str = Form(default=""), db: Session = Depends(get_db)):
+    order = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.id == order_id).first()
+    if not order:
+        _public_error("Order not found.", 404)
+    save_order_internal_notes(db, order, internal_notes, actor=_admin_actor(request))
+    return RedirectResponse(url=f"/admin/orders/{order.id}?notice=notes_saved", status_code=303)
+
+
+@app.post("/admin/orders/{order_id}/transition")
+@admin_required
+async def admin_order_transition(request: Request, order_id: int, action: str = Form(...), db: Session = Depends(get_db)):
+    order = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.id == order_id).first()
+    if not order:
+        _public_error("Order not found.", 404)
+    try:
+        apply_admin_order_transition(db, order, action, actor=_admin_actor(request))
+    except ValueError as exc:
+        return RedirectResponse(url=f"/admin/orders/{order.id}?error={urlencode({'message': str(exc)})}", status_code=303)
+    return RedirectResponse(url=f"/admin/orders/{order.id}?notice={action}", status_code=303)
+
+
+@app.post("/admin/orders/{order_id}/send-report")
+@admin_required
+async def admin_send_report(request: Request, order_id: int, db: Session = Depends(get_db)):
+    order = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.id == order_id).first()
+    if not order:
+        _public_error("Order not found.", 404)
+    try:
+        send_final_report_delivery_email(db, order, actor=_admin_actor(request))
+    except ValueError as exc:
+        return RedirectResponse(url=f"/admin/orders/{order.id}?error={urlencode({'message': str(exc)})}", status_code=303)
+    return RedirectResponse(url=f"/admin/orders/{order.id}?notice=report_sent", status_code=303)
+
+
+@app.post("/admin/orders/{order_id}/refund")
+@admin_required
+async def admin_refund_order(
+    request: Request,
+    order_id: int,
+    refund_amount: str = Form(default=""),
+    refund_reason: str = Form(default=""),
+    refund_mode: str = Form(default="provider"),
+    db: Session = Depends(get_db),
+):
+    order = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.id == order_id).first()
+    if not order:
+        _public_error("Order not found.", 404)
+    try:
+        request_order_refund(db, order, refund_amount=refund_amount, reason=refund_reason, actor=_admin_actor(request), refund_mode=refund_mode)
+    except (ValueError, payments.PaymentError) as exc:
+        return RedirectResponse(url=f"/admin/orders/{order.id}?error={urlencode({'message': str(exc)})}", status_code=303)
+    return RedirectResponse(url=f"/admin/orders/{order.id}?notice=refunded", status_code=303)
+
+
+@app.post("/admin/orders/{order_id}/cancel")
+@admin_required
+async def admin_cancel_order(
+    request: Request,
+    order_id: int,
+    cancellation_reason: str = Form(default=""),
+    admin_override: str = Form(default=""),
+    db: Session = Depends(get_db),
+):
+    order = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.id == order_id).first()
+    if not order:
+        _public_error("Order not found.", 404)
+    try:
+        cancel_service_order(db, order, reason=cancellation_reason, actor=_admin_actor(request), admin_override=admin_override == "1")
+    except ValueError as exc:
+        return RedirectResponse(url=f"/admin/orders/{order.id}?error={urlencode({'message': str(exc)})}", status_code=303)
+    return RedirectResponse(url=f"/admin/orders/{order.id}?notice=cancelled", status_code=303)
+
+
+@app.post("/admin/orders/{order_id}/mark-no-show")
+@admin_required
+async def admin_mark_no_show(request: Request, order_id: int, no_show_reason: str = Form(default=""), db: Session = Depends(get_db)):
+    order = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.id == order_id).first()
+    if not order:
+        _public_error("Order not found.", 404)
+    try:
+        mark_consultation_no_show(db, order, reason=no_show_reason, actor=_admin_actor(request))
+    except ValueError as exc:
+        return RedirectResponse(url=f"/admin/orders/{order.id}?error={urlencode({'message': str(exc)})}", status_code=303)
+    return RedirectResponse(url=f"/admin/orders/{order.id}?notice=no_show", status_code=303)
+
+
+@app.post("/admin/orders/{order_id}/reconcile-payment")
+@admin_required
+async def admin_reconcile_payment(
+    request: Request,
+    order_id: int,
+    payment_token: str = Form(default=""),
+    conversation_id: str = Form(default=""),
+    db: Session = Depends(get_db),
+):
+    order = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.id == order_id).first()
+    if not order:
+        _public_error("Order not found.", 404)
+    try:
+        reconcile_order_payment(db, order, token=payment_token, conversation_id=conversation_id, actor=_admin_actor(request))
+    except (ValueError, payments.PaymentError) as exc:
+        return RedirectResponse(url=f"/admin/orders/{order.id}?error={urlencode({'message': str(exc)})}", status_code=303)
+    return RedirectResponse(url=f"/admin/orders/{order.id}?notice=reconciled", status_code=303)
 
 
 @app.get("/admin/users", response_class=HTMLResponse)
@@ -4967,6 +7027,7 @@ async def payments_webhook(request: Request, db: Session = Depends(get_db)):
 
 @app.post("/api/v1/email-capture")
 async def api_email_capture(request: Request, db: Session = Depends(get_db)):
+    current_language = _result_language(request, get_request_user(request, db))
     try:
         payload = await request.json()
     except Exception:
@@ -4990,7 +7051,7 @@ async def api_email_capture(request: Request, db: Session = Depends(get_db)):
                     "is_converted": bool(capture.is_converted),
                 },
                 "created": created,
-                "message": "Your reading has been saved for later.",
+                "message": "Okumanız daha sonra bakmak üzere kaydedildi." if current_language == "tr" else "Your reading has been saved for later.",
             }
         )
     except ValueError as exc:
@@ -5094,6 +7155,7 @@ async def calculate_from_form(
 ):
     try:
         current_user = get_request_user(request, db)
+        current_language = _result_language(request, current_user)
         if resolved_birth_place and resolved_latitude and resolved_longitude and resolved_timezone:
             _log_birthplace_event(
                 db,
@@ -5155,10 +7217,12 @@ async def calculate_from_form(
             parent_bundle["name"] = parent_full_name.strip()
             child_bundle["name"] = child_full_name.strip()
             interpretation_context = build_parent_child_interpretation(parent_bundle, child_bundle)
+            interpretation_context = _localize_result_layer_text(interpretation_context, current_language)
             ai_interpretation = build_parent_child_ai_summary(interpretation_context)
             child_meta = child_bundle["calculation_config"]
             result_data = {
                 "request": request,
+                "language": current_language,
                 "full_name": child_full_name,
                 "birth_date": child_birth_date,
                 "birth_time": child_birth_time,
@@ -5203,6 +7267,7 @@ async def calculate_from_form(
             }
             result_data["related_articles"] = []
             payload_json = {
+                "language": current_language,
                 "full_name": child_full_name,
                 "birth_date": child_birth_date,
                 "birth_time": child_birth_time,
@@ -5367,9 +7432,11 @@ async def calculate_from_form(
             transit_data=transit_data,
         )
         interpretation_context["recommendation_layer"] = interpretation_context["signal_layer"].get("recommendation_layer", {})
+        interpretation_context = _localize_result_layer_text(interpretation_context, current_language)
 
         result_data = {
             "request": request,
+            "language": current_language,
             "full_name": full_name,
             "birth_date": birth_date,
             "birth_time": birth_time,
@@ -5396,8 +7463,9 @@ async def calculate_from_form(
             "fullmoon_data": _serialize_temporal_values(fullmoon_data),
             "interpretation_context": _serialize_temporal_values(interpretation_context),
         }
-        result_data["related_articles"] = _match_related_articles_for_result(db, interpretation_context)
+        result_data["related_articles"] = _match_related_articles_for_result(db, interpretation_context, language=current_language)
         payload_json = {
+            "language": current_language,
             "full_name": full_name,
             "birth_date": birth_date,
             "birth_time": birth_time,

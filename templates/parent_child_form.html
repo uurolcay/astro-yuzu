@@ -1,11 +1,20 @@
 {% extends "base.html" %}
 
-{% block title %}Focus Astrology | Parent-Child Guidance{% endblock %}
+{% block title %}{{ t("parent_child_form.page_title") }}{% endblock %}
 
 {% block extra_head %}
 <style>
-    .dual-form-shell { display:grid; gap:28px; }
-    .intro-card, .person-card { padding:30px 28px; border-radius:var(--radius); border:1px solid var(--border); background:rgba(30,50,86,.30); }
+    .dual-form-shell { display:grid; gap:clamp(28px, 5vw, 46px); }
+    .intro-card {
+        padding:32px 0 0;
+        border-top:1px solid rgba(223,192,112,.12);
+    }
+    .person-card {
+        padding:28px 26px;
+        border-radius:var(--radius);
+        border:1px solid rgba(223,192,112,.10);
+        background:rgba(30,50,86,.22);
+    }
     .person-grid, .form-grid { display:grid; gap:18px; }
     .person-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
     .form-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
@@ -19,10 +28,10 @@
     .suggestion-item:hover, .suggestion-item.active, .suggestion-item:focus { background:rgba(201,168,76,0.1); outline:none; }
     .suggestion-main { display:block; font-weight:600; }
     .suggestion-sub { display:block; margin-top:4px; font-size:0.82rem; color:var(--text-soft); }
-    label { display:block; margin-bottom:10px; font-family:"Cinzel", serif; font-size:0.72rem; letter-spacing:.18em; text-transform:uppercase; color:rgba(223,192,112,.74); }
+    label { display:block; margin-bottom:10px; font-size:0.9rem; font-weight:600; color:rgba(248,245,240,.82); }
     input { width:100%; min-height:54px; padding:0 16px; border-radius:0; border:1px solid rgba(223,192,112,.18); background:rgba(15,30,52,.34); color:var(--text); font:inherit; }
     input:focus { outline:none; border-color:rgba(240,192,96,0.62); box-shadow:0 0 0 3px rgba(201,168,76,0.16); background-color:rgba(255,255,255,0.05); }
-    @media (max-width: 960px) { .person-grid, .form-grid { grid-template-columns:1fr; } .field-full { grid-column:auto; } }
+    @media (max-width: 960px) { .person-grid, .form-grid { grid-template-columns:1fr; } .field-full { grid-column:auto; } .person-card { padding:24px 22px; } }
 </style>
 {% endblock %}
 
@@ -31,34 +40,34 @@
     <div class="container">
         <div class="dual-form-shell">
             <div class="intro-card">
-                <div class="eyebrow">Parent-Child Report</div>
-                <h1 class="hero-title" style="font-size:2.6rem;">Parent-Child Guidance & Compatibility</h1>
-                <p class="hero-text">A family reading focused on the child’s nature, emotional dynamics, school tendencies, and the parenting approach that supports growth best.</p>
+                <div class="eyebrow">{{ t("parent_child_form.hero_eyebrow") }}</div>
+                <h1 class="hero-title" style="font-size:2.6rem;">{{ t("parent_child_form.hero_title") }}</h1>
+                <p class="hero-text">{{ t("parent_child_form.hero_text") }}</p>
             </div>
 
             <form action="/calculate" method="post" class="person-grid">
                 <input type="hidden" name="report_type" value="parent_child">
                 <section class="person-card">
-                    <div class="eyebrow">Parent</div>
-                    <h2 class="section-title">Parent birth details</h2>
+                    <div class="eyebrow">{{ t("parent_child_form.parent_eyebrow") }}</div>
+                    <h2 class="section-title">{{ t("parent_child_form.parent_title") }}</h2>
                     <div class="form-grid" style="margin-top:18px;">
                         <div class="field-full">
-                            <label for="parent_full_name">Parent name</label>
-                            <input id="parent_full_name" name="parent_full_name" type="text" placeholder="Parent name" required>
+                            <label for="parent_full_name">{{ t("parent_child_form.parent_name_label") }}</label>
+                            <input id="parent_full_name" name="parent_full_name" type="text" placeholder="{{ t("parent_child_form.parent_name_placeholder") }}" required>
                         </div>
                         <div>
-                            <label for="parent_birth_date">Birth date</label>
+                            <label for="parent_birth_date">{{ t("parent_child_form.birth_date_label") }}</label>
                             <input id="parent_birth_date" name="parent_birth_date" type="date" required>
                         </div>
                         <div>
-                            <label for="parent_birth_time">Birth time</label>
+                            <label for="parent_birth_time">{{ t("parent_child_form.birth_time_label") }}</label>
                             <input id="parent_birth_time" name="parent_birth_time" type="time" required>
                         </div>
                         <div class="field-full">
-                            <label for="parent_birth_city">Birth place</label>
+                            <label for="parent_birth_city">{{ t("parent_child_form.birth_place_label") }}</label>
                             <div class="autocomplete-shell">
-                                <input id="parent_birth_city" name="parent_birth_city" type="text" autocomplete="off" aria-expanded="false" aria-controls="parent-birthplace-suggestions" aria-autocomplete="list" placeholder="Start typing: Besiktas, Istanbul, Turkey" required>
-                                <ul id="parent-birthplace-suggestions" class="suggestion-list" role="listbox" aria-label="Parent birth place suggestions"></ul>
+                                <input id="parent_birth_city" name="parent_birth_city" type="text" autocomplete="off" aria-expanded="false" aria-controls="parent-birthplace-suggestions" aria-autocomplete="list" placeholder="{{ t("parent_child_form.birth_place_placeholder") }}" required>
+                                <ul id="parent-birthplace-suggestions" class="suggestion-list" role="listbox" aria-label="{{ t("parent_child_form.parent_suggestions_label") }}"></ul>
                             </div>
                             <input id="parent_country" name="parent_country" type="hidden">
                             <input id="parent_resolved_birth_place" name="parent_resolved_birth_place" type="hidden">
@@ -67,32 +76,32 @@
                             <input id="parent_resolved_timezone" name="parent_resolved_timezone" type="hidden">
                             <input id="parent_resolved_geocode_provider" name="parent_resolved_geocode_provider" type="hidden">
                             <input id="parent_resolved_geocode_confidence" name="parent_resolved_geocode_confidence" type="hidden">
-                            <div id="parent-birthplace-status" class="autocomplete-status">Select the closest match for the most reliable house and timing accuracy.</div>
+                            <div id="parent-birthplace-status" class="autocomplete-status">{{ t("parent_child_form.birthplace.form_help") }}</div>
                         </div>
                     </div>
                 </section>
 
                 <section class="person-card">
-                    <div class="eyebrow">Child</div>
-                    <h2 class="section-title">Child birth details</h2>
+                    <div class="eyebrow">{{ t("parent_child_form.child_eyebrow") }}</div>
+                    <h2 class="section-title">{{ t("parent_child_form.child_title") }}</h2>
                     <div class="form-grid" style="margin-top:18px;">
                         <div class="field-full">
-                            <label for="child_full_name">Child name</label>
-                            <input id="child_full_name" name="child_full_name" type="text" placeholder="Child name" required>
+                            <label for="child_full_name">{{ t("parent_child_form.child_name_label") }}</label>
+                            <input id="child_full_name" name="child_full_name" type="text" placeholder="{{ t("parent_child_form.child_name_placeholder") }}" required>
                         </div>
                         <div>
-                            <label for="child_birth_date">Birth date</label>
+                            <label for="child_birth_date">{{ t("parent_child_form.birth_date_label") }}</label>
                             <input id="child_birth_date" name="child_birth_date" type="date" required>
                         </div>
                         <div>
-                            <label for="child_birth_time">Birth time</label>
+                            <label for="child_birth_time">{{ t("parent_child_form.birth_time_label") }}</label>
                             <input id="child_birth_time" name="child_birth_time" type="time" required>
                         </div>
                         <div class="field-full">
-                            <label for="child_birth_city">Birth place</label>
+                            <label for="child_birth_city">{{ t("parent_child_form.birth_place_label") }}</label>
                             <div class="autocomplete-shell">
-                                <input id="child_birth_city" name="child_birth_city" type="text" autocomplete="off" aria-expanded="false" aria-controls="child-birthplace-suggestions" aria-autocomplete="list" placeholder="Start typing: Besiktas, Istanbul, Turkey" required>
-                                <ul id="child-birthplace-suggestions" class="suggestion-list" role="listbox" aria-label="Child birth place suggestions"></ul>
+                                <input id="child_birth_city" name="child_birth_city" type="text" autocomplete="off" aria-expanded="false" aria-controls="child-birthplace-suggestions" aria-autocomplete="list" placeholder="{{ t("parent_child_form.birth_place_placeholder") }}" required>
+                                <ul id="child-birthplace-suggestions" class="suggestion-list" role="listbox" aria-label="{{ t("parent_child_form.child_suggestions_label") }}"></ul>
                             </div>
                             <input id="child_country" name="child_country" type="hidden">
                             <input id="child_resolved_birth_place" name="child_resolved_birth_place" type="hidden">
@@ -101,14 +110,14 @@
                             <input id="child_resolved_timezone" name="child_resolved_timezone" type="hidden">
                             <input id="child_resolved_geocode_provider" name="child_resolved_geocode_provider" type="hidden">
                             <input id="child_resolved_geocode_confidence" name="child_resolved_geocode_confidence" type="hidden">
-                            <div id="child-birthplace-status" class="autocomplete-status">Select the closest match for the most reliable house and timing accuracy.</div>
+                            <div id="child-birthplace-status" class="autocomplete-status">{{ t("parent_child_form.birthplace.form_help") }}</div>
                         </div>
                     </div>
                 </section>
 
                 <div class="field-full" style="display:flex; gap:12px; flex-wrap:wrap;">
-                    <button class="btn btn-primary" type="submit">Generate Parent-Child Report</button>
-                    <a class="btn btn-secondary" href="/reports">Back to reports</a>
+                    <button class="btn btn-primary" type="submit">{{ t("parent_child_form.cta_submit") }}</button>
+                    <a class="btn btn-secondary" href="/reports">{{ t("parent_child_form.cta_back") }}</a>
                 </div>
             </form>
         </div>
@@ -118,6 +127,14 @@
 
 {% block scripts %}
 <script>
+    const parentChildTranslations = {{ translation_namespace("parent_child_form.birthplace")|tojson }};
+
+    function parentChildText(key) {
+        const language = document.documentElement.lang === "tr" ? "tr" : "en";
+        const copy = parentChildTranslations[language] || parentChildTranslations.en || {};
+        return copy[key] || (parentChildTranslations.en && parentChildTranslations.en[key]) || key;
+    }
+
     function attachBirthplaceAutocomplete(prefix) {
         const input = document.getElementById(`${prefix}_birth_city`);
         const list = document.getElementById(`${prefix}-birthplace-suggestions`);
@@ -202,11 +219,11 @@
                 const results = response.ok ? await response.json() : [];
                 if (requestId !== activeRequest) return;
                 renderSuggestions(Array.isArray(results) ? results : []);
-                if (!results.length) setStatus("Please refine the place name and select the closest match.");
+                if (!results.length) setStatus(parentChildText("no_results"));
             } catch (_error) {
                 if (requestId !== activeRequest) return;
                 closeSuggestions();
-                setStatus("Suggestions are temporarily unavailable.");
+                setStatus(parentChildText("unavailable"));
             }
         }
         input.addEventListener("input", () => {
@@ -214,8 +231,8 @@
             closeSuggestions();
             const query = input.value.trim();
             if (debounceTimer) clearTimeout(debounceTimer);
-            if (query.length < 2) { setStatus("Select the closest match for the most reliable house and timing accuracy."); return; }
-            setStatus("Searching birth place suggestions...");
+            if (query.length < 2) { setStatus(parentChildText("form_help")); return; }
+            setStatus(parentChildText("searching"));
             debounceTimer = setTimeout(() => fetchSuggestions(query), 220);
         });
         document.addEventListener("click", (event) => {

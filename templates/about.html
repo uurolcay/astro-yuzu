@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t("about.page_title") }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    .about-shell { display:grid; gap:28px; }
+    .about-grid { display:grid; grid-template-columns: 1fr 0.9fr; gap:32px; align-items:center; }
+    .about-story-grid { display:grid; grid-template-columns: 1.05fr 0.95fr; gap:20px; }
+    .about-explore-grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:20px; }
+    .about-visual {
+        min-height: 420px;
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
+        background: radial-gradient(circle at 50% 50%, rgba(54,82,126,.36), rgba(18,33,57,.84));
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        position:relative;
+        overflow:hidden;
+    }
+    .about-visual svg {
+        width:min(520px, 72%);
+        opacity:.2;
+    }
+    .about-copy { display:grid; gap:18px; }
+    .about-panel {
+        display:grid;
+        gap:16px;
+        padding: clamp(24px, 3vw, 32px);
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
+        background: rgba(20,34,58,.3);
+    }
+    .about-panel--hero {
+        background: linear-gradient(180deg, rgba(38,61,98,.26), rgba(20,34,58,.2));
+    }
+    .about-panel-title {
+        margin:0;
+        font-family:"Cormorant Garamond", serif;
+        font-size: clamp(2rem, 3vw, 2.8rem);
+        font-weight:300;
+        line-height:1.08;
+    }
+    .about-panel-text {
+        margin:0;
+        color: var(--text-soft);
+        line-height:1.84;
+        font-size:1.05rem;
+    }
+    .about-title {
+        margin:0;
+        font-family:"Cormorant Garamond", serif;
+        font-size: clamp(2.6rem, 5vw, 4rem);
+        font-weight:300;
+        line-height:1.08;
+    }
+    .about-actions { display:flex; flex-wrap:wrap; gap:14px; }
+    .about-close-card {
+        display:grid;
+        gap:16px;
+        justify-items:start;
+        padding: clamp(28px, 3vw, 36px);
+        border-radius: var(--radius);
+        border: 1px solid rgba(223,192,112,.16);
+        background: linear-gradient(180deg, rgba(34,54,89,.28), rgba(19,32,56,.22));
+    }
+    .about-stats { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:16px; }
+    .about-stat {
+        padding:18px;
+        border-radius:20px;
+        background:rgba(30,50,86,.3);
+        border:1px solid var(--border);
+    }
+    .about-stat strong {
+        display:block;
+        margin-bottom:8px;
+        font-family:"Cinzel", serif;
+        color:var(--gold-light);
+        font-size:1.6rem;
+    }
+    @media (max-width: 960px) {
+        .about-grid, .about-stats, .about-story-grid, .about-explore-grid { grid-template-columns:1fr; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad about-shell">
+            <div class="chip-row">
+                <span class="chip">Focus Astrology</span>
+                <span class="chip">{{ t("about.eyebrow") }}</span>
+            </div>
+            <div class="about-grid">
+                <div class="about-copy">
+                    <h1 class="about-title">{{ t("about.title") }}</h1>
+                    <p class="hero-text">{{ t("about.text") }}</p>
+                    <div class="about-actions">
+                        <a class="btn btn-primary" href="/calculator">{{ t("index.cta_start") }}</a>
+                        <a class="btn btn-secondary" href="/reports">{{ t("common.nav_reports") }}</a>
+                    </div>
+                    <div class="about-stats">
+                        <div class="about-stat">
+                            <strong>{{ t("about.stat_1_value") }}</strong>
+                            <span class="muted">{{ t("about.stat_1_label") }}</span>
+                        </div>
+                        <div class="about-stat">
+                            <strong>{{ t("about.stat_2_value") }}</strong>
+                            <span class="muted">{{ t("about.stat_2_label") }}</span>
+                        </div>
+                        <div class="about-stat">
+                            <strong>{{ t("about.stat_3_value") }}</strong>
+                            <span class="muted">{{ t("about.stat_3_label") }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="about-visual" aria-hidden="true">
+                    <svg viewBox="0 0 600 430" fill="none">
+                        <line x1="80" y1="30" x2="80" y2="400" stroke="#DFC070" stroke-width="8" stroke-linecap="round"/>
+                        <line x1="52" y1="30" x2="108" y2="30" stroke="#DFC070" stroke-width="5.5" stroke-linecap="round"/>
+                        <line x1="52" y1="400" x2="108" y2="400" stroke="#DFC070" stroke-width="5.5" stroke-linecap="round"/>
+                        <line x1="80" y1="82" x2="196" y2="82" stroke="#DFC070" stroke-width="7" stroke-linecap="round"/>
+                        <line x1="80" y1="215" x2="146" y2="215" stroke="#DFC070" stroke-width="6.5" stroke-linecap="round"/>
+                        <circle cx="146" cy="215" r="9" fill="#F0DC95" opacity="0.9"/>
+                        <circle cx="342" cy="215" r="196" stroke="#DFC070" stroke-width="8" fill="none"/>
+                        <ellipse cx="342" cy="215" rx="196" ry="52" stroke="#DFC070" stroke-width="2.5" opacity="0.52" fill="none" transform="rotate(-10 342 215)"/>
+                        <ellipse cx="342" cy="215" rx="83" ry="196" stroke="#DFC070" stroke-width="2.2" opacity="0.38" fill="none" transform="rotate(-10 342 215)"/>
+                        <line x1="370" y1="25" x2="314" y2="405" stroke="#DFC070" stroke-width="2" opacity="0.36" stroke-linecap="round"/>
+                        <g transform="rotate(-10 370 20)">
+                            <line x1="370" y1="4" x2="370" y2="36" stroke="#DFC070" stroke-width="2.5" opacity="0.65" stroke-linecap="round"/>
+                            <line x1="354" y1="20" x2="386" y2="20" stroke="#DFC070" stroke-width="2.5" opacity="0.65" stroke-linecap="round"/>
+                            <line x1="357" y1="7" x2="383" y2="33" stroke="#DFC070" stroke-width="1.4" opacity="0.38" stroke-linecap="round"/>
+                            <line x1="383" y1="7" x2="357" y2="33" stroke="#DFC070" stroke-width="1.4" opacity="0.38" stroke-linecap="round"/>
+                        </g>
+                        <circle cx="370" cy="20" r="7" fill="#F0DC95" opacity="0.9"/>
+                    </svg>
+                </div>
+            </div>
+            <div class="about-story-grid">
+                <article class="about-panel about-panel--hero">
+                    <div class="section-kicker">{{ t("about.what_label") }}</div>
+                    <h2 class="about-panel-title">{{ t("about.what_title") }}</h2>
+                    <p class="about-panel-text">{{ t("about.what_text") }}</p>
+                </article>
+                <article class="about-panel">
+                    <div class="section-kicker">{{ t("about.why_label") }}</div>
+                    <h2 class="about-panel-title">{{ t("about.why_title") }}</h2>
+                    <p class="about-panel-text">{{ t("about.why_text") }}</p>
+                </article>
+            </div>
+            <div class="about-story-grid">
+                <article class="about-panel">
+                    <div class="section-kicker">{{ t("index.editorial_pill") }}</div>
+                    <h2 class="about-panel-title">{{ t("about.lead_title") }}</h2>
+                    <p class="about-panel-text">{{ t("about.lead_text") }}</p>
+                    <p class="about-panel-text">{{ t("index.value_text") }}</p>
+                </article>
+                <article class="about-panel">
+                    <div class="section-kicker">{{ t("about.method_label") }}</div>
+                    <h2 class="about-panel-title">{{ t("about.method_title") }}</h2>
+                    <p class="about-panel-text">{{ t("about.method_text_1") }}</p>
+                    <p class="about-panel-text">{{ t("about.method_text_2") }}</p>
+                </article>
+            </div>
+            <section class="section-shell card-pad">
+                <div class="section-header">
+                    <div class="section-kicker">{{ t("about.explore_label") }}</div>
+                    <h2 class="section-title">{{ t("about.explore_title") }}</h2>
+                </div>
+                <div class="about-explore-grid">
+                    <article class="about-panel">
+                        <h3 class="about-panel-title">{{ t("about.explore_personal_title") }}</h3>
+                        <p class="about-panel-text">{{ t("about.explore_personal_text") }}</p>
+                    </article>
+                    <article class="about-panel">
+                        <h3 class="about-panel-title">{{ t("about.explore_child_title") }}</h3>
+                        <p class="about-panel-text">{{ t("about.explore_child_text") }}</p>
+                    </article>
+                    <article class="about-panel">
+                        <h3 class="about-panel-title">{{ t("about.explore_articles_title") }}</h3>
+                        <p class="about-panel-text">{{ t("about.explore_articles_text") }}</p>
+                    </article>
+                    <article class="about-panel">
+                        <h3 class="about-panel-title">{{ t("about.explore_calculator_title") }}</h3>
+                        <p class="about-panel-text">{{ t("about.explore_calculator_text") }}</p>
+                    </article>
+                </div>
+            </section>
+            <section class="section-shell card-pad">
+                <div class="section-header">
+                    <div class="section-kicker">{{ t("about.philosophy_label") }}</div>
+                    <h2 class="section-title">{{ t("about.philosophy_title") }}</h2>
+                    <p class="section-text">{{ t("about.philosophy_text") }}</p>
+                </div>
+            </section>
+            <div class="about-close-card">
+                <h2 class="about-panel-title">{{ t("about.closing_title") }}</h2>
+                <p class="about-panel-text">{{ t("about.closing_text") }}</p>
+                <div class="about-actions">
+                    <a class="btn btn-primary" href="/calculator">{{ t("about.closing_primary") }}</a>
+                    <a class="btn btn-secondary" href="/reports">{{ t("about.closing_secondary") }}</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

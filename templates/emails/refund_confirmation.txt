@@ -1,0 +1,7 @@
+İade kaydı
+
+{{ product.title }}
+
+İade işleminiz yönetici tarafından kaydedildi. Tutar: {{ refund_amount }} {{ order.currency or "TRY" }}.
+
+Ödeme sağlayıcısının bankaya yansıma süresi ayrıca değişebilir.

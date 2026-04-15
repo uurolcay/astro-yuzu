@@ -4,19 +4,148 @@
 
 {% block extra_head %}
 <style>
-    .articles-shell { display:grid; gap:28px; }
-    .articles-hero { padding-bottom:22px; border-bottom:1px solid var(--border); }
-    .filter-row { display:flex; flex-wrap:wrap; gap:10px; }
-    .article-list-card { padding:30px 28px; background:rgba(30,50,86,.30); border:1px solid var(--border); transition:border-color .3s ease, background .3s ease; }
-    .article-list-card:hover { border-color:rgba(223,192,112,.38); background:rgba(30,50,86,.38); }
-    .article-list-card .card-title { font-family:"Cormorant Garamond", serif; font-size:2rem; font-style:italic; font-weight:300; line-height:1.28; }
+    .articles-shell { display:grid; gap:clamp(28px, 5vw, 44px); }
+    .articles-shell-frame {
+        position:relative;
+        overflow:hidden;
+        background:
+            linear-gradient(180deg, rgba(6,12,28,.16) 0%, rgba(6,12,28,.24) 22%, rgba(6,12,28,.82) 100%),
+            linear-gradient(90deg, rgba(8,16,35,.72) 0%, rgba(8,16,35,.18) 58%, rgba(8,16,35,.46) 100%),
+            url('/static/articles/secili_makaleler.jpg'),
+            linear-gradient(135deg, rgba(9,18,40,.96), rgba(13,28,58,.88));
+        background-size:cover;
+        background-position:center;
+        border:1px solid rgba(223,192,112,.12);
+    }
+    .articles-shell-frame::before {
+        content:"";
+        position:absolute;
+        inset:0;
+        background:
+            linear-gradient(160deg, rgba(223,192,112,.14), transparent 44%),
+            linear-gradient(0deg, rgba(5,10,24,.10), rgba(5,10,24,.10));
+        pointer-events:none;
+    }
+    .articles-shell-frame > * { position:relative; z-index:1; }
+    .articles-hero {
+        min-height:360px;
+        padding:34px 34px 10px;
+        background:transparent;
+        border:none;
+    }
+    .articles-hero .hero-title,
+    .articles-hero .hero-text { max-width:36rem; }
+    .filter-row {
+        display:flex;
+        flex-wrap:wrap;
+        gap:10px;
+        padding:0 34px 34px;
+    }
+    .filter-row .chip {
+        color:rgba(248,245,240,.88);
+        border-color:rgba(223,192,112,.26);
+        background:rgba(12,22,42,.52);
+        box-shadow:none;
+    }
+    .filter-row .chip:hover {
+        background:rgba(18,31,58,.56);
+        border-color:rgba(223,192,112,.28);
+        color:var(--gold-light);
+    }
+    .articles-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:26px; }
+    .article-list-card {
+        display:flex;
+        flex-direction:column;
+        min-height:100%;
+        overflow:hidden;
+        background:rgba(18,31,61,.30);
+        border:1px solid rgba(223,192,112,.10);
+        transition:border-color .24s ease, background .24s ease;
+    }
+    .article-list-card:hover {
+        border-color:rgba(223,192,112,.22);
+        background:rgba(18,31,61,.36);
+    }
+    .article-card-cover {
+        position:relative;
+        min-height:320px;
+        padding:24px;
+        display:flex;
+        align-items:flex-end;
+        background-color:#0d1a38;
+        background-image:var(--article-cover-image);
+        background-size:cover;
+        background-position:center;
+        isolation:isolate;
+    }
+    .article-card-cover::after {
+        content:"";
+        position:absolute;
+        inset:0;
+        background:
+            linear-gradient(180deg, rgba(5,10,22,.08) 0%, rgba(5,10,22,.24) 28%, rgba(5,10,22,.90) 100%),
+            linear-gradient(90deg, rgba(8,16,35,.74) 0%, rgba(8,16,35,.18) 70%);
+        z-index:-1;
+    }
+    .article-card-copy {
+        width:min(100%, 34rem);
+        display:grid;
+        gap:10px;
+    }
+    .article-card-title {
+        margin:0;
+        font-family:"Cormorant Garamond", serif;
+        font-size:2.2rem;
+        line-height:1.06;
+        font-weight:500;
+        color:var(--white);
+        text-wrap:balance;
+    }
+    .article-card-title a { color:inherit; }
+    .article-card-subtitle {
+        margin:0;
+        max-width:32rem;
+        font-size:1rem;
+        line-height:1.72;
+        color:rgba(248,245,240,.84);
+    }
+    .article-card-body {
+        display:flex;
+        flex:1 1 auto;
+        flex-direction:column;
+        gap:18px;
+        padding:20px 24px 24px;
+    }
+    .article-card-body .muted { margin:0; line-height:1.8; }
+    .article-card-cta {
+        margin-top:auto;
+        display:flex;
+        align-items:center;
+        justify-content:flex-start;
+        padding-top:4px;
+    }
+    .article-card-cta .btn { min-width:170px; }
+    @media (max-width: 1100px) {
+        .articles-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    }
+    @media (max-width: 760px) {
+        .articles-hero { min-height:320px; padding:28px 24px; }
+        .articles-grid { grid-template-columns:1fr; }
+        .article-card-cover { min-height:280px; padding:20px; }
+        .article-card-title { font-size:1.85rem; }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
+{% set featured_article_covers = {
+    'venus-transiti-degisim-kacinilmaz': '/static/articles/venus_transiti.jpg',
+    'merkur-transiti-planla-ve-harekete-gec': '/static/articles/merkur_transiti.jpg',
+    'jupiter-transiti-jupiter-acele-etme-diyor': '/static/articles/jüpiter_transiti.jpg'
+} %}
 <section class="page-section">
     <div class="container">
-        <div class="glass-card card-pad articles-shell">
+        <div class="articles-shell articles-shell-frame">
             <div class="articles-hero">
                 <div class="chip-row">
                     <span class="chip">{{ t("articles.chip_brand") }}</span>
@@ -37,14 +166,32 @@
 
 <section class="page-section" style="padding-top:0;">
     <div class="container">
-        <div class="grid-3">
+        <div class="articles-grid">
             {% for article in articles %}
+            {% if article.cover_image %}
+                {% if article.cover_image[:1] == '/' %}
+                    {% set article_cover = article.cover_image %}
+                {% else %}
+                    {% set article_cover = '/static/articles/' ~ article.cover_image %}
+                {% endif %}
+            {% elif article.slug in featured_article_covers %}
+                {% set article_cover = featured_article_covers[article.slug] %}
+            {% else %}
+                {% set article_cover = '/static/articles/' ~ article.slug ~ '.jpg' %}
+            {% endif %}
             <article class="article-list-card">
-                <div class="metric-label">{{ t("article_categories." ~ article.category.slug) }}{% if article.published_at %} | {{ article.published_at }}{% endif %}{% if article.reading_time %} | {{ article.reading_time }} {{ t("articles.read_minutes") }}{% endif %}</div>
-                <h2 class="card-title" style="margin-top:0;"><a href="/articles/{{ article.slug }}">{{ article.title }}</a></h2>
-                <p class="muted">{{ article.excerpt }}</p>
-                <div style="margin-top:18px;">
-                    <a class="btn btn-secondary" href="/articles/{{ article.slug }}">{{ t("articles.read_article") }}</a>
+                <div class="article-card-cover" style="--article-cover-image: linear-gradient(180deg, rgba(6,12,28,.12), rgba(6,12,28,.12)), url('{{ article_cover }}');">
+                    <div class="article-card-copy">
+                        <div class="metric-label">{{ t("article_categories." ~ article.category.slug) }}{% if article.published_at %} | {{ article.published_at }}{% endif %}{% if article.reading_time %} | {{ article.reading_time }} {{ t("articles.read_minutes") }}{% endif %}</div>
+                        <h2 class="article-card-title"><a href="/articles/{{ article.slug }}">{{ article.title }}</a></h2>
+                        <p class="article-card-subtitle">{{ article.excerpt }}</p>
+                    </div>
+                </div>
+                <div class="article-card-body">
+                    <p class="muted">{{ article.excerpt }}</p>
+                    <div class="article-card-cta">
+                        <a class="btn btn-secondary" href="/articles/{{ article.slug }}">{{ t("articles.read_article") }}</a>
+                    </div>
                 </div>
             </article>
             {% endfor %}

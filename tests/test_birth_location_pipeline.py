@@ -235,6 +235,103 @@ class BirthLocationPipelineTests(unittest.TestCase):
         self.assertIn("resolved_birthplace_label", template)
         self.assertIn("normalized_birth_place", template)
 
+    def test_calculator_result_respects_turkish_language_for_preview_unlock_copy(self):
+        client = TestClient(app.app)
+        response = client.post(
+            "/calculate",
+            data={
+                "full_name": "Test User",
+                "birth_date": "1990-01-01",
+                "birth_time": "12:00",
+                "birth_city": "Istanbul",
+                "country": "Turkey",
+                "resolved_birth_place": "Istanbul, Turkey",
+                "resolved_latitude": "41.0082",
+                "resolved_longitude": "28.9784",
+                "resolved_timezone": "Europe/Istanbul",
+                "resolved_geocode_provider": "test",
+                "resolved_geocode_confidence": "1",
+                "report_type": "premium",
+            },
+            cookies={"focus_astrology_language": "tr"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Harita temelli rehberlik", response.text)
+        self.assertIn("Doğru okumayı seçiyorsunuz", response.text)
+        self.assertIn('"language": "tr"', response.text)
+        self.assertNotIn("Chart-based guidance", response.text)
+        self.assertNotIn("You're choosing the right reading", response.text)
+        self.assertNotIn("Unlock Your Full Reading", response.text)
+        self.assertNotIn("This recommendation is driven by", response.text)
+
+    def test_result_recommendation_layer_localizes_engine_copy_for_turkish(self):
+        context = app._localize_result_layer_text(
+            {
+                "signal_layer": {
+                    "top_anchors": [
+                        {
+                            "rank": 1,
+                            "title": "Career ambition with material consequences",
+                            "summary": "A period of professional restructuring, increased responsibility, and strategic redirection. This cluster lands most strongly across career and money.",
+                            "why_it_matters": "This anchor shapes decision quality, emotional orientation, and timing across career, money.",
+                            "opportunity": "Strategic positioning, earned credibility, and visible progress.",
+                            "risk": "Pressure fatigue, over-control, or mistaking delay for failure.",
+                        }
+                    ]
+                },
+                "narrative_analysis": {
+                    "primary_narratives": [
+                        {
+                            "narrative_type": "career_transition",
+                            "narrative_summary": "A period of professional restructuring, increased responsibility, and strategic redirection.",
+                            "recommended_focus": "long term planning",
+                            "risk_factor": "burnout risk",
+                            "growth_potential": "high stability potential",
+                            "intensity": "major life chapter",
+                        }
+                    ],
+                },
+                "recommendation_layer": {
+                    "top_recommendations": [
+                        {
+                            "type": "action",
+                            "priority": "high",
+                            "title": "Prioritize deliberate career positioning",
+                            "reasoning": "This recommendation is driven by current dasha emphasis and reinforced by chart themes around structured progress in work decisions.",
+                            "time_window": "next 4-6 weeks",
+                        }
+                    ],
+                    "opportunity_windows": [
+                        {
+                            "title": "Use the current opening for targeted growth",
+                            "time_window": "next 4-6 weeks",
+                            "priority": "medium",
+                        }
+                    ],
+                    "risk_windows": [],
+                    "recommendation_notes": [
+                        "Recommendation wording stays more direct because recent feedback favored clearer guidance."
+                    ],
+                }
+            },
+            "tr",
+        )
+        recommendation = context["recommendation_layer"]["top_recommendations"][0]
+
+        self.assertEqual(recommendation["title"], "Kariyer yönünüzü bilinçli şekilde önceliklendirin")
+        self.assertEqual(recommendation["time_window"], "önümüzdeki 4-6 hafta")
+        self.assertEqual(recommendation["priority_label"], "Yüksek öncelik")
+        self.assertNotIn("This recommendation is driven by", recommendation["reasoning"])
+        self.assertIn("daha doğrudan", context["recommendation_layer"]["recommendation_notes"][0])
+        anchor = context["signal_layer"]["top_anchors"][0]
+        self.assertNotIn("This cluster", anchor["summary"])
+        self.assertNotIn("A period of professional", anchor["summary"])
+        self.assertIn("kariyer", anchor["summary"].lower())
+        narrative = context["narrative_analysis"]["primary_narratives"][0]
+        self.assertEqual(narrative["recommended_focus"], "uzun vadeli planlama")
+        self.assertNotIn("burnout risk", narrative["risk_factor"])
+
     def test_query_change_reset_hook_and_stale_field_clearing_remain_present(self):
         template = Path("C:\\Users\\uolca\\Documents\\Chatgpt Codex\\astro-yuzu\\templates\\calculator.html").read_text(encoding="utf-8")
         self.assertIn("highlightedIndex = -1", template)
@@ -253,12 +350,16 @@ class BirthLocationPipelineTests(unittest.TestCase):
         base_template = Path("C:\\Users\\uolca\\Documents\\Chatgpt Codex\\astro-yuzu\\templates\\base.html").read_text(encoding="utf-8")
         index_template = Path("C:\\Users\\uolca\\Documents\\Chatgpt Codex\\astro-yuzu\\templates\\index.html").read_text(encoding="utf-8")
         self.assertIn('href="/reports"', base_template)
+        self.assertIn('href="/personal-consultation"', base_template)
         self.assertIn('href="/articles"', base_template)
         self.assertIn('href="/calculator"', base_template)
-        self.assertIn('href="/#about-focus"', base_template)
-        self.assertNotIn('id="full-reading"', index_template)
-        self.assertNotIn('id="calculator-entry"', index_template)
+        self.assertIn('href="/about"', base_template)
+        self.assertIn('data-nav-menu', base_template)
+        self.assertIn('data-nav-trigger', base_template)
+        self.assertIn('data-nav-dropdown', base_template)
         self.assertIn('id="how-it-works"', index_template)
+        self.assertIn('href="/calculator"', index_template)
+        self.assertIn('href="/articles"', index_template)
 
     def test_turkish_birthplace_helper_and_gender_select_markup_are_present(self):
         template = Path("C:\\Users\\uolca\\Documents\\Chatgpt Codex\\astro-yuzu\\templates\\calculator.html").read_text(encoding="utf-8")
@@ -270,7 +371,22 @@ class BirthLocationPipelineTests(unittest.TestCase):
     def test_logo_asset_reference_is_present_in_header(self):
         template = Path("C:\\Users\\uolca\\Documents\\Chatgpt Codex\\astro-yuzu\\templates\\base.html").read_text(encoding="utf-8")
         self.assertIn('/static/focus-logo.png', template)
-        self.assertIn('class="auth-links"', template)
+        self.assertIn('data-account-menu', template)
+        self.assertIn('data-account-trigger', template)
+        self.assertIn('data-account-dropdown', template)
+        self.assertIn('account-dropdown-link', template)
+        self.assertIn("flex-wrap: nowrap;", template)
+        self.assertIn('data-nav-menu', template)
+        self.assertIn('data-nav-trigger', template)
+        self.assertIn('data-nav-dropdown', template)
+        self.assertIn('href="/reports"', template)
+        self.assertIn('href="/personal-consultation"', template)
+        self.assertIn('data-theme-toggle', template)
+        self.assertIn('data-theme-option="dark"', template)
+        self.assertIn('data-theme-option="light"', template)
+        self.assertIn('data-theme-option="auto"', template)
+        self.assertIn("focus-astrology-theme-mode", template)
+        self.assertIn('aria-haspopup="menu"', template)
         self.assertNotIn('class="btn btn-primary">{{ t("common.nav_reports") }}</a>', template)
 
     def test_homepage_render_contains_focus_astrology_and_turkish_helper_text(self):
@@ -278,7 +394,35 @@ class BirthLocationPipelineTests(unittest.TestCase):
         response = client.get("/", headers={"accept-language": "tr"})
         self.assertEqual(response.status_code, 200)
         self.assertIn('/static/focus-logo.png', response.text)
-        self.assertIn("Yorumunu Başlat", response.text)
+        self.assertIn('data-theme-toggle', response.text)
+        self.assertIn('data-account-trigger', response.text)
+        self.assertIn("Harita Hesapla", response.text)
+        self.assertIn("Raporlar", response.text)
+        self.assertIn("Danışmanlık", response.text)
+        self.assertIn("60 dk Birebir Astroloji Danışmanlığı", response.text)
+        self.assertIn("Yapınızı görün.", response.text)
+        self.assertIn("Daha net karar verin.", response.text)
+        self.assertIn("Raporunuzu Seçin", response.text)
+        self.assertIn("Seçili Makaleler", response.text)
+
+    def test_logged_out_header_account_dropdown_shows_auth_routes(self):
+        client = TestClient(app.app)
+        response = client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('data-account-dropdown', response.text)
+        self.assertIn('href="/login"', response.text)
+        self.assertIn('href="/signup"', response.text)
+
+    def test_logged_in_header_account_dropdown_shows_account_links(self):
+        user = SimpleNamespace(is_admin=False)
+        with patch.object(app, "get_request_user", return_value=user):
+            response = TestClient(app.app).get("/reports")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('data-account-dropdown', response.text)
+        self.assertIn('href="/account"', response.text)
+        self.assertIn('href="/reports"', response.text)
+        self.assertIn('href="/dashboard"', response.text)
+        self.assertIn('href="/logout"', response.text)
 
     def test_calculator_render_contains_turkish_helper_text(self):
         client = TestClient(app.app)
@@ -290,20 +434,44 @@ class BirthLocationPipelineTests(unittest.TestCase):
         client = TestClient(app.app)
         response = client.get("/")
         self.assertIn('href="/calculator"', response.text)
+        self.assertIn('href="/calculator"', response.text)
         self.assertIn('href="/articles"', response.text)
-        self.assertIn("Exact birth chart reading", response.text)
-        self.assertNotIn("Insights &amp; Articles", response.text)
-        self.assertNotIn("Parent-Child Guidance Report", response.text)
-        self.assertNotIn("Unlock Your Full Child Report", response.text)
+        self.assertIn('href="/reports"', response.text)
+        self.assertIn('href="/personal-consultation"', response.text)
+        self.assertIn("A premium Vedic astrology experience designed to bring precision", response.text)
+        self.assertIn('viewBox="0 0 160 110"', response.text)
+        self.assertIn("Personal Consultation", response.text)
 
     def test_homepage_contains_core_themes_and_focus_preview(self):
         client = TestClient(app.app)
         response = client.get("/")
         self.assertIn("Understand Your Core Patterns", response.text)
-        self.assertIn("What to Focus on Now", response.text)
+        self.assertIn("Choose Your Report", response.text)
+        self.assertIn("Selected Articles", response.text)
+        self.assertIn("60-Minute 1:1 Astrology Consultation", response.text)
         self.assertIn("Growth through strategic restraint", response.text)
-        self.assertIn("Prioritize deliberate career positioning", response.text)
-        self.assertNotIn("Choose the reading that matches your question", response.text)
+        self.assertIn("A premium 60-minute session for people who want structured clarity", response.text)
+        self.assertIn("Choose the clearest lens", response.text)
+        self.assertIn("60-Minute 1:1 Astrology Consultation", response.text)
+
+    def test_homepage_links_to_calculator_instead_of_embedding_full_form(self):
+        client = TestClient(app.app)
+        response = client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('href="/calculator"', response.text)
+        self.assertNotIn('action="/calculate"', response.text)
+        self.assertNotIn('id="birthplace-suggestions"', response.text)
+        self.assertNotIn('data-testid="gender-select"', response.text)
+        self.assertNotIn("birthplaceSuggestionSelected", response.text)
+        self.assertNotIn("autocomplete_submit_warning", response.text)
+
+    def test_homepage_hero_uses_inline_mark_and_removes_raster_hero_logo_block(self):
+        template = Path("C:\\Users\\uolca\\Documents\\Chatgpt Codex\\astro-yuzu\\templates\\index.html").read_text(encoding="utf-8")
+        self.assertIn('class="hero-brandrow hero-animate hero-animate--1"', template)
+        self.assertIn('viewBox="0 0 160 110"', template)
+        self.assertNotIn('class="hero-brand"><img src="/static/focus-logo.png"', template)
+        self.assertIn('heroFadeUp', template)
+        self.assertIn('class="hero-side hero-animate hero-animate--5"', template)
 
     def test_calculator_route_renders_successfully(self):
         client = TestClient(app.app)
@@ -313,11 +481,46 @@ class BirthLocationPipelineTests(unittest.TestCase):
         self.assertIn("birthplace-suggestions", response.text)
         self.assertIn("gender-select", response.text)
 
+    def test_about_route_renders_successfully(self):
+        client = TestClient(app.app)
+        response = client.get("/about")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Personal guidance, not generic astrology output", response.text)
+        self.assertIn("A calmer way to read your chart", response.text)
+        self.assertIn("The reading is built to be revisited, not just skimmed once.", response.text)
+        self.assertIn("A modern reading interface built on a traditional system.", response.text)
+        self.assertIn("Different entry points, one coherent reading experience.", response.text)
+        self.assertIn("The chart is not used to dramatize life, but to understand its pattern.", response.text)
+
+    def test_personal_consultation_route_renders_successfully(self):
+        client = TestClient(app.app)
+        response = client.get("/personal-consultation")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Kişisel Danışmanlık", response.text)
+        self.assertIn("Zamanlamanı anla. Kararlarını daha net ver.", response.text)
+        self.assertIn("Başlangıç Analizi", response.text)
+        self.assertIn("Derin Danışmanlık", response.text)
+        self.assertIn("Danışmanlık Al", response.text)
+        self.assertIn('href="/calculator"', response.text)
+        self.assertIn('href="/personal-consultation/book"', response.text)
+        self.assertNotIn("Unlock Your Full Reading", response.text)
+        self.assertNotIn("Schedule a Session", response.text)
+        self.assertIn('<a class="btn btn-primary" href="/personal-consultation/book">', response.text)
+
+    def test_personal_consultation_booking_route_renders_calendly_ready_flow(self):
+        client = TestClient(app.app)
+        response = client.get("/personal-consultation/book", follow_redirects=False)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Uygun zamanı seçerek", response.text)
+        self.assertIn("Calendly", response.text)
+        self.assertIn("24 saat önce ücretsiz olarak iptal edilebilir veya yeniden planlanabilir", response.text)
+
     def test_articles_route_renders_successfully(self):
         client = TestClient(app.app)
         response = client.get("/articles")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Insights &amp; Articles", response.text)
+        self.assertIn("Selected Articles", response.text)
+        self.assertIn("Jupiter Transit: Jupiter Says", response.text)
 
     def test_ambiguous_or_failed_geocoding_returns_user_facing_validation_failure(self):
         client = TestClient(app.app)
@@ -335,6 +538,14 @@ class BirthLocationPipelineTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 400)
         self.assertIn("Dogum yeriniz fazla genel veya belirsiz", response.text)
+
+    def test_free_premium_calculator_request_downgrades_to_preview_not_parent_child(self):
+        report_type, notice = app.resolve_report_type_for_user(None, "premium")
+        self.assertEqual(report_type, "preview")
+        self.assertIn("Preview", notice)
+
+        explicit_parent_child, _ = app.resolve_report_type_for_user(None, "parent_child")
+        self.assertEqual(explicit_parent_child, "parent_child")
 
     def test_legacy_record_with_place_string_only_uses_fallback_resolution(self):
         with patch.object(app, "_build_birth_context", return_value={

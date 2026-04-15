@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="tr">
+<body style="margin:0; padding:0; background:#0e182c; color:#f8f3e6; font-family:Georgia, 'Times New Roman', serif;">
+    <div style="max-width:720px; margin:0 auto; padding:32px;">
+        <p style="color:#dfc070; letter-spacing:.12em; text-transform:uppercase; font-size:12px;">Yeni rapor talebi</p>
+        <h1 style="font-weight:400; margin:0 0 18px;">{{ product.title }}</h1>
+
+        <div style="padding:18px; border:1px solid rgba(223,192,112,.22); border-radius:18px; background:rgba(255,255,255,.04);">
+            <p><strong>Müşteri:</strong> {{ order.full_name }}</p>
+            <p><strong>E-posta:</strong> {{ order.email }}</p>
+            <p><strong>Rapor türü:</strong> {{ order.report_type }} / {{ product.title }}</p>
+            <p><strong>Doğum bilgileri:</strong> {{ order.birth_date }} · {{ order.birth_time }} · {{ order.birth_city }}</p>
+            <p><strong>Not:</strong> {{ order.optional_note or "-" }}</p>
+            <p><strong>Gönderim zamanı:</strong> {{ order.submitted_at }}</p>
+            <p><strong>Taslak durumu:</strong> {{ draft_status }}</p>
+        </div>
+
+        <h2 style="font-weight:400; margin:28px 0 12px;">AI destekli taslak</h2>
+        <div style="white-space:pre-wrap; line-height:1.7; color:#eee2bf;">{{ draft_text }}</div>
+
+        <p style="margin-top:28px; color:#b8ad96; line-height:1.6;">
+            Bu taslak yalnızca yönetici incelemesi içindir. Müşteriye otomatik gönderilmez.
+        </p>
+    </div>
+</body>
+</html>

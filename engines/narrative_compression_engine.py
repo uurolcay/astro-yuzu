@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from collections import defaultdict
 from datetime import date, datetime
 from typing import Any
@@ -138,6 +139,108 @@ NARRATIVE_ARCHETYPES = {
     },
 }
 
+NARRATIVE_TYPE_LABELS_TR = {
+    "career_transition": "kariyer geçişi",
+    "relationship_transition": "ilişki geçişi",
+    "financial_restructuring": "finansal yeniden yapılanma",
+    "identity_reinvention": "kimlik yenilenmesi",
+    "emotional_healing": "duygusal iyileşme",
+    "responsibility_cycle": "sorumluluk döngüsü",
+    "growth_opportunity": "büyüme fırsatı",
+    "life_redirection": "yaşam yönünün yeniden belirlenmesi",
+    "inner_transformation": "içsel dönüşüm",
+    "stability_building": "istikrar inşası",
+    "release_and_closure": "bırakma ve kapanış",
+    "expansion_period": "genişleme dönemi",
+    "pressure_test_phase": "baskı ve sınav dönemi",
+}
+
+NARRATIVE_TEXT_TR = {
+    "A period of professional restructuring, increased responsibility, and strategic redirection.": "Profesyonel yeniden yapılanma, artan sorumluluk ve stratejik yön değişimi öne çıkıyor.",
+    "identity maturation through work and responsibility": "iş ve sorumluluk üzerinden kimliğin olgunlaşması",
+    "career restructuring": "kariyerde yeniden yapılanma",
+    "long term planning": "uzun vadeli planlama",
+    "burnout risk": "tükenme riski",
+    "high stability potential": "güçlü istikrar potansiyeli",
+    "Relationship patterns are shifting, requiring honesty, emotional processing, and relational clarity.": "İlişki örüntüleri değişiyor; dürüstlük, duygusal işlemleme ve ilişkisel netlik ihtiyacı artıyor.",
+    "relational re-patterning": "ilişkisel örüntülerin yeniden kurulması",
+    "relationship transition": "ilişki geçişi",
+    "clear communication": "net iletişim",
+    "emotional reactivity": "duygusal tepkisellik",
+    "deeper intimacy potential": "daha derin yakınlık potansiyeli",
+    "Financial priorities are reorganizing, pushing stronger structure, realism, and resource management.": "Finansal öncelikler yeniden düzenleniyor; daha güçlü yapı, gerçekçilik ve kaynak yönetimi ihtiyacı belirginleşiyor.",
+    "security recalibration": "güvenlik algısının yeniden ayarlanması",
+    "financial restructuring": "finansal yeniden yapılanma",
+    "budget discipline": "bütçe disiplini",
+    "scarcity stress": "yetersizlik stresi",
+    "stronger foundation potential": "daha güçlü temel potansiyeli",
+    "Identity is being reshaped, pushing reinvention, autonomy, and a new direction.": "Kimlik yeniden şekilleniyor; yenilenme, özerklik ve yeni bir yön ihtiyacı öne çıkıyor.",
+    "deep self-redefinition": "derin öz tanım yenilenmesi",
+    "identity reinvention": "kimlik yenilenmesi",
+    "aligned choices": "uyumlu seçimler",
+    "fragmented direction": "dağınık yön",
+    "high authenticity potential": "yüksek özgünlük potansiyeli",
+    "Emotional material is surfacing for release, reflection, and healing integration.": "Duygusal malzeme bırakma, düşünme ve iyileştirici bütünleşme için yüzeye çıkıyor.",
+    "emotional processing": "duygusal işlemleme",
+    "healing cycle": "iyileşme döngüsü",
+    "rest and reflection": "dinlenme ve iç gözlem",
+    "emotional overwhelm": "duygusal taşma",
+    "deep healing potential": "derin iyileşme potansiyeli",
+    "A responsibility-heavy chapter is asking for discipline, patience, and durable commitments.": "Sorumluluğu yüksek bir dönem; disiplin, sabır ve kalıcı taahhütler istiyor.",
+    "maturity under pressure": "baskı altında olgunlaşma",
+    "responsibility cycle": "sorumluluk döngüsü",
+    "structured effort": "yapılı emek",
+    "fatigue accumulation": "yorgunluk birikimi",
+    "long-term authority building": "uzun vadeli yetkinlik inşası",
+    "Expansion signals are active, opening opportunities for progress, visibility, and growth.": "Genişleme sinyalleri aktif; ilerleme, görünürlük ve büyüme için fırsatlar açılıyor.",
+    "confidence expansion": "özgüven genişlemesi",
+    "opportunity phase": "fırsat evresi",
+    "timely action": "zamanında hareket",
+    "overextension": "aşırı yayılma",
+    "high opportunity yield": "yüksek fırsat verimi",
+    "Life direction is reorienting, asking for closure, decisions, and a revised path forward.": "Yaşam yönü yeniden hizalanıyor; kapanış, karar ve revize edilmiş bir yol ihtiyacı doğuyor.",
+    "path correction": "yol düzeltmesi",
+    "life redirection": "yaşam yönünün değişmesi",
+    "decision clarity": "karar netliği",
+    "indecision drag": "kararsızlığın yavaşlatması",
+    "clearer trajectory potential": "daha net yön potansiyeli",
+    "A deep inner transformation is underway, shifting values, meaning, and psychological orientation.": "Derin bir içsel dönüşüm işliyor; değerler, anlam ve psikolojik yönelim değişiyor.",
+    "inner reorganization": "içsel yeniden düzenlenme",
+    "inner transformation": "içsel dönüşüm",
+    "inner alignment": "içsel hizalanma",
+    "dissolution confusion": "çözülme kaynaklı kafa karışıklığı",
+    "profound renewal potential": "güçlü yenilenme potansiyeli",
+    "This period emphasizes building stability through consistent choices and practical structure.": "Bu dönem, istikrarı tutarlı seçimler ve pratik yapı üzerinden kurmayı vurguluyor.",
+    "foundation reinforcement": "temel güçlendirme",
+    "stability building": "istikrar inşası",
+    "steady consistency": "istikrarlı süreklilik",
+    "rigidity": "katılık",
+    "durable security potential": "kalıcı güvenlik potansiyeli",
+    "Release and closure themes are active, helping old cycles complete and make room for change.": "Bırakma ve kapanış temaları aktif; eski döngülerin tamamlanıp değişime alan açmasına yardım ediyor.",
+    "completion and release": "tamamlanma ve bırakma",
+    "ending cycle": "kapanış döngüsü",
+    "conscious letting go": "bilinçli bırakma",
+    "clinging to expired patterns": "süresi dolmuş örüntülere tutunma",
+    "renewal through completion": "tamamlanma yoluyla yenilenme",
+    "An expansion period is opening wider possibilities through growth, learning, and visibility.": "Bir genişleme dönemi; büyüme, öğrenme ve görünürlük üzerinden daha geniş olasılıklar açıyor.",
+    "horizon broadening": "ufkun genişlemesi",
+    "expansion period": "genişleme dönemi",
+    "strategic openness": "stratejik açıklık",
+    "scattered priorities": "dağınık öncelikler",
+    "broad advancement potential": "geniş ilerleme potansiyeli",
+    "A pressure test phase is exposing weak points and demanding resilience, strategy, and restraint.": "Bir baskı ve sınav dönemi zayıf noktaları görünür kılıyor; dayanıklılık, strateji ve ölçülülük istiyor.",
+    "stress testing of structures": "yapıların baskı altında sınanması",
+    "high-pressure phase": "yüksek baskı evresi",
+    "prioritization and resilience": "önceliklendirme ve dayanıklılık",
+    "conflict escalation": "çatışmanın yükselmesi",
+    "stronger systems after correction": "düzeltme sonrası daha güçlü sistemler",
+    "No dominant life storyline is currently active.": "Şu anda baskın bir yaşam hikayesi aktif görünmüyor.",
+    "defining life period": "belirleyici yaşam dönemi",
+    "major life chapter": "önemli yaşam bölümü",
+    "active story": "aktif hikaye",
+    "background story": "arka plan hikayesi",
+}
+
 
 def compress_ai_narratives(
     scored_events: list[dict[str, Any]],
@@ -217,6 +320,37 @@ def compress_ai_narratives(
         "life_period_summary": _life_period_summary(primary_narratives),
         "interpretation_strategy": "story_based" if merged_narratives else "mixed",
     }
+
+
+def localize_narrative_text(value: Any, language: str = "tr") -> str:
+    text = str(value or "")
+    if language != "tr" or not text:
+        return text
+    return NARRATIVE_TEXT_TR.get(text, text)
+
+
+def localize_narrative_analysis(analysis: dict[str, Any] | None, language: str = "tr") -> dict[str, Any]:
+    if language != "tr" or not isinstance(analysis, dict):
+        return analysis or {}
+
+    localized = copy.deepcopy(analysis)
+    for bucket in ("primary_narratives", "secondary_narratives", "emerging_narratives"):
+        for narrative in localized.get(bucket) or []:
+            if not isinstance(narrative, dict):
+                continue
+            for field in (
+                "narrative_summary",
+                "narrative_psychological_meaning",
+                "narrative_external_manifestation",
+                "recommended_focus",
+                "risk_factor",
+                "growth_potential",
+                "intensity",
+            ):
+                if field in narrative:
+                    narrative[field] = localize_narrative_text(narrative.get(field), language)
+    localized["life_period_summary"] = _life_period_summary(localized.get("primary_narratives") or [], language=language)
+    return localized
 
 
 def _theme_lookup(psychological_themes: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -367,12 +501,18 @@ def _story_weights(narratives: list[dict[str, Any]]) -> dict[str, int]:
     }
 
 
-def _life_period_summary(primary_narratives: list[dict[str, Any]]) -> str:
+def _life_period_summary(primary_narratives: list[dict[str, Any]], language: str = "en") -> str:
     if not primary_narratives:
-        return "No dominant life storyline is currently active."
+        return "Şu anda baskın bir yaşam hikayesi aktif görünmüyor." if language == "tr" else "No dominant life storyline is currently active."
     fragments = []
     for narrative in primary_narratives[:2]:
-        fragments.append(narrative["narrative_type"].replace("_", " "))
+        narrative_type = narrative["narrative_type"]
+        if language == "tr":
+            fragments.append(NARRATIVE_TYPE_LABELS_TR.get(narrative_type, narrative_type.replace("_", " ")))
+        else:
+            fragments.append(narrative_type.replace("_", " "))
+    if language == "tr":
+        return _truncate_words(f"Bu dönem {' ve '.join(fragments)} etrafında yoğunlaşıyor.", 40)
     summary = f"This period centers on {' and '.join(fragments)}."
     return _truncate_words(summary, 40)
 

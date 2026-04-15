@@ -1,53 +1,164 @@
 {% extends "base.html" %}
 
-{% block title %}Jyotish | Dashboard{% endblock %}
+{% block title %}{{ t("dashboard.page_title") }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    .dashboard-shell { display:grid; gap:clamp(30px, 5vw, 48px); }
+    .dashboard-hero,
+    .dashboard-next,
+    .dashboard-reports {
+        display:grid;
+        gap:20px;
+        padding: clamp(28px, 4vw, 38px);
+        border-radius: var(--radius);
+        border: 1px solid rgba(223,192,112,.10);
+        box-shadow: 0 14px 34px rgba(0,0,0,.12);
+    }
+    .dashboard-hero {
+        background:
+            radial-gradient(circle at 84% 18%, rgba(223,192,112,.14), transparent 26%),
+            linear-gradient(180deg, rgba(31,50,84,.34), rgba(15,26,46,.22));
+    }
+    .dashboard-next {
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+    }
+    .dashboard-reports {
+        background: rgba(20,34,58,.18);
+        box-shadow: 0 10px 24px rgba(0,0,0,.08);
+    }
+    .dashboard-hero-layout,
+    .dashboard-next-layout { display:grid; grid-template-columns:minmax(0, 1.06fr) minmax(280px, .94fr); gap:22px; align-items:start; }
+    .dashboard-intro,
+    .dashboard-support,
+    .dashboard-next-copy,
+    .dashboard-next-actions { display:grid; gap:16px; }
+    .dashboard-support {
+        padding: clamp(20px, 3vw, 26px);
+        border-radius: calc(var(--radius) - 6px);
+        background: rgba(255,255,255,.018);
+    }
+    .dashboard-next-actions {
+        padding:0;
+        background:transparent;
+    }
+    .dashboard-metrics { margin-top:6px; }
+    .dashboard-actions { display:flex; gap:14px; flex-wrap:wrap; }
+    .dashboard-support-title {
+        margin:0;
+        font-family:"Cormorant Garamond", serif;
+        font-size:clamp(2rem, 3vw, 2.6rem);
+        font-weight:300;
+        line-height:1.08;
+        color:var(--text);
+    }
+    .dashboard-recent-grid { display:grid; gap:16px; grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    .dashboard-report-card {
+        display:grid;
+        gap:10px;
+        padding:22px;
+        border-radius: calc(var(--radius) - 6px);
+        background: rgba(255,255,255,.012);
+    }
+    @media (max-width: 1020px) {
+        .dashboard-hero-layout,
+        .dashboard-next-layout,
+        .dashboard-recent-grid { grid-template-columns:1fr; }
+    }
+    @media (max-width: 760px) {
+        .dashboard-hero,
+        .dashboard-reports { padding: clamp(24px, 7vw, 34px); }
+        .dashboard-next { padding:0; }
+        .dashboard-actions .btn {
+            width:100%;
+            justify-content:center;
+        }
+        .dashboard-next-actions { align-items:stretch; }
+        .dashboard-next-actions .chip {
+            justify-content:center;
+            text-align:center;
+        }
+    }
+</style>
+{% endblock %}
 
 {% block content %}
 <section class="page-section">
     <div class="container">
-        <div class="glass-card card-pad">
-            <h1 class="hero-title" style="font-size:2.6rem;">Dashboard</h1>
-            <p class="hero-text">{{ dashboard_user.name or dashboard_user.email }} • {{ plan_features.label }} Plan</p>
-            <div class="grid-3" style="margin-top:24px;">
-                <div class="metric-card">
-                    <div class="metric-label">Plan</div>
-                    <div class="metric-value">{{ plan_features.label }}</div>
+        <div class="dashboard-shell">
+            <section class="dashboard-hero">
+                <div class="dashboard-hero-layout">
+                    <div class="dashboard-intro">
+                        <div class="chip-row">
+                            <span class="chip">Focus Astrology</span>
+                            <span class="chip">{{ plan_features.label }} Plan</span>
+                        </div>
+                        <h1 class="hero-title" style="font-size:2.8rem;">{{ t("dashboard.title") }}</h1>
+                        <p class="hero-text">{{ t("dashboard.intro") }}</p>
+                        <p class="muted" style="margin:0;">{{ dashboard_user.name or dashboard_user.email }} • {{ dashboard_user.email }}</p>
+                        <div class="grid-3 dashboard-metrics">
+                            <div class="metric-card">
+                                <div class="metric-label">{{ t("dashboard.plan_label") }}</div>
+                                <div class="metric-value">{{ plan_features.label }}</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">{{ t("dashboard.profiles_label") }}</div>
+                                <div class="metric-value">{{ profile_count }}</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">{{ t("dashboard.reports_label") }}</div>
+                                <div class="metric-value">{{ report_count }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <aside class="dashboard-support">
+                        <h2 class="dashboard-support-title">{{ t("dashboard.next_title") }}</h2>
+                        <p class="muted" style="margin:0;">{{ t("dashboard.next_text") }}</p>
+                        <div class="dashboard-actions">
+                            <a class="btn btn-primary" href="/calculator">{{ t("dashboard.new_report_cta") }}</a>
+                            <a class="btn btn-secondary" href="/reports">{{ t("dashboard.history_cta") }}</a>
+                        </div>
+                    </aside>
                 </div>
-                <div class="metric-card">
-                    <div class="metric-label">Kayitli Profiller</div>
-                    <div class="metric-value">{{ profile_count }}</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Kayitli Raporlar</div>
-                    <div class="metric-value">{{ report_count }}</div>
-                </div>
-            </div>
-            <div class="chip-row" style="margin-top:18px;">
-                <a class="chip" href="/">Yeni Rapor Olustur</a>
-                <a class="chip" href="/reports">Rapor Gecmisi</a>
-                <a class="chip" href="/account">Plan ve Hesap</a>
-            </div>
-        </div>
-    </div>
-</section>
+            </section>
 
-<section class="page-section">
-    <div class="container">
-        <div class="glass-card card-pad">
-            <h2 class="section-title">Son Raporlar</h2>
-            {% if recent_reports %}
-            <div class="grid-2" style="margin-top:20px;">
-                {% for report in recent_reports %}
-                <div class="metric-card">
-                    <div class="metric-label">{{ report.report_type|title }} • {{ report.created_at or '-' }}</div>
-                    <div class="metric-value">{{ report.title or "Vedic Report" }}</div>
-                    <p class="muted">{{ report.birth_date }} • {{ report.birth_city }}</p>
+            <section class="dashboard-next">
+                <div class="dashboard-next-layout">
+                    <div class="dashboard-next-copy">
+                        <div class="section-header" style="margin-bottom:0; padding-bottom:0; border-bottom:none;">
+                            <div class="section-kicker">{{ t("dashboard.reports_panel_title") }}</div>
+                            <h2 class="section-title">{{ t("dashboard.recent_reports_title") }}</h2>
+                            <p class="section-text">{{ t("dashboard.reports_panel_text") }}</p>
+                        </div>
+                    </div>
+                    <div class="dashboard-next-actions">
+                        <a class="chip" href="/calculator">{{ t("dashboard.new_report_cta") }}</a>
+                        <a class="chip" href="/reports">{{ t("dashboard.history_cta") }}</a>
+                        <a class="chip" href="/account">{{ t("dashboard.account_cta") }}</a>
+                    </div>
                 </div>
-                {% endfor %}
-            </div>
-            {% else %}
-            <p class="muted" style="margin-top:18px;">Henuz kayitli raporun yok. Bir rapor olusturdugunda burada gorunecek.</p>
-            {% endif %}
+            </section>
+
+            <section class="dashboard-reports">
+                <h2 class="section-title">{{ t("dashboard.recent_reports_title") }}</h2>
+                {% if recent_reports %}
+                <div class="dashboard-recent-grid">
+                    {% for report in recent_reports %}
+                    <div class="dashboard-report-card">
+                        <div class="metric-label">{{ report.report_type|title }} • {{ report.created_at or '-' }}</div>
+                        <div class="metric-value">{{ report.title or t("dashboard.fallback_report_title") }}</div>
+                        <p class="muted" style="margin:0;">{{ report.birth_date }} • {{ report.birth_city }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="muted" style="margin-top:4px;">{{ t("dashboard.recent_empty") }}</p>
+                {% endif %}
+            </section>
         </div>
     </div>
 </section>

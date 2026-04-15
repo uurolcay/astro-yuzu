@@ -1,0 +1,7 @@
+Danışmanlık ödemeniz alındı
+
+{{ product.title }}
+
+60 dakikalık birebir danışmanlık ödemeniz doğrulandı. Randevu seçiminizle birlikte görüşme hazırlık süreci başlatılır.
+
+Randevular, planlanan saatten en az 24 saat önce ücretsiz olarak iptal edilebilir veya yeniden planlanabilir.

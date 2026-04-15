@@ -1,33 +1,146 @@
 {% extends "base.html" %}
 
-{% block title %}Jyotish | Hesabim{% endblock %}
+{% block title %}{{ t("account.page_title") }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    .account-shell { display:grid; gap:clamp(30px, 5vw, 48px); }
+    .account-hero,
+    .account-sections {
+        display:grid;
+        gap:22px;
+        padding: clamp(28px, 4vw, 38px);
+        border-radius: var(--radius);
+        border: 1px solid rgba(223,192,112,.10);
+        box-shadow: 0 14px 34px rgba(0,0,0,.12);
+    }
+    .account-hero {
+        background:
+            radial-gradient(circle at 84% 18%, rgba(223,192,112,.14), transparent 26%),
+            linear-gradient(180deg, rgba(31,50,84,.34), rgba(15,26,46,.22));
+    }
+    .account-sections {
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+    }
+    .account-hero-layout,
+    .account-grid { display:grid; grid-template-columns:minmax(0, 1.04fr) minmax(280px, .96fr); gap:22px; align-items:start; }
+    .account-intro,
+    .account-summary,
+    .account-panel {
+        display:grid;
+        gap:16px;
+    }
+    .account-summary {
+        padding: clamp(16px, 2.5vw, 22px) 0 0 18px;
+        border-left: 1px solid rgba(223,192,112,.14);
+        background: transparent;
+    }
+    .account-panel {
+        padding: clamp(20px, 3vw, 26px);
+        border-radius: calc(var(--radius) - 6px);
+        background: rgba(255,255,255,.018);
+    }
+    .account-panel:first-child {
+        padding-left:18px;
+        border-left:1px solid rgba(223,192,112,.12);
+        border-radius:0;
+        background:transparent;
+    }
+    .account-panel:first-child .metric-card {
+        padding:0;
+        border:0;
+        background:transparent;
+        box-shadow:none;
+    }
+    .account-panel-title {
+        margin:0;
+        font-family:"Cormorant Garamond", serif;
+        font-size:clamp(2rem, 3vw, 2.6rem);
+        font-weight:300;
+        line-height:1.08;
+        color:var(--text);
+    }
+    .account-plan-form { display:grid; gap:16px; max-width:360px; }
+    .account-plan-form label { display:block; color:var(--text); font-weight:600; }
+    @media (max-width: 980px) {
+        .account-hero-layout,
+        .account-grid { grid-template-columns:1fr; }
+    }
+    @media (max-width: 760px) {
+        .account-hero { padding: clamp(24px, 7vw, 34px); }
+        .account-sections { padding:0; }
+        .account-plan-form { max-width:none; }
+        .account-plan-form .btn {
+            width:100%;
+            justify-content:center;
+        }
+    }
+</style>
+{% endblock %}
 
 {% block content %}
 <section class="page-section">
     <div class="container">
-        <div class="glass-card card-pad">
-            <h1 class="hero-title" style="font-size:2.5rem;">Hesabim</h1>
-            <p class="hero-text">{{ dashboard_user.email }} • {{ plan_features.label }} Plan</p>
-            <div class="grid-2" style="margin-top:24px;">
-                <div class="metric-card">
-                    <div class="metric-label">Kullanici</div>
-                    <div class="metric-value">{{ dashboard_user.name or dashboard_user.email }}</div>
+        <div class="account-shell">
+            <section class="account-hero">
+                <div class="account-hero-layout">
+                    <div class="account-intro">
+                        <div class="chip-row">
+                            <span class="chip">Focus Astrology</span>
+                            <span class="chip">{{ plan_features.label }} Plan</span>
+                        </div>
+                        <h1 class="hero-title" style="font-size:2.7rem;">{{ t("account.title") }}</h1>
+                        <p class="hero-text">{{ t("account.intro") }}</p>
+                    </div>
+                    <aside class="account-summary">
+                        <div class="section-kicker">{{ t("account.identity_title") }}</div>
+                        <h2 class="account-panel-title">{{ dashboard_user.name or dashboard_user.email }}</h2>
+                        <p class="muted" style="margin:0;">{{ dashboard_user.email }}</p>
+                        <p class="muted" style="margin:0;">{{ t("account.identity_text") }}</p>
+                    </aside>
                 </div>
-                <div class="metric-card">
-                    <div class="metric-label">Plan Ozellikleri</div>
-                    <div class="metric-value">{{ ", ".join(plan_features.allowed_report_types) }}</div>
+            </section>
+
+            <section class="account-sections">
+                <div class="account-grid">
+                    <article class="account-panel">
+                        <div class="section-kicker">{{ t("account.identity_title") }}</div>
+                        <h2 class="account-panel-title">{{ t("account.identity_title") }}</h2>
+                        <p class="muted" style="margin:0;">{{ t("account.identity_text") }}</p>
+                        <div class="grid-2" style="margin-top:6px;">
+                            <div class="metric-card">
+                                <div class="metric-label">{{ t("account.user_label") }}</div>
+                                <div class="metric-value">{{ dashboard_user.name or dashboard_user.email }}</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">{{ t("account.plan_features_label") }}</div>
+                                <div class="metric-value">{{ ", ".join(plan_features.allowed_report_types) }}</div>
+                            </div>
+                        </div>
+                    </article>
+                    <article class="account-panel">
+                        <div class="section-kicker">{{ t("account.plan_title") }}</div>
+                        <h2 class="account-panel-title">{{ t("account.plan_title") }}</h2>
+                        <p class="muted" style="margin:0;">{{ t("account.plan_text") }}</p>
+                        <form action="/account/plan" method="post" class="account-plan-form">
+                            <div>
+                                <label for="plan_code">{{ t("account.plan_change_label") }}</label>
+                                <select id="plan_code" name="plan_code" style="width:100%; margin-top:8px;">
+                                    <option value="free">Free</option>
+                                    <option value="basic">Basic</option>
+                                    <option value="premium">Full</option>
+                                    <option value="elite">Elite</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-primary" type="submit">{{ t("account.plan_update_cta") }}</button>
+                        </form>
+                    </article>
                 </div>
-            </div>
-            <form action="/account/plan" method="post" style="display:grid; gap:16px; max-width:360px; margin-top:24px;">
-                <label for="plan_code">Plan Degistir (yerel test)</label>
-                <select id="plan_code" name="plan_code">
-                    <option value="free">Free</option>
-                    <option value="basic">Basic</option>
-                    <option value="premium">Full</option>
-                    <option value="elite">Elite</option>
-                </select>
-                <button class="btn btn-secondary" type="submit">Plani Guncelle</button>
-            </form>
+            </section>
         </div>
     </div>
 </section>

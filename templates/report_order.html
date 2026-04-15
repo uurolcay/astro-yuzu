@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}{{ product.title }} Talebi{% endblock %}
+
+{% block extra_head %}
+<style>
+    .order-shell { display:grid; gap:clamp(28px, 5vw, 46px); }
+    .order-hero,
+    .order-form-panel {
+        border-radius:var(--radius);
+        border:1px solid rgba(223,192,112,.14);
+        background:
+            radial-gradient(circle at 82% 18%, rgba(223,192,112,.11), transparent 28%),
+            linear-gradient(180deg, rgba(32,51,84,.50), rgba(14,24,44,.30));
+        box-shadow:0 18px 42px rgba(0,0,0,.16);
+    }
+    .order-hero {
+        display:grid;
+        grid-template-columns:minmax(0, 1.08fr) minmax(280px, .92fr);
+        gap:22px;
+        align-items:end;
+        padding:clamp(30px, 5vw, 50px);
+    }
+    .order-copy,
+    .order-summary,
+    .order-form-panel,
+    .order-form,
+    .order-trust { display:grid; gap:16px; }
+    .order-summary {
+        padding:clamp(20px, 3vw, 28px);
+        border-radius:calc(var(--radius) - 6px);
+        background:rgba(255,255,255,.024);
+    }
+    .order-form-panel { padding:clamp(24px, 4vw, 36px); }
+    .order-form {
+        grid-template-columns:repeat(2, minmax(0, 1fr));
+        gap:18px;
+    }
+    .order-field-full { grid-column:1 / -1; }
+    .order-field label {
+        display:block;
+        margin-bottom:10px;
+        color:rgba(248,245,240,.82);
+        font-weight:600;
+        font-size:.92rem;
+    }
+    .order-field input,
+    .order-field textarea {
+        width:100%;
+        min-height:54px;
+        padding:0 16px;
+        border:1px solid rgba(223,192,112,.18);
+        border-radius:0;
+        background:rgba(15,30,52,.34);
+        color:var(--text);
+        font:inherit;
+    }
+    .order-field textarea {
+        min-height:130px;
+        padding:16px;
+        resize:vertical;
+    }
+    .order-field input:focus,
+    .order-field textarea:focus {
+        outline:none;
+        border-color:rgba(240,192,96,.62);
+        box-shadow:0 0 0 3px rgba(201,168,76,.16);
+        background-color:rgba(255,255,255,.05);
+    }
+    .order-error {
+        padding:14px 16px;
+        border-radius:18px;
+        border:1px solid rgba(246,147,147,.28);
+        background:rgba(246,147,147,.08);
+        color:#ffd7d7;
+    }
+    .order-trust {
+        grid-template-columns:repeat(3, minmax(0, 1fr));
+        color:var(--text-soft);
+        line-height:1.68;
+    }
+    .order-trust div {
+        padding-left:16px;
+        border-left:1px solid rgba(223,192,112,.14);
+    }
+    .order-trust strong {
+        display:block;
+        margin-bottom:6px;
+        color:var(--gold-light);
+    }
+    .order-actions { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+    @media (max-width: 960px) {
+        .order-hero,
+        .order-form,
+        .order-trust { grid-template-columns:1fr; }
+        .order-field-full { grid-column:auto; }
+    }
+    @media (max-width: 760px) {
+        .order-hero,
+        .order-form-panel { padding:clamp(24px, 7vw, 34px); }
+        .order-actions,
+        .order-actions .btn { width:100%; justify-content:center; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="order-shell">
+            <section class="order-hero">
+                <div class="order-copy">
+                    <div class="chip-row">
+                        <span class="chip">Rapor talebi</span>
+                        <span class="chip">{{ product.price }}</span>
+                    </div>
+                    <div class="section-kicker">{{ product.label }}</div>
+                    <h1 class="hero-title">{{ product.title }}</h1>
+                    <p class="hero-text">{{ product.summary }}</p>
+                    {% if product.included_products %}
+                    <p class="muted">Bu paket tek siparişte birden fazla analiz katmanını bir araya getirir; teslim yine insan değerlendirmesi sonrası e-posta ile yapılır.</p>
+                    {% endif %}
+                </div>
+                <aside class="order-summary">
+                    <h2 class="section-title" style="font-size:clamp(1.9rem, 3vw, 2.5rem);">Bu form neyi başlatır?</h2>
+                    <p class="muted">
+                        Bilgilerinizle AI destekli bir taslak hazırlanır ve inceleme için yönetici e-postasına iletilir. Rapor müşteriye otomatik gönderilmez; insan değerlendirmesi sonrası en geç 7 gün içinde e-posta ile teslim edilir.
+                    </p>
+                </aside>
+            </section>
+
+            <section class="order-form-panel">
+                <div>
+                    <div class="section-kicker">Rapor bilgileri</div>
+                    <h2 class="section-title">Analizi hazırlayabilmemiz için doğum bilgilerinizi paylaşın.</h2>
+                    <p class="section-text">Saat, tarih ve yer bilgisi raporun kalitesi için önemlidir. Emin olmadığınız bir detay varsa not alanında belirtebilirsiniz.</p>
+                </div>
+                {% if error_message %}
+                <div class="order-error" role="alert">{{ error_message }}</div>
+                {% endif %}
+                <form class="order-form" action="{{ order_action or ('/reports/order/' ~ report_type) }}" method="post">
+                    <input type="hidden" name="selected_report_type" value="{{ report_type }}">
+                    {% if bundle_type %}
+                    <input type="hidden" name="selected_bundle_type" value="{{ bundle_type }}">
+                    {% endif %}
+                    <div class="order-field">
+                        <label for="full_name">Ad soyad</label>
+                        <input id="full_name" name="full_name" type="text" value="{{ form_data.full_name or '' }}" autocomplete="name" required>
+                    </div>
+                    <div class="order-field">
+                        <label for="email">E-posta</label>
+                        <input id="email" name="email" type="email" value="{{ form_data.email or '' }}" autocomplete="email" required>
+                    </div>
+                    <div class="order-field">
+                        <label for="birth_date">Doğum tarihi</label>
+                        <input id="birth_date" name="birth_date" type="date" value="{{ form_data.birth_date or '' }}" required>
+                    </div>
+                    <div class="order-field">
+                        <label for="birth_time">Doğum saati</label>
+                        <input id="birth_time" name="birth_time" type="time" value="{{ form_data.birth_time or '' }}" required>
+                    </div>
+                    <div class="order-field order-field-full">
+                        <label for="birth_city">Doğum yeri</label>
+                        <input id="birth_city" name="birth_city" type="text" value="{{ form_data.birth_city or '' }}" placeholder="İlçe / şehir / ülke" autocomplete="off" required>
+                    </div>
+                    <div class="order-field order-field-full">
+                        <label for="optional_note">Opsiyonel soru veya not</label>
+                        <textarea id="optional_note" name="optional_note" placeholder="Bu raporda özellikle odaklanmamızı istediğiniz konu varsa paylaşabilirsiniz.">{{ form_data.optional_note or '' }}</textarea>
+                    </div>
+                    <div class="order-field-full order-actions">
+                        <button class="btn btn-primary" type="submit">Rapor Talebini Gönder</button>
+                        <a class="btn btn-secondary" href="/reports">Raporlara Dön</a>
+                    </div>
+                </form>
+            </section>
+
+            <section class="order-trust" aria-label="Rapor teslim süreci">
+                <div>
+                    <strong>AI destekli taslak</strong>
+                    Sistem önce inceleme için bir taslak üretir.
+                </div>
+                <div>
+                    <strong>İnsan değerlendirmesi</strong>
+                    Taslak müşteriye otomatik gönderilmez; manuel gözden geçirme korunur.
+                </div>
+                <div>
+                    <strong>7 gün içinde teslim</strong>
+                    Rapor, hazırlık sürecinin ardından en geç 7 gün içinde e-posta ile teslim edilir.
+                </div>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

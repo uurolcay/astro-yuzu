@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, create_engine, inspect, text
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, create_engine, inspect, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 
@@ -106,6 +106,77 @@ class GeneratedReport(Base):
 
     user = relationship("AppUser", back_populates="reports")
     profile = relationship("UserProfile", back_populates="reports")
+
+
+class ServiceOrder(Base):
+    __tablename__ = "service_orders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    order_token = Column(String, unique=True, nullable=False, index=True)
+    public_token = Column(String, unique=True, nullable=True, index=True)
+    service_type = Column(String, nullable=False, index=True)
+    product_type = Column(String, nullable=False, index=True)
+    bundle_type = Column(String, nullable=True, index=True)
+    included_products_json = Column(Text, nullable=True)
+    bundle_price = Column(Numeric(10, 2), nullable=True)
+    status = Column(String, nullable=False, default="initiated", index=True)
+    customer_name = Column(String, nullable=True)
+    customer_email = Column(String, nullable=True, index=True)
+    birth_date = Column(String, nullable=True)
+    birth_time = Column(String, nullable=True)
+    birth_place = Column(String, nullable=True)
+    optional_note = Column(Text, nullable=True)
+    amount = Column(Numeric(10, 2), nullable=True)
+    amount_label = Column(String, nullable=True)
+    currency = Column(String, nullable=True, default="TRY")
+    provider_name = Column(String, nullable=True, index=True)
+    provider_token = Column(String, nullable=True, index=True)
+    provider_payment_id = Column(String, unique=True, nullable=True, index=True)
+    provider_transaction_id = Column(String, nullable=True, index=True)
+    provider_conversation_id = Column(String, nullable=True, index=True)
+    payment_provider = Column(String, nullable=True)
+    payment_session_id = Column(String, nullable=True, index=True)
+    payment_reference = Column(String, nullable=True, index=True)
+    payment_verified_at = Column(DateTime, nullable=True)
+    paid_at = Column(DateTime, nullable=True)
+    fraud_status = Column(String, nullable=True)
+    calendly_event_uri = Column(String, nullable=True)
+    scheduled_start = Column(DateTime, nullable=True)
+    scheduled_end = Column(DateTime, nullable=True)
+    payload_json = Column(Text, nullable=True)
+    draft_status = Column(String, nullable=True)
+    draft_sent_at = Column(DateTime, nullable=True)
+    ai_draft_text = Column(Text, nullable=True)
+    ai_draft_created_at = Column(DateTime, nullable=True)
+    ai_draft_version = Column(Integer, nullable=True, default=1)
+    internal_notes = Column(Text, nullable=True)
+    review_started_at = Column(DateTime, nullable=True)
+    ready_to_send_at = Column(DateTime, nullable=True)
+    delivered_at = Column(DateTime, nullable=True)
+    confirmed_at = Column(DateTime, nullable=True)
+    prepared_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    refund_status = Column(String, nullable=True, index=True)
+    refund_amount = Column(Numeric(10, 2), nullable=True)
+    refunded_at = Column(DateTime, nullable=True)
+    refund_reason = Column(Text, nullable=True)
+    cancellation_reason = Column(Text, nullable=True)
+    cancelled_at = Column(DateTime, nullable=True)
+    no_show_at = Column(DateTime, nullable=True)
+    reconciliation_notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class AdminActionLog(Base):
+    __tablename__ = "admin_action_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(Integer, ForeignKey("service_orders.id"), nullable=False, index=True)
+    action = Column(String, nullable=False, index=True)
+    actor = Column(String, nullable=True)
+    metadata_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
 
 class Article(Base):
@@ -296,6 +367,46 @@ def _add_missing_columns():
                 connection.execute(text("ALTER TABLE generated_reports ADD COLUMN pdf_ready BOOLEAN DEFAULT 0 NOT NULL"))
             if "delivered_at" not in table_columns["generated_reports"]:
                 connection.execute(text("ALTER TABLE generated_reports ADD COLUMN delivered_at DATETIME"))
+        if "service_orders" in table_columns:
+            service_order_columns = {
+                "public_token": "VARCHAR",
+                "amount": "NUMERIC(10, 2)",
+                "provider_name": "VARCHAR",
+                "provider_token": "VARCHAR",
+                "provider_payment_id": "VARCHAR",
+                "provider_transaction_id": "VARCHAR",
+                "bundle_type": "VARCHAR",
+                "included_products_json": "TEXT",
+                "bundle_price": "NUMERIC(10, 2)",
+                "provider_conversation_id": "VARCHAR",
+                "payment_verified_at": "DATETIME",
+                "paid_at": "DATETIME",
+                "fraud_status": "VARCHAR",
+                "calendly_event_uri": "VARCHAR",
+                "scheduled_start": "DATETIME",
+                "scheduled_end": "DATETIME",
+                "ai_draft_text": "TEXT",
+                "ai_draft_created_at": "DATETIME",
+                "ai_draft_version": "INTEGER",
+                "internal_notes": "TEXT",
+                "review_started_at": "DATETIME",
+                "ready_to_send_at": "DATETIME",
+                "delivered_at": "DATETIME",
+                "confirmed_at": "DATETIME",
+                "prepared_at": "DATETIME",
+                "completed_at": "DATETIME",
+                "refund_status": "VARCHAR",
+                "refund_amount": "NUMERIC(10, 2)",
+                "refunded_at": "DATETIME",
+                "refund_reason": "TEXT",
+                "cancellation_reason": "TEXT",
+                "cancelled_at": "DATETIME",
+                "no_show_at": "DATETIME",
+                "reconciliation_notes": "TEXT",
+            }
+            for column_name, column_type in service_order_columns.items():
+                if column_name not in table_columns["service_orders"]:
+                    connection.execute(text(f"ALTER TABLE service_orders ADD COLUMN {column_name} {column_type}"))
         if "email_captures" in table_columns:
             if "source" not in table_columns["email_captures"]:
                 connection.execute(text("ALTER TABLE email_captures ADD COLUMN source VARCHAR DEFAULT 'result_page'"))

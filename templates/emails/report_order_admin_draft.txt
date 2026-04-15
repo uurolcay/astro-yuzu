@@ -1,0 +1,16 @@
+Yeni rapor talebi
+
+Rapor: {{ product.title }}
+Rapor türü: {{ order.report_type }}
+
+Müşteri: {{ order.full_name }}
+E-posta: {{ order.email }}
+Doğum bilgileri: {{ order.birth_date }} · {{ order.birth_time }} · {{ order.birth_city }}
+Not: {{ order.optional_note or "-" }}
+Gönderim zamanı: {{ order.submitted_at }}
+Taslak durumu: {{ draft_status }}
+
+AI destekli taslak:
+{{ draft_text }}
+
+Bu taslak yalnızca yönetici incelemesi içindir. Müşteriye otomatik gönderilmez.

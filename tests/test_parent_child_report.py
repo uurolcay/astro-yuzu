@@ -133,10 +133,22 @@ class ParentChildReportTests(unittest.TestCase):
         with patch.object(app, "get_request_user", return_value=user):
             response = self.client.get("/reports")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Parent-Child Guidance Report", response.text)
+        self.assertIn("Ebeveyn-Çocuk", response.text)
         self.assertIn("/reports/parent-child", response.text)
-        self.assertIn("Guidance, not labeling.", response.text)
-        self.assertIn("Unlock Your Full Child Report", response.text)
+        self.assertIn("Etiketlemek yerine anlamayı güçlendirir", response.text)
+        self.assertIn("Bu Raporu Al", response.text)
+        self.assertIn("Danışmanlıkla Derinleştir", response.text)
+
+    def test_reports_page_shows_turkish_order_cta_for_parent_child_card(self):
+        user = db_mod.AppUser(email="parent-tr@example.com", password_hash="hash", name="Parent", plan_code="premium", is_active=True)
+        self.db.add(user)
+        self.db.commit()
+        self.db.refresh(user)
+        with patch.object(app, "get_request_user", return_value=user):
+            response = self.client.get("/reports", headers={"accept-language": "tr"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Bu Raporu Al", response.text)
+        self.assertNotIn("Hesaplayıcı ile Başla", response.text)
 
     def test_result_template_supports_parent_child_sections(self):
         interpretation = build_parent_child_interpretation(_bundle("Parent"), _bundle("Child"))
@@ -165,7 +177,7 @@ class ParentChildReportTests(unittest.TestCase):
         self.assertIn("Parent-Child Guidance", html)
         self.assertIn("Child Core Nature", html)
         self.assertIn("Recommended Approach", html)
-        self.assertIn("This is only part of your child's profile", html)
+        self.assertIn("This is only part of your child", html)
 
     def test_report_pdf_supports_parent_child_sections_with_missing_timing(self):
         interpretation = build_parent_child_interpretation(_bundle("Parent"), _bundle("Child"))

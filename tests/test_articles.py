@@ -23,13 +23,14 @@ class ArticleSystemTests(unittest.TestCase):
         self.db.commit()
         self.db.close()
 
-    def _add_article(self, title, *, category="foundations", slug=None, published=True, published_at=None):
+    def _add_article(self, title, *, category="foundations", slug=None, published=True, published_at=None, cover_image=None):
         article = db_mod.Article(
             title=title,
             slug=slug or app._unique_article_slug(self.db, title),
             category=category,
             excerpt=f"{title} excerpt",
             body=f"{title} body paragraph one.\n\n{title} body paragraph two.",
+            cover_image=cover_image,
             is_published=published,
             published_at=published_at or datetime.utcnow(),
             author_name="Focus Astrology",
@@ -45,8 +46,12 @@ class ArticleSystemTests(unittest.TestCase):
         client = TestClient(app.app)
         response = client.get("/articles")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Insights & Articles", response.text)
-        self.assertIn("What Is Vedic Astrology", response.text)
+        self.assertIn("Selected Articles", response.text)
+        self.assertIn("/static/articles/secili_makaleler.jpg", response.text)
+        self.assertIn("Jupiter Transit: Jupiter Says", response.text)
+        self.assertIn("/static/articles/venus_transiti.jpg", response.text)
+        self.assertIn("/static/articles/merkur_transiti.jpg", response.text)
+        self.assertIn("/static/articles/jüpiter_transiti.jpg", response.text)
 
     def test_article_cards_render_from_stored_content(self):
         article = self._add_article("Latest Editorial Signal", category="timing", published_at=datetime.utcnow() + timedelta(days=1))
@@ -55,6 +60,8 @@ class ArticleSystemTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(article.title, response.text)
         self.assertIn(article.slug, response.text)
+        self.assertIn("article-card-cover", response.text)
+        self.assertIn(f"/static/articles/{article.slug}.jpg", response.text)
 
     def test_article_detail_renders_successfully(self):
         article = self._add_article("Authority Detail Article", category="chart-reading")
@@ -63,6 +70,33 @@ class ArticleSystemTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(article.title, response.text)
         self.assertIn(article.excerpt, response.text)
+        self.assertIn("article-detail-hero", response.text)
+        self.assertIn(f"/static/articles/{article.slug}.jpg", response.text)
+
+    def test_article_templates_support_explicit_cover_images(self):
+        article = self._add_article("Covered Editorial Signal", cover_image="covered-editorial-signal.webp")
+        client = TestClient(app.app)
+        listing = client.get("/articles")
+        detail = client.get(f"/articles/{article.slug}")
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(detail.status_code, 200)
+        self.assertIn("/static/articles/covered-editorial-signal.webp", listing.text)
+        self.assertIn("/static/articles/covered-editorial-signal.webp", detail.text)
+
+    def test_seeded_article_detail_uses_finalized_cover_assets(self):
+        client = TestClient(app.app)
+        response = client.get("/articles/venus-transiti-degisim-kacinilmaz")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("/static/articles/venus_transiti.jpg", response.text)
+        self.assertIn("Venus Transit: Change Is Unavoidable", response.text)
+
+    def test_seeded_article_detail_renders_english_body_in_english_locale(self):
+        client = TestClient(app.app)
+        response = client.get("/articles/merkur-transiti-planla-ve-harekete-gec", headers={"accept-language": "en"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Mercury Transit: Plan and Take Action", response.text)
+        self.assertIn("Mercury asks us to rethink how we think, speak, organize, and act", response.text)
+        self.assertNotIn("Merkür bu yıl düşünme biçimimizi", response.text)
 
     def test_category_filter_route_works(self):
         self._add_article("Timing Piece", category="timing")
@@ -94,8 +128,8 @@ class ArticleSystemTests(unittest.TestCase):
         client = TestClient(app.app)
         response = client.get("/")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(article.title, response.text)
-        self.assertIn(f"/articles/{article.slug}", response.text)
+        self.assertNotIn(article.title, response.text)
+        self.assertNotIn(f"/articles/{article.slug}", response.text)
 
     def test_unpublished_articles_are_not_shown_publicly(self):
         article = self._add_article("Hidden Draft", published=False)
@@ -166,7 +200,15 @@ class ArticleSystemTests(unittest.TestCase):
     def test_result_template_contains_related_insights_guard(self):
         template = Path("C:\\Users\\uolca\\Documents\\Chatgpt Codex\\astro-yuzu\\templates\\result.html").read_text(encoding="utf-8")
         self.assertIn("{% if related_articles %}", template)
-        self.assertIn("Related Insights", template)
+        self.assertIn('t("result.related_title"', template)
+        self.assertIn("related-insights-grid", template)
+
+    def test_article_templates_include_cover_layout_markers(self):
+        articles_template = Path("C:\\Users\\uolca\\Documents\\Chatgpt Codex\\astro-yuzu\\templates\\articles.html").read_text(encoding="utf-8")
+        detail_template = Path("C:\\Users\\uolca\\Documents\\Chatgpt Codex\\astro-yuzu\\templates\\article_detail.html").read_text(encoding="utf-8")
+        self.assertIn("article-card-cover", articles_template)
+        self.assertIn("article-detail-hero", detail_template)
+        self.assertIn("related-cover", detail_template)
 
     def test_result_template_renders_related_articles_when_present(self):
         layer = build_interpretation_layer(SAMPLE_NATAL_DATA, dasha_data=SAMPLE_DASHA, transit_data=SAMPLE_TRANSITS)

@@ -11,7 +11,7 @@ def _env_flag(name, default=False):
 
 
 def payment_provider():
-    return str(os.getenv("PAYMENT_PROVIDER", "stripe")).strip().lower() or "stripe"
+    return str(os.getenv("PAYMENT_PROVIDER", "iyzico")).strip().lower() or "iyzico"
 
 
 def payments_enabled():

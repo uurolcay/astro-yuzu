@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="tr">
+<body style="margin:0; padding:0; background:#0e182c; color:#f8f3e6; font-family:Georgia, 'Times New Roman', serif;">
+    <div style="max-width:680px; margin:0 auto; padding:32px;">
+        <p style="color:#dfc070; letter-spacing:.12em; text-transform:uppercase; font-size:12px;">İade kaydı</p>
+        <h1 style="font-weight:400; margin:0 0 18px;">{{ product.title }}</h1>
+        <p style="line-height:1.7; color:#eee2bf;">
+            İade işleminiz yönetici tarafından kaydedildi. Tutar: {{ refund_amount }} {{ order.currency or "TRY" }}.
+        </p>
+        <p style="line-height:1.7; color:#b8ad96;">
+            Ödeme sağlayıcısının bankaya yansıma süresi ayrıca değişebilir.
+        </p>
+    </div>
+</body>
+</html>

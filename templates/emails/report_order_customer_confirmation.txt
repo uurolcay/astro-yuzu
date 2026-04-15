@@ -1,0 +1,7 @@
+Rapor talebiniz alındı
+
+{{ product.title }}
+
+Ödemeniz doğrulandı ve rapor talebiniz hazırlık sürecine alındı. Raporunuz AI destekli taslak ve insan değerlendirmesi sonrasında en geç 7 gün içinde e-posta ile teslim edilir.
+
+Bu süreç otomatik müşteri teslimi değildir; kalite ve bağlam kontrolü için manuel inceleme korunur.

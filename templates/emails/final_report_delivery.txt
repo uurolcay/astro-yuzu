@@ -1,0 +1,11 @@
+Raporunuz hazır
+
+{{ product.title }}
+
+Merhaba {{ order.full_name or "Merhaba" }},
+
+Talep ettiğiniz rapor insan değerlendirmesiyle gözden geçirildi ve teslim için hazırlandı. Aşağıdaki metin nihai rapor tesliminizdir.
+
+{{ final_report_text }}
+
+Bu çalışma yorumlayıcı rehberlik niteliğindedir; tıbbi, hukuki veya finansal tavsiye yerine geçmez.

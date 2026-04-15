@@ -1,0 +1,404 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t("consultation.page_title") }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    .consultation-shell { display:grid; gap:clamp(34px, 5vw, 58px); }
+
+    .consultation-hero,
+    .consultation-package,
+    .consultation-final {
+        border-radius:var(--radius);
+        border:1px solid rgba(223,192,112,.14);
+        background:
+            radial-gradient(circle at 82% 18%, rgba(223,192,112,.13), transparent 28%),
+            radial-gradient(circle at 18% 82%, rgba(54,82,126,.16), transparent 30%),
+            linear-gradient(180deg, rgba(32,51,84,.58), rgba(14,24,44,.38));
+        box-shadow:0 20px 48px rgba(0,0,0,.18);
+    }
+
+    .consultation-hero { padding:clamp(34px, 5vw, 54px); }
+    .consultation-hero-layout,
+    .consultation-grid-two,
+    .consultation-grid-three,
+    .consultation-process {
+        display:grid;
+        gap:20px;
+    }
+    .consultation-hero-layout { grid-template-columns:minmax(0, 1.1fr) minmax(280px, .9fr); align-items:end; }
+    .consultation-grid-two { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    .consultation-grid-three { grid-template-columns:repeat(3, minmax(0, 1fr)); }
+    .consultation-process { grid-template-columns:repeat(4, minmax(0, 1fr)); }
+
+    .consultation-copy,
+    .consultation-support,
+    .consultation-card,
+    .consultation-step,
+    .consultation-package,
+    .consultation-final {
+        display:grid;
+        gap:16px;
+    }
+
+    .consultation-copy .hero-title { max-width:12ch; }
+    .consultation-actions,
+    .consultation-card-actions,
+    .consultation-final-actions { display:flex; flex-wrap:wrap; gap:14px; }
+
+    .consultation-support {
+        padding:clamp(22px, 3vw, 30px);
+        border-radius:calc(var(--radius) - 6px);
+        background:linear-gradient(180deg, rgba(38,61,98,.24), rgba(20,34,58,.18));
+    }
+
+    .consultation-section { display:grid; gap:22px; }
+    .consultation-section-header { display:grid; gap:10px; max-width:760px; }
+
+    .consultation-card,
+    .consultation-step,
+    .consultation-proof {
+        padding:0 0 0 18px;
+        border-left:1px solid rgba(223,192,112,.14);
+    }
+
+    .consultation-card h3,
+    .consultation-step h3,
+    .consultation-package h3,
+    .consultation-final h2,
+    .consultation-support h2 {
+        margin:0;
+        font-family:"Cormorant Garamond", serif;
+        font-size:clamp(1.85rem, 3vw, 2.45rem);
+        font-weight:300;
+        line-height:1.08;
+        color:var(--text);
+    }
+
+    .consultation-list {
+        margin:0;
+        padding-left:18px;
+        color:var(--text-soft);
+        display:grid;
+        gap:10px;
+        line-height:1.72;
+    }
+
+    .consultation-meta {
+        display:inline-flex;
+        align-items:center;
+        align-self:flex-start;
+        padding:7px 12px;
+        border-radius:999px;
+        border:1px solid rgba(223,192,112,.2);
+        color:var(--gold-light);
+        font-family:"Cinzel", serif;
+        font-size:.68rem;
+        letter-spacing:.16em;
+        text-transform:uppercase;
+    }
+
+    .consultation-package {
+        position:relative;
+        padding:clamp(26px, 4vw, 36px);
+        background:linear-gradient(180deg, rgba(30,50,86,.32), rgba(14,24,44,.24));
+    }
+
+    .consultation-package--featured {
+        border-color:rgba(223,192,112,.28);
+        background:
+            radial-gradient(circle at 84% 14%, rgba(223,192,112,.16), transparent 26%),
+            linear-gradient(180deg, rgba(36,58,94,.48), rgba(14,24,44,.30));
+        box-shadow:0 24px 56px rgba(0,0,0,.22);
+    }
+
+    .consultation-price {
+        display:flex;
+        align-items:end;
+        justify-content:space-between;
+        gap:14px;
+        padding-top:16px;
+        border-top:1px solid rgba(223,192,112,.14);
+    }
+
+    .consultation-price strong {
+        color:var(--text);
+        font-family:"Cormorant Garamond", serif;
+        font-size:clamp(1.9rem, 3vw, 2.5rem);
+        font-weight:300;
+        line-height:1;
+    }
+
+    .consultation-proof {
+        display:grid;
+        gap:10px;
+        color:var(--text-soft);
+    }
+
+    .consultation-proof blockquote {
+        margin:0;
+        font-family:"Cormorant Garamond", serif;
+        font-size:1.35rem;
+        line-height:1.28;
+        color:var(--text);
+    }
+
+    .consultation-final {
+        padding:clamp(30px, 4vw, 44px);
+        grid-template-columns:minmax(0, 1fr) auto;
+        align-items:center;
+    }
+
+    .consultation-reassurance {
+        display:grid;
+        grid-template-columns:repeat(4, minmax(0, 1fr));
+        gap:16px;
+        padding:clamp(22px, 3vw, 30px);
+        border-radius:calc(var(--radius) - 4px);
+        background:rgba(255,255,255,.024);
+        border:1px solid rgba(223,192,112,.10);
+    }
+
+    .consultation-reassurance-item {
+        display:grid;
+        gap:8px;
+        color:var(--text-soft);
+        line-height:1.68;
+    }
+
+    .consultation-reassurance-item strong {
+        color:var(--gold-light);
+        font-size:1rem;
+    }
+
+    @media (max-width: 1120px) {
+        .consultation-hero-layout,
+        .consultation-grid-two,
+        .consultation-grid-three,
+        .consultation-reassurance,
+        .consultation-final { grid-template-columns:1fr; }
+        .consultation-process { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 760px) {
+        .consultation-hero,
+        .consultation-package,
+        .consultation-final { padding:clamp(24px, 7vw, 34px); }
+        .consultation-process { grid-template-columns:1fr; }
+        .consultation-actions,
+        .consultation-card-actions,
+        .consultation-final-actions { width:100%; }
+        .consultation-actions .btn,
+        .consultation-card-actions .btn,
+        .consultation-final-actions .btn {
+            width:100%;
+            justify-content:center;
+        }
+        .consultation-price {
+            align-items:flex-start;
+            flex-direction:column;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="consultation-shell">
+            <section class="consultation-hero">
+                <div class="consultation-hero-layout">
+                    <div class="consultation-copy">
+                        <div class="chip-row">
+                            <span class="chip">Focus Astrology</span>
+                            <span class="chip">{{ t("common.consultation_full_name") }}</span>
+                        </div>
+                        <h1 class="hero-title">{{ t("consultation.hero_headline") }}</h1>
+                        <p class="hero-text">
+                            {{ t("consultation.hero_supporting_text") }}
+                        </p>
+                        <div class="consultation-actions">
+                            <a class="btn btn-primary" href="/personal-consultation/book">{{ t("common.cta_personal_consultation") }}</a>
+                            <a class="btn btn-secondary" href="/calculator">{{ t("common.cta_chart_first") }}</a>
+                        </div>
+                    </div>
+                    <aside class="consultation-support">
+                        <div class="consultation-meta">{{ t("consultation.eyebrow") }}</div>
+                        <h2>{{ t("consultation.hero_support_title") }}</h2>
+                        <ul class="consultation-list">
+                            <li>{{ t("consultation.hero_support_point_1") }}</li>
+                            <li>{{ t("consultation.hero_support_point_2") }}</li>
+                            <li>{{ t("consultation.hero_support_point_3") }}</li>
+                        </ul>
+                    </aside>
+                </div>
+            </section>
+
+            <section class="consultation-section">
+                <div class="consultation-section-header">
+                    <div class="section-kicker">{{ t("consultation.explore_label") }}</div>
+                    <h2 class="section-title">{{ t("consultation.explore_title") }}</h2>
+                    <p class="section-text">{{ t("consultation.what_section_text") }}</p>
+                </div>
+                <div class="consultation-grid-two">
+                    <article class="consultation-card">
+                        <h3>{{ t("consultation.explore_item_2_title") }}</h3>
+                        <p class="muted">{{ t("consultation.explore_item_2_text") }}</p>
+                    </article>
+                    <article class="consultation-card">
+                        <h3>{{ t("consultation.explore_item_3_title") }}</h3>
+                        <p class="muted">{{ t("consultation.explore_item_3_text") }}</p>
+                    </article>
+                    <article class="consultation-card">
+                        <h3>{{ t("consultation.explore_item_1_title") }}</h3>
+                        <p class="muted">{{ t("consultation.explore_item_1_text") }}</p>
+                    </article>
+                    <article class="consultation-card">
+                        <h3>{{ t("consultation.explore_item_4_title") }}</h3>
+                        <p class="muted">{{ t("consultation.explore_item_4_text") }}</p>
+                    </article>
+                </div>
+            </section>
+
+            <section class="consultation-section">
+                <div class="consultation-section-header">
+                    <div class="section-kicker">{{ t("consultation.outcomes_label") }}</div>
+                    <h2 class="section-title">{{ t("consultation.outcomes_title") }}</h2>
+                </div>
+                <div class="consultation-grid-four consultation-grid-two">
+                    <article class="consultation-card">
+                        <h3>{{ t("consultation.outcomes_point_1") }}</h3>
+                        <p class="muted">{{ t("consultation.outcomes_point_5") }}</p>
+                    </article>
+                    <article class="consultation-card">
+                        <h3>{{ t("consultation.outcomes_point_2") }}</h3>
+                        <p class="muted">{{ t("consultation.outcomes_point_6") }}</p>
+                    </article>
+                    <article class="consultation-card">
+                        <h3>{{ t("consultation.outcomes_point_3") }}</h3>
+                        <p class="muted">{{ t("consultation.different_text_2") }}</p>
+                    </article>
+                    <article class="consultation-card">
+                        <h3>{{ t("consultation.outcomes_point_4") }}</h3>
+                        <p class="muted">{{ t("consultation.trust_text") }}</p>
+                    </article>
+                </div>
+            </section>
+
+            <section class="consultation-section">
+                <div class="consultation-section-header">
+                    <div class="section-kicker">{{ t("consultation.how_label") }}</div>
+                    <h2 class="section-title">{{ t("consultation.flow_title") }}</h2>
+                </div>
+                <div class="consultation-process">
+                    <article class="consultation-step">
+                        <div class="consultation-meta">01</div>
+                        <h3>{{ t("consultation.flow_step_2_title") }}</h3>
+                        <p class="muted">{{ t("consultation.how_text_1") }}</p>
+                    </article>
+                    <article class="consultation-step">
+                        <div class="consultation-meta">02</div>
+                        <h3>{{ t("consultation.flow_step_3_title") }}</h3>
+                        <p class="muted">{{ t("consultation.flow_step_3_text") }}</p>
+                    </article>
+                    <article class="consultation-step">
+                        <div class="consultation-meta">03</div>
+                        <h3>{{ t("consultation.flow_step_5_title") }}</h3>
+                        <p class="muted">{{ t("consultation.flow_step_5_text") }}</p>
+                    </article>
+                    <article class="consultation-step">
+                        <div class="consultation-meta">04</div>
+                        <h3>{{ t("consultation.flow_step_4_title") }}</h3>
+                        <p class="muted">{{ t("consultation.flow_step_4_text") }}</p>
+                    </article>
+                </div>
+            </section>
+
+            <section class="consultation-section" id="consultation-pricing">
+                <div class="consultation-section-header">
+                    <div class="section-kicker">{{ t("consultation.pricing_label") }}</div>
+                    <h2 class="section-title">{{ t("consultation.pricing_title") }}</h2>
+                    <p class="section-text">{{ t("consultation.pricing_text") }}</p>
+                </div>
+                <article class="consultation-package consultation-package--featured">
+                    <span class="consultation-meta">{{ t("common.consultation_full_name") }}</span>
+                    <h3>{{ t("consultation.booking_title") }}</h3>
+                    <p class="muted">{{ t("consultation.booking_text") }}</p>
+                    <div class="consultation-price">
+                        <span class="muted">{{ t("consultation.booking_duration") }}</span>
+                        <strong>₺4.900</strong>
+                    </div>
+                    <ul class="consultation-list">
+                        <li>{{ t("consultation.booking_point_1") }}</li>
+                        <li>{{ t("consultation.booking_point_2") }}</li>
+                        <li>{{ t("consultation.booking_point_3") }}</li>
+                        <li>{{ t("consultation.booking_point_4") }}</li>
+                        <li>{{ t("consultation.booking_point_5") }}</li>
+                    </ul>
+                    <div class="consultation-card-actions">
+                        <a class="btn btn-primary" href="/personal-consultation/book">{{ t("common.cta_personal_consultation") }}</a>
+                        <a class="btn btn-secondary" href="/calculator">{{ t("common.cta_chart_first") }}</a>
+                    </div>
+                </article>
+            </section>
+
+            <section class="consultation-section">
+                <div class="consultation-section-header">
+                    <div class="section-kicker">{{ t("consultation.trust_label") }}</div>
+                    <h2 class="section-title">{{ t("consultation.trust_title") }}</h2>
+                </div>
+                <div class="consultation-grid-three">
+                    <article class="consultation-proof">
+                        <blockquote>{{ t("consultation.trust_point_1") }}</blockquote>
+                        <p>{{ t("consultation.trust_text") }}</p>
+                    </article>
+                    <article class="consultation-proof">
+                        <blockquote>{{ t("consultation.trust_point_2") }}</blockquote>
+                        <p>{{ t("consultation.different_text_1") }}</p>
+                    </article>
+                    <article class="consultation-proof">
+                        <blockquote>{{ t("consultation.trust_point_3") }}</blockquote>
+                        <p>{{ t("consultation.different_text_2") }}</p>
+                    </article>
+                </div>
+            </section>
+
+            <section class="consultation-section">
+                <div class="consultation-section-header">
+                    <div class="section-kicker">{{ t("consultation.faq_label") }}</div>
+                    <h2 class="section-title">{{ t("consultation.faq_title") }}</h2>
+                </div>
+                <div class="consultation-reassurance">
+                    <div class="consultation-reassurance-item">
+                        <strong>{{ t("consultation.faq_1_q") }}</strong>
+                        <span>{{ t("consultation.faq_1_a") }}</span>
+                    </div>
+                    <div class="consultation-reassurance-item">
+                        <strong>{{ t("consultation.faq_2_q") }}</strong>
+                        <span>{{ t("consultation.faq_2_a") }}</span>
+                    </div>
+                    <div class="consultation-reassurance-item">
+                        <strong>{{ t("consultation.faq_3_q") }}</strong>
+                        <span>{{ t("consultation.faq_3_a") }}</span>
+                    </div>
+                    <div class="consultation-reassurance-item">
+                        <strong>{{ t("consultation.faq_4_q") }}</strong>
+                        <span>{{ t("consultation.faq_4_a") }}</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="consultation-final">
+                <div>
+                    <div class="consultation-meta">{{ t("index.mid_cta_eyebrow") }}</div>
+                    <h2>{{ t("consultation.final_cta_title") }}</h2>
+                    <p class="muted">{{ t("consultation.final_cta_text") }}</p>
+                </div>
+                <div class="consultation-final-actions">
+                    <a class="btn btn-primary" href="/personal-consultation/book">{{ t("common.cta_personal_consultation") }}</a>
+                </div>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

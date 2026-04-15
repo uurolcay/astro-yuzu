@@ -282,6 +282,51 @@ class InterpretationLayerTests(unittest.TestCase):
         self.assertIn('data-recommendation-label="very_useful"', template)
         self.assertIn("Start here first.", template)
 
+    def test_result_template_includes_next_product_recommendation_layer(self):
+        template = Path("C:\\Users\\uolca\\Documents\\Chatgpt Codex\\astro-yuzu\\templates\\result.html").read_text(encoding="utf-8")
+        self.assertIn("next_product_probe", template)
+        self.assertIn("Sizin için en uygun bir sonraki adım", template)
+        self.assertIn("Doğum Haritası Karma’sı", template)
+        self.assertIn("Yıllık Transit", template)
+        self.assertIn("Kariyer", template)
+        self.assertIn("Ebeveyn-Çocuk", template)
+        self.assertIn("60 dk birebir vedik astroloji danışmanlığı", template)
+        self.assertIn("Kişisel Danışmanlık Al", template)
+
+    def test_result_template_recommends_career_report_from_career_context(self):
+        context = {
+            "request": SimpleNamespace(state=SimpleNamespace(current_user=None)),
+            "full_name": "Career Reader",
+            "birth_date": "1990-01-01",
+            "birth_time": "08:30",
+            "birth_city": "Istanbul, Turkey",
+            "normalized_birth_place": "Istanbul, Turkey",
+            "timezone": "Europe/Istanbul",
+            "report_type": "premium",
+            "report_type_config": {"include_pdf": True},
+            "interpretation_context": {
+                "primary_focus": "kariyer yönü",
+                "secondary_focus": "profession decisions",
+                "dominant_life_areas": ["career"],
+                "dominant_narratives": ["work direction"],
+                "signal_layer": {"top_anchors": []},
+                "recommendation_layer": {"top_recommendations": [], "opportunity_windows": [], "risk_windows": []},
+                "top_timing_windows": {},
+            },
+            "payload_json": {},
+            "report_access": {"is_preview": True, "show_unlock_cta": False, "can_view_full_report": False, "can_download_pdf": False, "show_login_hint": False, "unlock_success": False, "access_label": "Preview"},
+            "related_articles": [],
+            "natal_data": {},
+            "dasha_data": [],
+            "navamsa_data": {},
+            "transit_data": [],
+            "eclipse_data": [],
+        }
+        html = app.templates.env.get_template("result.html").render(context)
+        self.assertIn("Bu sonuca göre en güçlü devam yolu: Kariyer", html)
+        self.assertIn("Continue with This Analysis", html)
+        self.assertIn("Get Personal Consultation", html)
+
     def test_result_template_renders_interpretation_feedback_controls(self):
         template = Path("C:\\Users\\uolca\\Documents\\Chatgpt Codex\\astro-yuzu\\templates\\result.html").read_text(encoding="utf-8")
         self.assertIn("Top Interpretation Themes", template)
@@ -313,6 +358,7 @@ class InterpretationLayerTests(unittest.TestCase):
         self.assertIn('t("result.value_personal_2_title"', template)
         self.assertIn('t("result.value_personal_3_title"', template)
         self.assertIn('t("result.value_personal_4_title"', template)
+        self.assertIn("result-conversion-card", template)
         self.assertGreaterEqual(template.count('data-unlock-report-btn'), 4)
 
     def test_result_template_keeps_locked_preview_cues_visible(self):
@@ -323,6 +369,16 @@ class InterpretationLayerTests(unittest.TestCase):
         self.assertIn('t("result.final_title_personal"', template)
         self.assertIn('t("result.parent_child_preview_lead"', template)
         self.assertIn('t("result.child_loss_title"', template)
+        self.assertIn("locked-teaser-card", template)
+
+    def test_result_template_uses_distinct_editorial_section_markers(self):
+        template = Path("C:\\Users\\uolca\\Documents\\Chatgpt Codex\\astro-yuzu\\templates\\result.html").read_text(encoding="utf-8")
+        self.assertIn("result-hero-card", template)
+        self.assertIn("result-section-card", template)
+        self.assertIn("result-feedback-card", template)
+        self.assertIn("result-section-card--support", template)
+        self.assertIn("hero-shell--parent", template)
+        self.assertIn("hero-shell--personal", template)
 
     def test_result_template_uses_consistent_primary_cta_language(self):
         template = Path("C:\\Users\\uolca\\Documents\\Chatgpt Codex\\astro-yuzu\\templates\\result.html").read_text(encoding="utf-8")
@@ -348,6 +404,18 @@ class InterpretationLayerTests(unittest.TestCase):
         self.assertIn("{% elif primary_anchor %}", template)
         self.assertIn("{% else %}", template)
         self.assertIn("No concentrated risk window currently outweighs the main guidance above.", template)
+
+    def test_result_template_refines_lower_half_into_editorial_layers(self):
+        template = Path("C:\\Users\\uolca\\Documents\\Chatgpt Codex\\astro-yuzu\\templates\\result.html").read_text(encoding="utf-8")
+        self.assertIn("result-section-card--editorial", template)
+        self.assertIn("ai-reading-surface", template)
+        self.assertIn("ai-context-rail", template)
+        self.assertIn('data-result-text="application_eyebrow"', template)
+        self.assertIn('data-result-text="basis_eyebrow"', template)
+        self.assertIn('data-result-text="technical_eyebrow"', template)
+        self.assertIn('data-result-text="utility_eyebrow"', template)
+        self.assertIn("technical-metric-grid", template)
+        self.assertIn("result-action-card", template)
 
     def test_feedback_payload_hook_includes_report_id_and_anchor_rank(self):
         template = Path("C:\\Users\\uolca\\Documents\\Chatgpt Codex\\astro-yuzu\\templates\\result.html").read_text(encoding="utf-8")
@@ -455,6 +523,8 @@ class InterpretationLayerTests(unittest.TestCase):
         self.assertIn("Designed to support - not label - your child.", html)
         self.assertIn(translate_text("result.child_decision_title"), html)
         self.assertIn(translate_text("result.child_decision_line_1").replace("'", "&#39;"), html)
+        self.assertIn("Bu sonuca göre en güçlü devam yolu: Ebeveyn-Çocuk", html)
+        self.assertIn("/reports/parent-child", html)
         self.assertIn(translate_text("result.child_decision_line_2"), html)
 
     def test_parent_child_result_template_handles_missing_sections_safely(self):
@@ -1086,10 +1156,14 @@ class InterpretationLayerTests(unittest.TestCase):
 
     def test_reports_template_renders_clean_card_actions(self):
         template = Path("C:\\Users\\uolca\\Documents\\Chatgpt Codex\\astro-yuzu\\templates\\reports.html").read_text(encoding="utf-8")
-        self.assertIn("View full report", template)
-        self.assertIn("View preview", template)
-        self.assertIn("Download PDF", template)
-        self.assertIn("Generate your first reading", template)
+        self.assertIn('t("reports.view_full_report")', template)
+        self.assertIn('t("reports.view_preview")', template)
+        self.assertIn('t("reports.download_pdf")', template)
+        self.assertIn('t("reports.empty_cta")', template)
+        self.assertIn(".reports-card-actions {", template)
+        self.assertIn('href="/reports/order/birth_chart_karma">{{ t("common.cta_report_buy") }}', template)
+        self.assertIn('href="/reports/order/annual_transit">{{ t("common.cta_report_buy") }}', template)
+        self.assertIn('href="/reports/order/career">{{ t("common.cta_report_buy") }}', template)
 
     def test_reports_empty_state_works(self):
         user = db_mod.AppUser(

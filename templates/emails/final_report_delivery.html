@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="tr">
+<body style="margin:0; padding:0; background:#0e182c; color:#f8f3e6; font-family:Georgia, 'Times New Roman', serif;">
+    <div style="max-width:680px; margin:0 auto; padding:32px;">
+        <p style="color:#dfc070; letter-spacing:.12em; text-transform:uppercase; font-size:12px;">Raporunuz hazır</p>
+        <h1 style="font-weight:400; margin:0 0 18px;">{{ product.title }}</h1>
+        <p style="line-height:1.7; color:#eee2bf;">
+            Merhaba {{ order.full_name or "Merhaba" }},
+        </p>
+        <p style="line-height:1.7; color:#eee2bf;">
+            Talep ettiğiniz rapor insan değerlendirmesiyle gözden geçirildi ve teslim için hazırlandı. Aşağıdaki metin nihai rapor tesliminizdir.
+        </p>
+        <div style="margin-top:22px; padding:22px; border:1px solid rgba(223,192,112,.22); border-radius:18px; background:rgba(255,255,255,.035); white-space:pre-wrap; line-height:1.7; color:#f8f3e6;">{{ final_report_text }}</div>
+        <p style="line-height:1.7; color:#b8ad96; margin-top:22px;">
+            Bu çalışma yorumlayıcı rehberlik niteliğindedir; tıbbi, hukuki veya finansal tavsiye yerine geçmez.
+        </p>
+    </div>
+</body>
+</html>

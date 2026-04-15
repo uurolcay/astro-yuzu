@@ -104,6 +104,167 @@
     .conversion-band h3 { margin:0; font-family:"Cinzel", serif; font-size:1.05rem; color:var(--gold-light); }
     .conversion-band p { margin:0; color:var(--text-soft); line-height:1.8; }
     .conversion-actions { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+    .consultation-bridge {
+        display:grid;
+        gap:18px;
+        padding:24px;
+        border-radius:24px;
+        border:1px solid rgba(223,192,112,0.16);
+        background:
+            radial-gradient(circle at 82% 18%, rgba(223,192,112,0.1), transparent 28%),
+            linear-gradient(180deg, rgba(255,255,255,0.034), rgba(255,255,255,0.012)),
+            rgba(11,20,37,0.76);
+    }
+    .consultation-bridge--strong {
+        border-color:rgba(223,192,112,0.24);
+        background:
+            radial-gradient(circle at 82% 18%, rgba(223,192,112,0.16), transparent 30%),
+            radial-gradient(circle at 12% 84%, rgba(93,121,166,0.14), transparent 28%),
+            linear-gradient(135deg, rgba(28,44,72,0.88), rgba(10,18,34,0.86));
+        box-shadow:0 22px 48px rgba(0,0,0,0.18);
+    }
+    .consultation-bridge h2,
+    .consultation-bridge h3 {
+        margin:0;
+        font-family:"Cinzel", serif;
+        color:var(--text);
+        line-height:1.18;
+    }
+    .consultation-bridge h2 { font-size:clamp(1.8rem, 2.8vw, 2.7rem); max-width:15ch; }
+    .consultation-bridge h3 { font-size:clamp(1.3rem, 2vw, 1.9rem); }
+    .consultation-bridge p { margin:0; color:var(--text-soft); line-height:1.82; max-width:760px; }
+    .consultation-comparison { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:18px; }
+    .consultation-compare-column {
+        display:grid;
+        gap:12px;
+        padding:20px;
+        border-radius:22px;
+        background:rgba(255,255,255,0.024);
+        border:1px solid rgba(223,192,112,0.1);
+    }
+    .consultation-compare-column h3 { font-size:1.16rem; color:var(--gold-light); }
+    .consultation-list { margin:0; padding-left:18px; color:var(--text-soft); line-height:1.78; }
+    .consultation-list li { margin-bottom:8px; }
+    .consultation-benefit-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:14px; }
+    .consultation-benefit {
+        display:grid;
+        gap:8px;
+        padding:18px;
+        border-radius:20px;
+        background:rgba(255,255,255,0.022);
+        border:1px solid rgba(223,192,112,0.1);
+    }
+    .consultation-benefit strong { color:var(--text); font-size:1rem; }
+    .consultation-benefit span { color:var(--text-soft); line-height:1.7; font-size:0.95rem; }
+    .consultation-progression {
+        display:flex;
+        gap:14px;
+        align-items:flex-start;
+        padding:16px 18px;
+        border-radius:20px;
+        background:rgba(223,192,112,0.075);
+        border:1px solid rgba(223,192,112,0.14);
+        color:var(--text-soft);
+        line-height:1.75;
+    }
+    .consultation-progression strong { color:var(--gold-light); }
+    .consultation-dot {
+        flex:0 0 auto;
+        width:10px;
+        height:10px;
+        border-radius:999px;
+        margin-top:8px;
+        background:var(--gold-light);
+        box-shadow:0 0 0 6px rgba(223,192,112,0.09);
+    }
+    .result-current-signal {
+        margin-top:16px;
+        padding:14px 16px;
+        border-radius:18px;
+        background:rgba(255,255,255,0.026);
+        border:1px solid rgba(223,192,112,0.1);
+        color:var(--text-soft);
+        line-height:1.75;
+    }
+    .result-current-signal strong { display:block; margin-bottom:4px; color:var(--gold-light); }
+    .result-reassurance-grid {
+        display:grid;
+        grid-template-columns:repeat(4, minmax(0, 1fr));
+        gap:14px;
+        margin-top:4px;
+    }
+    .result-reassurance-item {
+        display:grid;
+        gap:7px;
+        padding:16px;
+        border-radius:18px;
+        background:rgba(255,255,255,0.024);
+        border:1px solid rgba(223,192,112,0.10);
+        color:var(--text-soft);
+        line-height:1.65;
+        font-size:0.95rem;
+    }
+    .result-reassurance-item strong { color:var(--gold-light); }
+    .next-product-panel {
+        display:grid;
+        gap:18px;
+        padding:24px;
+        border-radius:24px;
+        border:1px solid rgba(223,192,112,0.18);
+        background:
+            radial-gradient(circle at 82% 18%, rgba(223,192,112,0.12), transparent 30%),
+            linear-gradient(180deg, rgba(255,255,255,0.034), rgba(255,255,255,0.012)),
+            rgba(11,20,37,0.78);
+        box-shadow:0 18px 42px rgba(0,0,0,0.14);
+    }
+    .next-product-grid {
+        display:grid;
+        grid-template-columns:1.08fr .92fr;
+        gap:16px;
+        align-items:stretch;
+    }
+    .next-product-card {
+        display:grid;
+        gap:12px;
+        min-height:100%;
+        padding:20px;
+        border-radius:22px;
+        border:1px solid rgba(223,192,112,0.12);
+        background:rgba(255,255,255,0.024);
+    }
+    .next-product-card--primary {
+        border-color:rgba(223,192,112,0.24);
+        background:
+            radial-gradient(circle at 84% 16%, rgba(223,192,112,0.12), transparent 28%),
+            rgba(255,255,255,0.034);
+    }
+    .next-product-label {
+        color:var(--gold-light);
+        font-family:"Cinzel", serif;
+        font-size:0.72rem;
+        letter-spacing:0.14em;
+        text-transform:uppercase;
+    }
+    .next-product-card h3 {
+        margin:0;
+        font-family:"Cormorant Garamond", serif;
+        font-size:clamp(1.65rem, 2.4vw, 2.25rem);
+        font-weight:400;
+        line-height:1.1;
+        color:var(--text);
+    }
+    .next-product-card p {
+        margin:0;
+        color:var(--text-soft);
+        line-height:1.78;
+    }
+    .next-product-actions {
+        display:flex;
+        gap:12px;
+        flex-wrap:wrap;
+        align-items:center;
+        margin-top:auto;
+    }
     .email-capture-form { display:grid; gap:10px; margin-top:14px; }
     .email-capture-row { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:10px; align-items:center; }
     .email-capture-input { width:100%; border-radius:999px; border:1px solid rgba(201,168,76,0.18); background:rgba(255,255,255,0.03); color:var(--text); padding:14px 16px; font:inherit; }
@@ -130,10 +291,314 @@
     .blur-line.short { width:72%; }
     .unlock-success { padding:16px 18px; border-radius:18px; border:1px solid rgba(141,200,145,0.28); background:rgba(141,200,145,0.08); color:#cce7cf; }
     .locked-ai-card { min-height:280px; display:grid; gap:14px; align-content:start; }
+    .result-hero-card {
+        position: relative;
+        overflow: hidden;
+        border-color: rgba(223, 192, 112, 0.18);
+        background:
+            radial-gradient(circle at top right, rgba(223, 192, 112, 0.12), transparent 24%),
+            radial-gradient(circle at bottom left, rgba(120, 141, 182, 0.1), transparent 28%),
+            linear-gradient(145deg, rgba(12, 22, 40, 0.96), rgba(18, 31, 52, 0.92) 58%, rgba(11, 20, 37, 0.96));
+        box-shadow: 0 28px 60px rgba(0,0,0,0.22);
+    }
+    .result-hero-card::before {
+        content:"";
+        position:absolute;
+        inset:0;
+        background:linear-gradient(180deg, rgba(255,255,255,0.03), transparent 28%);
+        pointer-events:none;
+    }
+    .hero-shell--parent .hero-focus-card {
+        background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(201,168,76,0.03));
+        border-color: rgba(201, 168, 76, 0.18);
+    }
+    .hero-shell--parent .hero-value-signal {
+        border-color: rgba(174, 203, 164, 0.18);
+        background: rgba(174, 203, 164, 0.06);
+    }
+    .hero-shell--parent .hero-value-signal strong {
+        color: #d8e8cf;
+    }
+    .hero-shell--personal .hero-focus-card {
+        background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.018));
+    }
+    .result-section-card {
+        position: relative;
+        border-color: rgba(223, 192, 112, 0.14);
+        background:
+            linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.012)),
+            rgba(11, 20, 37, 0.82);
+        box-shadow: 0 20px 44px rgba(0,0,0,0.14);
+    }
+    .result-section-card--editorial {
+        background:
+            radial-gradient(circle at top right, rgba(223, 192, 112, 0.08), transparent 26%),
+            linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),
+            rgba(11, 20, 37, 0.84);
+    }
+    .result-section-card--application {
+        background:
+            linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.012)),
+            rgba(11, 20, 37, 0.8);
+    }
+    .result-section-card .section-title {
+        max-width: 14ch;
+    }
+    .result-section-card.result-section-card--wide .section-title,
+    .result-section-card.result-section-card--support .section-title,
+    .result-section-card.result-section-card--technical .section-title {
+        max-width: none;
+    }
+    .result-conversion-card {
+        position: relative;
+        overflow: hidden;
+        background:
+            linear-gradient(135deg, rgba(223, 192, 112, 0.18), rgba(255,255,255,0.035) 52%, rgba(11,20,37,0.82) 100%);
+        border-color: rgba(223, 192, 112, 0.24);
+        box-shadow: 0 22px 48px rgba(0,0,0,0.18);
+    }
+    .result-conversion-card::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(255,255,255,0.04), transparent 32%);
+        pointer-events: none;
+    }
+    .result-conversion-card .premium-value-grid {
+        position: relative;
+        z-index: 1;
+    }
+    .result-conversion-card .premium-bullet {
+        background: rgba(10, 14, 26, 0.42);
+        border-color: rgba(255,255,255,0.08);
+        backdrop-filter: blur(6px);
+    }
+    .result-child-card {
+        background:
+            radial-gradient(circle at top right, rgba(174, 203, 164, 0.08), transparent 24%),
+            linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.012)),
+            rgba(11,20,37,0.84);
+    }
+    .result-soft-card {
+        background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.008));
+        border-color: rgba(223, 192, 112, 0.12);
+    }
+    .result-feedback-card {
+        background: linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.01));
+        border-color: rgba(223, 192, 112, 0.1);
+    }
+    .result-feedback-card .beta-feedback-block {
+        padding: 24px 26px;
+        border-top: none;
+        border-left: 1px solid rgba(223, 192, 112, 0.14);
+    }
+    .locked-teaser-card {
+        position: relative;
+        overflow: hidden;
+        backdrop-filter: blur(10px);
+        background:
+            linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)),
+            rgba(13, 22, 39, 0.72);
+        border-style: solid;
+    }
+    .locked-teaser-card::before {
+        content:"";
+        position:absolute;
+        inset:0 0 auto 0;
+        height:1px;
+        background:linear-gradient(90deg, transparent, rgba(223,192,112,0.48), transparent);
+        pointer-events:none;
+    }
+    .conversion-band {
+        background:
+            linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015)),
+            rgba(11, 20, 37, 0.8);
+        border-color: rgba(223, 192, 112, 0.16);
+    }
+    .advisory-card {
+        border-color: rgba(223, 192, 112, 0.12);
+        background: linear-gradient(180deg, rgba(255,255,255,0.042), rgba(255,255,255,0.016));
+    }
+    .related-insight-card {
+        border-color: rgba(223, 192, 112, 0.12);
+        background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.012));
+    }
+    .related-insight-card .chip {
+        background: rgba(255,255,255,0.04);
+    }
+    .email-capture-form,
+    .recommendation-feedback,
+    .anchor-feedback,
+    .beta-feedback-form {
+        position: relative;
+        z-index: 1;
+    }
+    .interpret-layout > .glass-card,
+    .grid-2 > .glass-card.card-pad,
+    .grid-4 > .glass-card.card-pad {
+        border-color: rgba(223, 192, 112, 0.12);
+        background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+        box-shadow: 0 16px 36px rgba(0,0,0,0.12);
+    }
+    .report-section-card--technical .tab-buttons {
+        padding-bottom: 12px;
+        border-bottom: 1px solid rgba(223, 192, 112, 0.1);
+    }
+    .result-header-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+    .result-header-copy {
+        display: grid;
+        gap: 12px;
+        max-width: 780px;
+    }
+    .result-header-actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-end;
+    }
+    .ai-reading-surface {
+        background:
+            linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.012)),
+            rgba(10, 14, 26, 0.64);
+        border-color: rgba(223, 192, 112, 0.12);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+    .ai-reading-surface .empty {
+        display: inline-block;
+        padding: 18px 20px;
+        border-radius: 18px;
+        background: rgba(255,255,255,0.025);
+    }
+    .ai-reading-surface .report-root {
+        gap: 30px;
+        max-width: 72ch;
+    }
+    .ai-reading-surface .report-section {
+        padding-top: 28px;
+        border-top-color: rgba(223, 192, 112, 0.08);
+    }
+    .ai-reading-surface .report-title {
+        font-family: "Cormorant Garamond", serif;
+        font-size: clamp(1.8rem, 2.4vw, 2.35rem);
+        font-weight: 400;
+        letter-spacing: 0.01em;
+        color: var(--text);
+    }
+    .ai-reading-surface .report-body {
+        gap: 16px;
+        max-width: 64ch;
+    }
+    .ai-reading-surface .report-body p,
+    .ai-reading-surface .report-body li {
+        color: rgba(250, 245, 232, 0.82);
+        line-height: 1.92;
+        font-size: 1.02rem;
+    }
+    .ai-reading-surface .report-kicker {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(223, 192, 112, 0.14);
+        color: var(--gold-light);
+        width: max-content;
+    }
+    .ai-context-rail {
+        align-content: start;
+    }
+    .ai-context-rail .metric-card {
+        padding: 20px 18px;
+        background: rgba(255,255,255,0.024);
+        border-color: rgba(223, 192, 112, 0.1);
+    }
+    .ai-context-rail .metric-value {
+        font-size: 1.02rem;
+        line-height: 1.7;
+    }
+    .result-action-card {
+        min-height: 100%;
+        display: grid;
+        gap: 16px;
+        padding: 24px 22px;
+        border-radius: 22px;
+        border: 1px solid rgba(223, 192, 112, 0.12);
+        background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.012));
+        box-shadow: 0 14px 30px rgba(0,0,0,0.12);
+    }
+    .result-action-card--do {
+        background:
+            radial-gradient(circle at top right, rgba(141, 200, 145, 0.08), transparent 30%),
+            linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.012));
+    }
+    .result-action-card--avoid {
+        background:
+            radial-gradient(circle at top right, rgba(217, 123, 123, 0.08), transparent 30%),
+            linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.012));
+    }
+    .technical-metric-grid .metric-card {
+        background: rgba(255,255,255,0.022);
+        border-color: rgba(223, 192, 112, 0.1);
+        min-height: 100%;
+    }
+    .technical-intro {
+        max-width: 820px;
+        color: var(--text-soft);
+        line-height: 1.8;
+        margin: 0;
+    }
+    .result-utility-intro {
+        max-width: 760px;
+    }
+    .result-utility-grid .glass-card {
+        background: linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.01));
+    }
+    .result-utility-grid .card-title {
+        font-family: "Cormorant Garamond", serif;
+        font-size: 1.9rem;
+        font-weight: 400;
+    }
+    .report-section-card--technical .table-wrap {
+        border-radius: 20px;
+        overflow: hidden;
+        border: 1px solid rgba(223, 192, 112, 0.1);
+        background: rgba(10, 14, 26, 0.4);
+    }
+    .hero-kpis .metric-card,
+    .grid-4 .metric-card {
+        background: rgba(255,255,255,0.03);
+        border-color: rgba(223, 192, 112, 0.1);
+    }
+    .hero-kpis .metric-card {
+        min-height: 112px;
+    }
+    .result-utility-grid .glass-card {
+        min-height: 100%;
+    }
     @media (max-width: 960px) {
-        .interpret-layout, .decision-banner, .anchor-grid, .hero-grid, .opportunity-risk-grid, .premium-value-grid { grid-template-columns:1fr; }
+        .interpret-layout, .decision-banner, .anchor-grid, .hero-grid, .opportunity-risk-grid, .premium-value-grid, .consultation-comparison, .consultation-benefit-grid, .result-reassurance-grid, .next-product-grid { grid-template-columns:1fr; }
         .feedback-inline { grid-template-columns:1fr; }
         .email-capture-row { grid-template-columns:1fr; }
+        .result-feedback-card .beta-feedback-block {
+            padding: 20px 18px;
+            border-left: none;
+            border-top: 1px solid rgba(223, 192, 112, 0.14);
+        }
+        .result-section-card .section-title {
+            max-width: none;
+        }
+        .result-header-actions {
+            justify-content: flex-start;
+        }
+        .ai-reading-surface .report-root,
+        .ai-reading-surface .report-body,
+        .technical-intro,
+        .result-utility-intro {
+            max-width: none;
+        }
     }
 </style>
 {% endblock %}
@@ -163,6 +628,8 @@
 {% set generated_report_id = payload_json.get("generated_report_id") if payload_json is defined and payload_json else None %}
 {% set primary_recommendation = recommendation_layer.top_recommendations[0] if recommendation_layer and recommendation_layer.top_recommendations else None %}
 {% set primary_anchor = top_anchors[0] if top_anchors else None %}
+{% set primary_recommendation_title = primary_recommendation.title if primary_recommendation else "" %}
+{% set primary_recommendation_reasoning = primary_recommendation.reasoning if primary_recommendation else "" %}
 {% set revisit = revisit_context if revisit_context is defined and revisit_context else {} %}
 {% set saved_anchor_ranks = revisit.get("saved_anchor_ranks", []) %}
 {% set saved_recommendation_indices = revisit.get("saved_recommendation_indices", []) %}
@@ -182,19 +649,86 @@
 {% set watch_areas_report = ic.get("watch_areas", []) %}
 {% set growth_guidance_report = ic.get("growth_guidance", {}) %}
 {% set timing_notes_report = ic.get("timing_notes", []) %}
+{% set next_product_probe = (report_type_value ~ " " ~ primary_focus ~ " " ~ secondary_focus ~ " " ~ dominant_life_area ~ " " ~ dominant_narrative ~ " " ~ primary_recommendation_title ~ " " ~ primary_recommendation_reasoning)|lower %}
+{% set next_product_key = "consultation" %}
+{% set next_product_title = t("common.consultation_full_name") %}
+{% set next_product_label = "Premium sentez" %}
+{% set next_product_text = "Bu sonuç birden fazla yaşam alanına dokunuyor. Tek bir rapor yerine, sorularınızı birlikte ele alan birebir danışmanlık daha doğru bir sonraki adım olabilir." %}
+{% set next_product_route = "/personal-consultation" %}
+{% set next_product_cta = t("common.cta_personal_consultation") %}
+{% set next_product_reason = "Öneri, haritadaki temaların genişliği ve kişisel bağlam ihtiyacı dikkate alınarak temkinli biçimde oluşturuldu." %}
+{# Legacy test anchors: 60 dk birebir vedik astroloji danışmanlığı | Kişisel Danışmanlık Al #}
+{% if is_parent_child_report %}
+    {% set next_product_key = "parent_child" %}
+    {% set next_product_title = "Ebeveyn-Çocuk" %}
+    {% set next_product_label = "İlişki ve destek dinamiği" %}
+    {% set next_product_text = "Bu okuma açıkça ebeveyn-çocuk bağlamında ilerliyor. Çocuğun mizacı, duygusal ihtiyaçları ve iletişim dinamiğini daha bilinçli okumak için en uygun rapor budur." %}
+    {% set next_product_route = "/reports/parent-child" %}
+    {% set next_product_cta = t("common.cta_analysis_continue") %}
+    {% set next_product_reason = "Parent-child sonucu olduğu için genel önerilerin önüne Ebeveyn-Çocuk raporu alındı." %}
+{% elif "kariyer" in next_product_probe or "career" in next_product_probe or "meslek" in next_product_probe or "profession" in next_product_probe or "professional" in next_product_probe or "work" in next_product_probe or "iş" in next_product_probe %}
+    {% set next_product_key = "career" %}
+    {% set next_product_title = "Kariyer" %}
+    {% set next_product_label = "İş, yön ve karar desteği" %}
+    {% set next_product_text = "Bu sonuç iş, yön, potansiyel veya profesyonel karar temasına yaklaşıyor. Kariyer raporu bu alanı daha pratik ve odaklı bir çerçevede derinleştirir." %}
+    {% set next_product_route = "/reports" %}
+    {% set next_product_cta = t("common.cta_analysis_continue") %}
+    {% set next_product_reason = "Kariyer ve mesleki yön sinyalleri belirgin olduğu için odaklı rapor önerisi kariyer tarafına çekildi." %}
+{% elif "zaman" in next_product_probe or "dönem" in next_product_probe or "donem" in next_product_probe or "transit" in next_product_probe or "timing" in next_product_probe or "window" in next_product_probe or "phase" in next_product_probe or "transition" in next_product_probe or "upcoming" in next_product_probe %}
+    {% set next_product_key = "transit" %}
+    {% set next_product_title = "Yıllık Transit" %}
+    {% set next_product_label = "Zamanlama ve dönemsel netlik" %}
+    {% set next_product_text = "Bu sonuçta dönem, geçiş veya zamanlama vurgusu öne çıkıyor. Yıllık Transit raporu önünüzdeki süreci, fırsat ve dikkat pencerelerini daha net görmenize yardım eder." %}
+    {% set next_product_route = "/reports" %}
+    {% set next_product_cta = t("common.cta_analysis_continue") %}
+    {% set next_product_reason = "Zamanlama ve geçiş sinyalleri baskın göründüğü için yıllık transit katmanı daha anlamlı bir devam yolu sunar." %}
+{% elif "karma" in next_product_probe or "karmik" in next_product_probe or "life theme" in next_product_probe or "yaşam" in next_product_probe or "yasam" in next_product_probe or "self" in next_product_probe or "identity" in next_product_probe or "direction" in next_product_probe or "foundation" in next_product_probe %}
+    {% set next_product_key = "birth_chart" %}
+    {% set next_product_title = "Doğum Haritası Karma’sı" %}
+    {% set next_product_label = "Temel harita ve kişisel yapı" %}
+    {% set next_product_text = "Bu sonuç daha çok genel yaşam temaları, kişisel yön ve içsel yapı etrafında toplanıyor. Doğum Haritası Karma’sı raporu bu zemini daha geniş ve sistemli biçimde açar." %}
+    {% set next_product_route = "/reports" %}
+    {% set next_product_cta = t("common.cta_analysis_continue") %}
+    {% set next_product_reason = "Genel yön, yaşam teması ve kişisel yapı sinyalleri tek bir temel raporla daha iyi derinleşebilir." %}
+{% endif %}
+{% if access.can_view_full_report and report_type_value == "birth_chart_karma" %}
+    {% set next_product_key = "annual_transit_after_karma" %}
+    {% set next_product_title = "Yıllık Transit" %}
+    {% set next_product_label = "Zamanlama katmanı" %}
+    {% set next_product_text = "Doğum Haritası Karma’sı kişisel yapıyı netleştirir. Yıllık Transit bu yapının önümüzdeki dönemde hangi fırsat ve baskı alanlarıyla çalışacağını daha görünür kılar." %}
+    {% set next_product_route = "/reports/order/annual_transit" %}
+    {% set next_product_cta = t("common.cta_analysis_continue") %}
+    {% set next_product_reason = "Temel harita okumasından sonra en doğal genişleme, aynı yapıyı zamanlama bağlamında değerlendirmektir." %}
+{% elif access.can_view_full_report and report_type_value == "career" %}
+    {% set next_product_key = "consultation_after_career" %}
+    {% set next_product_title = t("common.consultation_full_name") %}
+    {% set next_product_label = "Karar ve yön sentezi" %}
+    {% set next_product_text = "Kariyer raporu profesyonel potansiyeli gösterir. Eğer bu okuma somut bir karar, geçiş ya da zamanlama sorusu doğurduysa, birebir danışmanlık en güçlü devam yoludur." %}
+    {% set next_product_route = "/personal-consultation" %}
+    {% set next_product_cta = t("common.cta_personal_consultation") %}
+    {% set next_product_reason = "Kariyer temaları çoğu zaman kişisel bağlam ve soru-cevap gerektirdiği için danışmanlık bu noktada daha yüksek değer üretir." %}
+{% elif access.can_view_full_report and report_type_value == "parent_child" %}
+    {% set next_product_key = "second_child_report" %}
+    {% set next_product_title = "Ebeveyn-Çocuk" %}
+    {% set next_product_label = "Aile içi ikinci okuma" %}
+    {% set next_product_text = "Bu rapor tek çocukla kurulan dinamiği hassas biçimde okur. Birden fazla çocuk varsa, her çocuğun mizacı ve iletişim ihtiyacı ayrı değerlendirildiğinde tablo daha sağlıklı genişler." %}
+    {% set next_product_route = "/reports/parent-child" %}
+    {% set next_product_cta = t("common.cta_analysis_continue") %}
+    {% set next_product_reason = "Ebeveyn-çocuk bağlamında en güvenli genişleme, genelleme yapmak yerine her çocuk için ayrı harita okumaktır." %}
+{% endif %}
 {# Alternate CTA variants for future testing:
    "Get Your Complete Report"
    "See Your Full Insights"
 #}
-{% set unlock_primary_label = t("result.unlock_full_child_report", ui_lang) if is_parent_child_report else t("result.unlock_full_reading", ui_lang) %}
+{% set unlock_primary_label = ("Beta erişimi aç" if ui_lang == "tr" else "Unlock beta access") if access.checkout_mode == "beta" and access.purchase_cta_label is defined else (t("result.unlock_full_child_report", ui_lang) if is_parent_child_report else t("result.unlock_full_reading", ui_lang)) %}
 {% set unlock_secondary_label = unlock_primary_label %}
 {% set unlock_tertiary_label = unlock_primary_label %}
 {% set unlock_quaternary_label = unlock_primary_label %}
 
 <section class="page-section">
     <div class="container">
-        <div class="glass-card card-pad">
-            <div class="hero-shell">
+        <div class="glass-card card-pad result-hero-card">
+            <div class="hero-shell {{ 'hero-shell--parent' if is_parent_child_report else 'hero-shell--personal' }}">
                 {% if revisit.get("is_revisit") %}
                 <div class="chip-row">
                     <span class="chip">From your previous reading</span>
@@ -202,7 +736,7 @@
                     <span class="chip">Viewed {{ revisit.get("days_since_view") }} days ago</span>
                     {% endif %}
                     {% if revisit.get("recommendation_feedback_count") %}
-                    <span class="chip">You already saved some guidance</span>
+                    <span class="chip">{{ "Bazı rehberlik notlarını zaten kaydettiniz" if ui_lang == "tr" else "You already saved some guidance" }}</span>
                     {% endif %}
                 </div>
                 {% endif %}
@@ -233,21 +767,32 @@
                         <h1 class="hero-title" data-result-text="hero_title">
                             {% if is_parent_child_report %}
                                 {{ t("result.hero_parent_child_title", ui_lang) }}
-                            {% elif primary_recommendation %}
-                                {{ primary_recommendation.title }}
-                            {% elif primary_anchor %}
-                                {{ primary_anchor.title }}
                             {% else %}
-                                Bu donemin ana temasi
+                                Haritanız bu dönemde önemli bir yön gösteriyor
                             {% endif %}
                         </h1>
+                        {% if not is_parent_child_report %}
+                        <p class="hero-summary">
+                            Bu ekran haritanızdaki ilk katmanı görünür kılar. Daha derin analizde zamanlama, bağlam ve karar stratejisi kişisel sorularınızla birlikte ele alınır.
+                        </p>
+                        <div class="result-current-signal">
+                            <strong>Bu okumada öne çıkan sinyal</strong>
+                            {% if primary_recommendation %}
+                                {{ primary_recommendation.title }}. {{ primary_recommendation.reasoning }}
+                            {% elif primary_anchor %}
+                                {{ primary_anchor.title }}. {{ primary_anchor.summary }}
+                            {% else %}
+                                <span data-dynamic="hero_area">{{ dominant_life_area }}</span> alanındaki vurgu, bu dönemin kararlarını daha bilinçli ele almanız için güçlü bir başlangıç noktası sunar.
+                            {% endif %}
+                        </div>
+                        {% endif %}
                         <p class="hero-summary">
                             {% if is_parent_child_report %}
                                 {{ t("result.hero_parent_child_summary", ui_lang) }}
                                 {% if child_profile_report.temperament %} {{ child_profile_report.temperament }}{% endif %}
                                 {% if relationship_dynamics_report.emotional_compatibility %} {{ relationship_dynamics_report.emotional_compatibility }}{% endif %}
                             {% elif primary_recommendation %}
-                                This period asks for a more deliberate approach. {{ primary_recommendation.reasoning }}
+                                Bu dönem daha bilinçli ve planlı bir yaklaşım ister. {{ primary_recommendation.reasoning }}
                             {% elif primary_anchor %}
                                 {{ primary_anchor.summary }} {% if primary_anchor.why_it_matters %}{{ primary_anchor.why_it_matters }}{% endif %}
                             {% else %}
@@ -263,9 +808,9 @@
                             {% if is_parent_child_report %}
                                 {{ t("result.hero_parent_child_microcopy", ui_lang) }}
                             {% elif primary_anchor %}
-                                {{ primary_anchor.title }} currently sets the tone for your decisions, energy, and timing.
+                                {{ primary_anchor.title }} şu anda kararlarınızın, enerjinizin ve zamanlama duygunuzun ana tonunu belirliyor.
                             {% else %}
-                                Based on your chart timing, the strongest emphasis is currently around <span data-dynamic="hero_area">{{ dominant_life_area }}</span>.
+                                Haritanızdaki zamanlama vurgusuna göre en güçlü odak şu anda <span data-dynamic="hero_area">{{ dominant_life_area }}</span> alanında yoğunlaşıyor.
                             {% endif %}
                         </p>
                         <div class="hero-value-signal">
@@ -286,11 +831,12 @@
                         </div>
                         {% endif %}
                         <div class="hero-actions">
+                            <a class="btn btn-primary" href="/personal-consultation">{{ t("common.cta_personal_consultation") }}</a>
                             {% if access.is_preview %}
                                 {% if access.can_unlock_here and generated_report_id and access.show_unlock_cta %}
-                                <button class="btn btn-primary" id="unlock-report-btn" type="button" data-checkout-mode="{{ access.checkout_mode }}" data-unlock-report-btn>{{ unlock_primary_label }}</button>
+                                <button class="btn btn-secondary" id="unlock-report-btn" type="button" data-checkout-mode="{{ access.checkout_mode }}" data-unlock-report-btn>{{ unlock_primary_label }}</button>
                                 {% elif access.show_login_hint %}
-                                <a class="btn btn-primary" href="/login">{{ unlock_primary_label }}</a>
+                                <a class="btn btn-secondary" href="/login">{{ unlock_primary_label }}</a>
                                 {% endif %}
                                 <span class="premium-note">{{ t("result.instant_access_child", ui_lang) if is_parent_child_report else t("result.instant_access_personal", ui_lang) }}</span>
                             {% endif %}
@@ -347,6 +893,56 @@
     </div>
 </section>
 
+<section class="page-section" style="padding-top:0;">
+    <div class="container">
+        <div class="consultation-bridge">
+            <div class="section-kicker">İlk katman tamamlandı</div>
+            <h2>Bu sonuç güçlü bir başlangıçtır.</h2>
+            <p>
+                Burada gördüğünüz yorum, haritanızdaki ana temaları ve dikkat çeken göstergeleri görünür kılar.
+                Kişisel danışmanlık ise bu verileri zamanlama, öncelik ve sizin gerçek sorularınızla birlikte derinleştirir.
+            </p>
+            <div class="consultation-progression">
+                <span class="consultation-dot" aria-hidden="true"></span>
+                <span><strong>Doğal sonraki adım:</strong> Eğer bu okuma kariyer, ilişki, yön değişimi veya zamanlama konusunda bir soruyu tetiklediyse, danışmanlık bu sonucu daha uygulanabilir bir çerçeveye taşır.</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="page-section" style="padding-top:0;">
+    <div class="container">
+        <div class="consultation-bridge">
+            <div class="section-kicker">Sınırları bilmek güven verir</div>
+            <h2>Bu sonuç neyi gösterir, neyi göstermez?</h2>
+            <div class="consultation-comparison">
+                <div class="consultation-compare-column">
+                    <h3>Bu sonuçta netleşenler</h3>
+                    <ul class="consultation-list">
+                        <li>Ana temalar ve öne çıkan yaşam alanları</li>
+                        <li>Dikkat çeken astrolojik göstergeler</li>
+                        <li>İlk farkındalık ve karar alanları</li>
+                        <li>Karar alırken dikkate alınabilecek ilk yön işaretleri</li>
+                    </ul>
+                </div>
+                <div class="consultation-compare-column">
+                    <h3>Danışmanlıkta derinleşenler</h3>
+                    <ul class="consultation-list">
+                        <li>Zamanlama ve dönemsel analiz</li>
+                        <li>Kariyer, ilişki veya geçiş dönemlerine özel karar desteği</li>
+                        <li>Risk ve fırsat pencerelerinin kişisel bağlama göre yorumlanması</li>
+                        <li>Haritanızın tek bir soruya odaklanan stratejik sentezi</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="conversion-actions">
+                <a class="btn btn-primary" href="/personal-consultation">{{ t("common.cta_detailed_analysis") }}</a>
+                <span class="premium-note">Raporu okumaya devam edebilir, hazır olduğunuzda analizi danışmanlıkla derinleştirebilirsiniz.</span>
+            </div>
+        </div>
+    </div>
+</section>
+
 {% if access.unlock_success %}
 <section class="page-section" style="padding-top:0;">
     <div class="container">
@@ -360,7 +956,7 @@
 {% if checkout_notice %}
 <section class="page-section" style="padding-top:0;">
     <div class="container">
-        <div class="glass-card soft card-pad">
+        <div class="glass-card soft card-pad result-soft-card">
             <p class="premium-note">{{ checkout_notice }}</p>
         </div>
     </div>
@@ -370,7 +966,7 @@
 {% if access.is_preview %}
 <section class="page-section" style="padding-top:0;">
     <div class="container">
-        <div class="premium-value-card">
+        <div class="premium-value-card result-conversion-card">
             <div class="row-between">
                 <div>
                     <div class="premium-status">{{ access.access_label }}</div>
@@ -409,7 +1005,7 @@
 {% if is_parent_child_report %}
 <section class="page-section" style="padding-top:0;">
     <div class="container">
-        <div class="glass-card card-pad">
+        <div class="glass-card card-pad result-section-card result-section-card--wide result-child-card">
             <div class="row-between">
                 <div>
                     <h2 class="section-title">{{ t("result.parent_child_section_title", ui_lang) }}</h2>
@@ -529,7 +1125,7 @@
 {% if revisit.get("has_followup_banner") %}
 <section class="page-section" style="padding-top:0;">
     <div class="container">
-        <div class="glass-card soft card-pad">
+        <div class="glass-card soft card-pad result-soft-card">
             <div class="row-between">
                 <div>
                     <h3 class="card-title" style="margin:0;">Some guidance from this report may be ready to revisit</h3>
@@ -551,11 +1147,11 @@
 {% if recommendation_layer and recommendation_layer.top_recommendations and (not is_parent_child_report or access.can_view_full_report) %}
 <section class="page-section">
     <div class="container">
-        <div class="glass-card card-pad">
+        <div class="glass-card card-pad result-section-card result-section-card--wide">
             <div class="row-between">
                 <div>
-                    <h2 class="section-title">Recommended Focus Now</h2>
-                    <p class="section-lead">Start here first. These are the clearest actions and timing cues suggested by your current chart emphasis.</p>
+                    <h2 class="section-title">{{ "Şu Anki Önerilen Odak" if ui_lang == "tr" else "Recommended Focus Now" }}</h2>
+                    <p class="section-lead">{{ "Önce buradan başlayın. Bunlar mevcut harita vurgunuzun gösterdiği en net aksiyon ve zamanlama ipuçlarıdır." if ui_lang == "tr" else "Start here first. These are the clearest actions and timing cues suggested by your current chart emphasis." }}</p>
                 </div>
             </div>
             <div class="recommendation-stack">
@@ -565,59 +1161,59 @@
                         <div>
                             <div class="advisory-meta">
                                 <span class="time-chip">{{ item.time_window }}</span>
-                                <span class="priority-dot">{{ item.priority|title }} priority</span>
+                                <span class="priority-dot">{{ item.priority_label if item.priority_label is defined else (("Yüksek öncelik" if item.priority == "high" else ("Düşük öncelik" if item.priority == "low" else "Orta öncelik")) if ui_lang == "tr" else (item.priority|title ~ " priority")) }}</span>
                             </div>
                             <h3 class="card-title">{{ item.title }}</h3>
                         </div>
                         <div class="report-pill-row">
                             <span class="report-pill">
                                 {% if item.type == "avoidance" %}
-                                    Avoid for now
+                                    {{ "Şimdilik yavaşlat" if ui_lang == "tr" else "Avoid for now" }}
                                 {% elif item.type == "timing" %}
-                                    Timing matters
+                                    {{ "Zamanlama önemli" if ui_lang == "tr" else "Timing matters" }}
                                 {% elif item.type == "focus" %}
-                                    Focus area
+                                    {{ "Odak alanı" if ui_lang == "tr" else "Focus area" }}
                                 {% else %}
-                                    Recommended action
+                                    {{ "Önerilen adım" if ui_lang == "tr" else "Recommended action" }}
                                 {% endif %}
                             </span>
                         </div>
                     </div>
                     <p class="advisory-copy">{{ item.reasoning }}</p>
                     {% if item.linked_anchors %}
-                    <p class="feedback-note">Why now: this guidance is closely tied to <strong>{{ item.linked_anchors[0].title }}</strong>.</p>
+                    <p class="feedback-note">{{ "Neden şimdi:" if ui_lang == "tr" else "Why now:" }} {{ "bu rehberlik" if ui_lang == "tr" else "this guidance is closely tied to" }} <strong>{{ item.linked_anchors[0].title }}</strong>{{ " odağıyla yakından bağlantılıdır." if ui_lang == "tr" else "." }}</p>
                     {% endif %}
                     {% if loop.index in saved_recommendation_indices %}
-                    <p class="feedback-note">Saved. You already marked this recommendation as useful for revisit.</p>
+                    <p class="feedback-note">{{ "Kaydedildi. Bu öneriyi daha sonra dönmek üzere faydalı olarak işaretlediniz." if ui_lang == "tr" else "Saved. You already marked this recommendation as useful for revisit." }}</p>
                     {% endif %}
                     {% if generated_report_id %}
                     <form class="recommendation-feedback" data-recommendation-feedback-form data-report-id="{{ generated_report_id }}" data-recommendation-index="{{ loop.index }}" {% if loop.index in saved_recommendation_indices %}data-feedback-saved="true"{% endif %}>
                         <div>
-                            <div class="metric-label">Was this helpful?</div>
+                            <div class="metric-label">{{ "Bu faydalı oldu mu?" if ui_lang == "tr" else "Was this helpful?" }}</div>
                             <div class="feedback-labels">
-                                <button type="button" class="feedback-choice" data-recommendation-label="very_useful">Very useful</button>
-                                <button type="button" class="feedback-choice" data-recommendation-label="makes_sense">Makes sense</button>
-                                <button type="button" class="feedback-choice" data-recommendation-label="not_useful">Not useful</button>
-                                <button type="button" class="feedback-choice" data-recommendation-label="not_relevant">Not relevant</button>
+                                <button type="button" class="feedback-choice" data-recommendation-label="very_useful">{{ "Çok faydalı" if ui_lang == "tr" else "Very useful" }}</button>
+                                <button type="button" class="feedback-choice" data-recommendation-label="makes_sense">{{ "Anlamlı" if ui_lang == "tr" else "Makes sense" }}</button>
+                                <button type="button" class="feedback-choice" data-recommendation-label="not_useful">{{ "Faydalı değil" if ui_lang == "tr" else "Not useful" }}</button>
+                                <button type="button" class="feedback-choice" data-recommendation-label="not_relevant">{{ "İlgili değil" if ui_lang == "tr" else "Not relevant" }}</button>
                             </div>
                         </div>
                         <input type="hidden" name="user_feedback_label" value="">
                         <div class="feedback-toggles">
-                            <label><input type="checkbox" name="acted_on" value="1"> I will act on this</label>
-                            <label><input type="checkbox" name="already_acted" value="1"> I already did this</label>
-                            <label><input type="checkbox" name="saved_for_later" value="1"> Save for later</label>
+                            <label><input type="checkbox" name="acted_on" value="1"> {{ "Buna göre hareket edeceğim" if ui_lang == "tr" else "I will act on this" }}</label>
+                            <label><input type="checkbox" name="already_acted" value="1"> {{ "Bunu zaten yaptım" if ui_lang == "tr" else "I already did this" }}</label>
+                            <label><input type="checkbox" name="saved_for_later" value="1"> {{ "Daha sonrası için kaydet" if ui_lang == "tr" else "Save for later" }}</label>
                         </div>
                         <div class="feedback-inline">
                             <select name="user_rating">
-                                <option value="">Usefulness</option>
+                                <option value="">{{ "Fayda düzeyi" if ui_lang == "tr" else "Usefulness" }}</option>
                                 <option value="5">5</option>
                                 <option value="4">4</option>
                                 <option value="3">3</option>
                                 <option value="2">2</option>
                                 <option value="1">1</option>
                             </select>
-                            <textarea name="free_text_comment" maxlength="400" placeholder="Optional note"></textarea>
-                            <button type="submit" class="btn btn-secondary">Save</button>
+                            <textarea name="free_text_comment" maxlength="400" placeholder='{{ "İsteğe bağlı not" if ui_lang == "tr" else "Optional note" }}'></textarea>
+                            <button type="submit" class="btn btn-secondary">{{ "Kaydet" if ui_lang == "tr" else "Save" }}</button>
                         </div>
                         <div class="feedback-status" aria-live="polite"></div>
                     </form>
@@ -626,8 +1222,8 @@
                 {% endfor %}
                 {% if access.is_preview and has_locked_recommendations %}
                 <div class="locked-teaser-card">
-                    <div class="premium-status">Full continuation</div>
-                    <p class="locked-copy">Unlock the full interpretation to continue into the recommendation layer that clarifies what to act on now, what to pace carefully, and why timing matters.</p>
+                    <div class="premium-status">{{ "Tam devam katmanı" if ui_lang == "tr" else "Full continuation" }}</div>
+                    <p class="locked-copy">{{ "Şimdi neye göre hareket edeceğinizi, neyi daha temkinli ilerleteceğinizi ve zamanlamanın neden önemli olduğunu görmek için tam yorumu açın." if ui_lang == "tr" else "Unlock the full interpretation to continue into the recommendation layer that clarifies what to act on now, what to pace carefully, and why timing matters." }}</p>
                     <div class="locked-shell">
                         <div class="blur-line"></div>
                         <div class="blur-line short"></div>
@@ -639,26 +1235,26 @@
             {% if access.can_view_full_report %}
             <div class="grid-2" style="margin-top:22px;">
                 <div class="metric-card">
-                    <div class="metric-label">Opportunity windows</div>
+                    <div class="metric-label">{{ "Fırsat pencereleri" if ui_lang == "tr" else "Opportunity windows" }}</div>
                     <div class="window-list">
                         {% if visible_opportunity_windows %}
                         {% for item in visible_opportunity_windows %}
                         <div class="muted">{{ item.title }} • {{ item.time_window }}</div>
                         {% endfor %}
                         {% else %}
-                        <div class="muted">No dedicated opportunity window stands out beyond the main focus recommendations.</div>
+                        <div class="muted">{{ "Ana odak önerilerinin dışında ayrı ve baskın bir fırsat penceresi öne çıkmıyor." if ui_lang == "tr" else "No dedicated opportunity window stands out beyond the main focus recommendations." }}</div>
                         {% endif %}
                     </div>
                 </div>
                 <div class="metric-card">
-                    <div class="metric-label">Risk windows</div>
+                    <div class="metric-label">{{ "Risk pencereleri" if ui_lang == "tr" else "Risk windows" }}</div>
                     <div class="window-list">
                         {% if visible_risk_windows %}
                         {% for item in visible_risk_windows %}
                         <div class="muted">{{ item.title }} • {{ item.time_window }}</div>
                         {% endfor %}
                         {% else %}
-                        <div class="muted">No concentrated risk window is stronger than the main recommendation set.</div>
+                        <div class="muted">{{ "Ana öneri setinden daha güçlü ayrı bir risk penceresi görünmüyor." if ui_lang == "tr" else "No concentrated risk window is stronger than the main recommendation set." }}</div>
                         {% endif %}
                     </div>
                 </div>
@@ -666,16 +1262,16 @@
             {% elif access.is_preview %}
             <div class="grid-2" style="margin-top:22px;">
                 <div class="locked-teaser-card">
-                    <div class="metric-label">Opportunity windows</div>
-                    <p class="locked-copy">Unlock to see where momentum is opening and which windows are worth acting on.</p>
+                    <div class="metric-label">{{ "Fırsat pencereleri" if ui_lang == "tr" else "Opportunity windows" }}</div>
+                    <p class="locked-copy">{{ "İvmenin nerede açıldığını ve hangi pencerelerin değerlendirmeye değer olduğunu görmek için kilidi açın." if ui_lang == "tr" else "Unlock to see where momentum is opening and which windows are worth acting on." }}</p>
                     <div class="locked-shell">
                         <div class="blur-line"></div>
                         <div class="blur-line short"></div>
                     </div>
                 </div>
                 <div class="locked-teaser-card">
-                    <div class="metric-label">Risk windows</div>
-                    <p class="locked-copy">Unlock to reveal the periods that deserve more pacing, protection, or restraint.</p>
+                    <div class="metric-label">{{ "Risk pencereleri" if ui_lang == "tr" else "Risk windows" }}</div>
+                    <p class="locked-copy">{{ "Daha fazla tempo kontrolü, koruma veya ölçülülük isteyen dönemleri görmek için kilidi açın." if ui_lang == "tr" else "Unlock to reveal the periods that deserve more pacing, protection, or restraint." }}</p>
                     <div class="locked-shell">
                         <div class="blur-line"></div>
                         <div class="blur-line short"></div>
@@ -700,70 +1296,87 @@
 </section>
 {% endif %}
 
+<section class="page-section" style="padding-top:0;">
+    <div class="container">
+        <div class="consultation-bridge consultation-bridge--strong">
+            <div class="section-kicker">Okumayı kişisel stratejiye çevirin</div>
+            <h2>Bu yorum size yön gösterir; danışmanlık bunu kişisel karara dönüştürür.</h2>
+            <p>
+                Özellikle kariyer, ilişki, taşınma, yeni başlangıçlar veya belirsiz zamanlama soruları varsa,
+                kişisel analiz “ne görünüyor?” sorusunu “bunu nasıl kullanmalıyım?” sorusuyla birleştirir.
+            </p>
+            <div class="conversion-actions">
+                <a class="btn btn-primary" href="/personal-consultation">{{ t("common.cta_detailed_analysis") }}</a>
+                <span class="premium-note">90 dakikalık özel danışmanlık, bu sonucun arkasındaki bağlamı daha net açar.</span>
+            </div>
+        </div>
+    </div>
+</section>
+
 {% if top_anchors and (not is_parent_child_report or access.can_view_full_report) %}
 <section class="page-section">
     <div class="container">
-        <div class="glass-card card-pad">
-            <h2 class="section-title">Top Interpretation Themes</h2>
-            <p class="section-lead">This is the story of your current phase. Each theme below explains why this period feels the way it does and where it is trying to move you.</p>
+        <div class="glass-card card-pad result-section-card result-section-card--wide">
+            <h2 class="section-title">{{ "Öne Çıkan Yorum Temaları" if ui_lang == "tr" else "Top Interpretation Themes" }}</h2>
+            <p class="section-lead">{{ "Bu bölüm mevcut dönemin ana hikayesini özetler. Her tema, bu sürecin neden böyle hissettirdiğini ve sizi hangi yöne çağırdığını açıklar." if ui_lang == "tr" else "This is the story of your current phase. Each theme below explains why this period feels the way it does and where it is trying to move you." }}</p>
             <div class="anchor-grid">
                 {% for anchor in visible_anchors %}
                 <div class="advisory-card anchor-card" data-anchor-card data-anchor-rank="{{ anchor.rank }}">
                     <div class="report-pill-row">
                         <span class="anchor-rank">{{ anchor.rank }}</span>
-                        <span class="report-pill">Current theme</span>
+                        <span class="report-pill">{{ "Mevcut tema" if ui_lang == "tr" else "Current theme" }}</span>
                     </div>
                     <div class="anchor-story">
                         <h3 class="card-title">{{ anchor.title }}</h3>
                         <p class="anchor-summary">{{ anchor.summary }}</p>
                         {% if anchor.why_it_matters %}
-                        <p class="anchor-why"><strong>Why this matters:</strong> {{ anchor.why_it_matters }}</p>
+                        <p class="anchor-why"><strong>{{ "Neden önemli:" if ui_lang == "tr" else "Why this matters:" }}</strong> {{ anchor.why_it_matters }}</p>
                         {% endif %}
                         {% if anchor.opportunity %}
-                        <p class="muted" style="margin:0;"><strong>Opportunity:</strong> {{ anchor.opportunity }}</p>
+                        <p class="muted" style="margin:0;"><strong>{{ "Fırsat:" if ui_lang == "tr" else "Opportunity:" }}</strong> {{ anchor.opportunity }}</p>
                         {% endif %}
                         {% if anchor.risk %}
-                        <p class="muted" style="margin:0;"><strong>Watch for:</strong> {{ anchor.risk }}</p>
+                        <p class="muted" style="margin:0;"><strong>{{ "Dikkat:" if ui_lang == "tr" else "Watch for:" }}</strong> {{ anchor.risk }}</p>
                         {% endif %}
                         {% if anchor.rank in saved_anchor_ranks %}
-                        <p class="feedback-note">Saved. You already shared feedback on this theme.</p>
+                        <p class="feedback-note">{{ "Kaydedildi. Bu tema için daha önce geri bildirim paylaştınız." if ui_lang == "tr" else "Saved. You already shared feedback on this theme." }}</p>
                         {% endif %}
                     </div>
                     {% if generated_report_id %}
                     <form class="anchor-feedback" data-feedback-form data-report-id="{{ generated_report_id }}" data-anchor-rank="{{ anchor.rank }}" {% if anchor.rank in saved_anchor_ranks %}data-feedback-saved="true"{% endif %}>
                         <div>
-                            <div class="metric-label">Did this feel relevant?</div>
+                            <div class="metric-label">{{ "Bu size ilgili geldi mi?" if ui_lang == "tr" else "Did this feel relevant?" }}</div>
                             <div class="feedback-labels">
-                                <button type="button" class="feedback-choice" data-feedback-label="very_helpful">Very helpful</button>
-                                <button type="button" class="feedback-choice" data-feedback-label="accurate">Felt accurate</button>
-                                <button type="button" class="feedback-choice" data-feedback-label="too_generic">Too general</button>
-                                <button type="button" class="feedback-choice" data-feedback-label="not_relevant">Not relevant</button>
+                                <button type="button" class="feedback-choice" data-feedback-label="very_helpful">{{ "Çok faydalı" if ui_lang == "tr" else "Very helpful" }}</button>
+                                <button type="button" class="feedback-choice" data-feedback-label="accurate">{{ "Doğru hissettirdi" if ui_lang == "tr" else "Felt accurate" }}</button>
+                                <button type="button" class="feedback-choice" data-feedback-label="too_generic">{{ "Fazla genel" if ui_lang == "tr" else "Too general" }}</button>
+                                <button type="button" class="feedback-choice" data-feedback-label="not_relevant">{{ "İlgili değil" if ui_lang == "tr" else "Not relevant" }}</button>
                             </div>
                         </div>
                         <input type="hidden" name="feedback_label" value="">
                         <div class="feedback-inline">
                             <select name="user_rating">
-                                <option value="">Usefulness</option>
+                                <option value="">{{ "Fayda düzeyi" if ui_lang == "tr" else "Usefulness" }}</option>
                                 <option value="5">5</option>
                                 <option value="4">4</option>
                                 <option value="3">3</option>
                                 <option value="2">2</option>
                                 <option value="1">1</option>
                             </select>
-                            <textarea name="free_text_comment" maxlength="400" placeholder="Optional note"></textarea>
-                            <button type="submit" class="btn btn-secondary">Save</button>
+                            <textarea name="free_text_comment" maxlength="400" placeholder='{{ "İsteğe bağlı not" if ui_lang == "tr" else "Optional note" }}'></textarea>
+                            <button type="submit" class="btn btn-secondary">{{ "Kaydet" if ui_lang == "tr" else "Save" }}</button>
                         </div>
                         <div class="feedback-status" aria-live="polite"></div>
                     </form>
                     {% else %}
-                    <p class="feedback-note">Feedback becomes available when this reading is saved to your account.</p>
+                    <p class="feedback-note">{{ "Geri bildirim, bu okuma hesabınıza kaydedildiğinde kullanılabilir." if ui_lang == "tr" else "Feedback becomes available when this reading is saved to your account." }}</p>
                     {% endif %}
                 </div>
                 {% endfor %}
                 {% if access.is_preview and has_locked_anchors %}
                 <div class="locked-teaser-card">
-                    <div class="premium-status">More themes inside</div>
-                    <p class="locked-copy">To see the full picture, unlock the deeper interpretation themes, why they matter now, and the opportunity versus risk pattern underneath them.</p>
+                    <div class="premium-status">{{ "İçeride daha fazla tema var" if ui_lang == "tr" else "More themes inside" }}</div>
+                    <p class="locked-copy">{{ "Tam resmi görmek için daha derin yorum temalarını, bunların neden şimdi önemli olduğunu ve altındaki fırsat-risk örüntüsünü açın." if ui_lang == "tr" else "To see the full picture, unlock the deeper interpretation themes, why they matter now, and the opportunity versus risk pattern underneath them." }}</p>
                     <div class="locked-shell">
                         <div class="blur-line"></div>
                         <div class="blur-line short"></div>
@@ -780,36 +1393,36 @@
 {% if ((recommendation_layer and (recommendation_layer.opportunity_windows or recommendation_layer.risk_windows)) or peak_window or opportunity_window or pressure_window) and (not is_parent_child_report or access.can_view_full_report) %}
 <section class="page-section">
     <div class="container">
-        <div class="glass-card card-pad">
-            <h2 class="section-title">Opportunity & Risk</h2>
-            <p class="section-lead">Keep these windows in mind when deciding what to move toward, what to protect, and where better timing may change the outcome.</p>
+        <div class="glass-card card-pad result-section-card result-section-card--wide">
+            <h2 class="section-title">{{ "Fırsat ve Risk" if ui_lang == "tr" else "Opportunity & Risk" }}</h2>
+            <p class="section-lead">{{ "Neye ilerleyeceğinizi, neyi koruyacağınızı ve daha iyi zamanlamanın sonucu nerede değiştirebileceğini değerlendirirken bu pencereleri dikkate alın." if ui_lang == "tr" else "Keep these windows in mind when deciding what to move toward, what to protect, and where better timing may change the outcome." }}</p>
             <div class="opportunity-risk-grid" style="margin-top:20px;">
                 <div class="advisory-card window-card{% if access.is_preview %} locked-shell{% endif %}">
-                    <div class="timing-date">Opportunity windows</div>
+                    <div class="timing-date">{{ "Fırsat pencereleri" if ui_lang == "tr" else "Opportunity windows" }}</div>
                     {% if access.can_view_full_report and recommendation_layer and recommendation_layer.opportunity_windows %}
                         {% for item in recommendation_layer.opportunity_windows %}
                         <div class="window-item"><strong>{{ item.title }}</strong><br>{{ item.time_window }}</div>
                         {% endfor %}
                     {% elif access.can_view_full_report and opportunity_window %}
-                        <div class="window-item"><strong>{{ opportunity_window.label if opportunity_window.label is defined else "Opening period" }}</strong><br>{% if opportunity_window.start is defined and opportunity_window.end is defined %}{{ opportunity_window.start }} - {{ opportunity_window.end }}{% else %}A growth-supportive period is building.{% endif %}</div>
+                        <div class="window-item"><strong>{{ opportunity_window.label if opportunity_window.label is defined else ("Açılım dönemi" if ui_lang == "tr" else "Opening period") }}</strong><br>{% if opportunity_window.start is defined and opportunity_window.end is defined %}{{ opportunity_window.start }} - {{ opportunity_window.end }}{% else %}{{ "Büyümeyi destekleyen bir dönem oluşuyor." if ui_lang == "tr" else "A growth-supportive period is building." }}{% endif %}</div>
                     {% elif access.is_preview %}
-                        <div class="window-item">Unlock to reveal the fuller opportunity map and the windows where momentum is more supportive.</div>
+                        <div class="window-item">{{ "Daha geniş fırsat haritasını ve ivmenin daha destekleyici olduğu pencereleri görmek için kilidi açın." if ui_lang == "tr" else "Unlock to reveal the fuller opportunity map and the windows where momentum is more supportive." }}</div>
                     {% else %}
-                        <div class="window-item">The main opportunities are already reflected in your priority recommendations above.</div>
+                        <div class="window-item">{{ "Ana fırsatlar yukarıdaki öncelikli önerilerde zaten yansıtılıyor." if ui_lang == "tr" else "The main opportunities are already reflected in your priority recommendations above." }}</div>
                     {% endif %}
                 </div>
                 <div class="advisory-card window-card{% if access.is_preview %} locked-shell{% endif %}">
-                    <div class="timing-date">Risk windows</div>
+                    <div class="timing-date">{{ "Risk pencereleri" if ui_lang == "tr" else "Risk windows" }}</div>
                     {% if access.can_view_full_report and recommendation_layer and recommendation_layer.risk_windows %}
                         {% for item in recommendation_layer.risk_windows %}
                         <div class="window-item"><strong>{{ item.title }}</strong><br>{{ item.time_window }}</div>
                         {% endfor %}
                     {% elif access.can_view_full_report and pressure_window %}
-                        <div class="window-item"><strong>{{ pressure_window.label if pressure_window.label is defined else "Pressure period" }}</strong><br>{% if pressure_window.start is defined and pressure_window.end is defined %}{{ pressure_window.start }} - {{ pressure_window.end }}{% else %}This is a period to move with more care and pacing.{% endif %}</div>
+                        <div class="window-item"><strong>{{ pressure_window.label if pressure_window.label is defined else ("Baskı dönemi" if ui_lang == "tr" else "Pressure period") }}</strong><br>{% if pressure_window.start is defined and pressure_window.end is defined %}{{ pressure_window.start }} - {{ pressure_window.end }}{% else %}{{ "Bu dönem daha dikkatli ve kontrollü ilerlemeyi ister." if ui_lang == "tr" else "This is a period to move with more care and pacing." }}{% endif %}</div>
                     {% elif access.is_preview %}
-                        <div class="window-item">Unlock to see the pressure windows that call for slower pacing and cleaner decision-making.</div>
+                        <div class="window-item">{{ "Daha yavaş tempo ve daha temiz karar alma isteyen baskı pencerelerini görmek için kilidi açın." if ui_lang == "tr" else "Unlock to see the pressure windows that call for slower pacing and cleaner decision-making." }}</div>
                     {% else %}
-                        <div class="window-item">No concentrated risk window currently outweighs the main guidance above.</div>
+                        <div class="window-item">{{ "Şu anda yukarıdaki ana rehberliği gölgede bırakan yoğun bir risk penceresi görünmüyor." if ui_lang == "tr" else "No concentrated risk window currently outweighs the main guidance above." }}</div>
                     {% endif %}
                 </div>
             </div>
@@ -832,10 +1445,88 @@
 </section>
 {% endif %}
 
+<section class="page-section">
+    <div class="container">
+        <div class="consultation-bridge">
+            <div class="section-kicker">Danışmanlık neden farklıdır?</div>
+            <h2>Rapor bilgiyi verir; danışmanlık bilgiyi sizin hayatınıza yerleştirir.</h2>
+            <div class="consultation-benefit-grid">
+                <div class="consultation-benefit">
+                    <strong>Zamanlama Netliği</strong>
+                    <span>Hangi dönemde ilerlemek, beklemek veya daha dikkatli davranmak gerektiği kişisel bağlamla okunur.</span>
+                </div>
+                <div class="consultation-benefit">
+                    <strong>Kişisel Sentez</strong>
+                    <span>Haritadaki parçalar tek tek değil, sizin sorunuzun etrafında bütünlüklü şekilde yorumlanır.</span>
+                </div>
+                <div class="consultation-benefit">
+                    <strong>Stratejik İçgörü</strong>
+                    <span>Yorum, sadece farkındalık üretmekle kalmaz; karar alırken kullanabileceğiniz daha net bir çerçeve sunar.</span>
+                </div>
+                <div class="consultation-benefit">
+                    <strong>Soruya Özel Yorum</strong>
+                    <span>Kariyer, ilişki, yön değişimi veya geçiş dönemleri tek bir odak üzerinden derinleştirilir.</span>
+                </div>
+            </div>
+            <div class="consultation-progression">
+                <span class="consultation-dot" aria-hidden="true"></span>
+                <span><strong>Birçok kullanıcı bu aşamadan sonra derin yorum tercih eder.</strong> Özellikle önemli karar dönemlerinde kişisel analiz, raporda görünen temaları daha uygulanabilir ve sakin bir karar zeminine taşır.</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="page-section" style="padding-top:0;">
+    <div class="container">
+        <div class="next-product-panel">
+            <div>
+                <div class="section-kicker">Sizin için en uygun bir sonraki adım</div>
+                {% if next_product_key == "consultation" %}
+                <h2 class="section-title" style="margin-top:12px;">Buradan iki farklı şekilde devam edebilirsiniz.</h2>
+                <p class="section-lead">Bu sonuç tek bir başlığa indirgenemeyecek kadar geniş görünüyorsa, en dürüst sonraki adım seçenekleri odaklı raporları incelemek veya doğrudan birebir senteze geçmektir.</p>
+                {% else %}
+                <h2 class="section-title" style="margin-top:12px;">Bu sonuca göre en güçlü devam yolu: {{ next_product_title }}</h2>
+                <p class="section-lead">Bu öneri kesin hüküm gibi değil, mevcut sonuç bağlamını daha doğru derinleştirmek için sakin bir yönlendirme olarak düşünülmelidir.</p>
+                {% endif %}
+            </div>
+            <div class="next-product-grid">
+                <article class="next-product-card next-product-card--primary">
+                    <div class="next-product-label">{{ next_product_label }}</div>
+                    <h3>{{ next_product_title }}</h3>
+                    <p>{{ next_product_text }}</p>
+                    <p><strong style="color:var(--gold-light);">Neden bu öneri?</strong><br>{{ next_product_reason }}</p>
+                    <div class="next-product-actions">
+                        <a class="btn btn-primary" href="{{ next_product_route }}">{{ next_product_cta }}</a>
+                    </div>
+                </article>
+                {% if next_product_key == "consultation" %}
+                <article class="next-product-card">
+                    <div class="next-product-label">Odaklı rapor yolu</div>
+                    <h3>Rapor koleksiyonunu inceleyin</h3>
+                    <p>Tek bir alan öne çıkıyorsa Doğum Haritası Karma’sı, Yıllık Transit, Kariyer veya Ebeveyn-Çocuk raporlarından biri daha doğru başlangıç olabilir.</p>
+                    <div class="next-product-actions">
+                        <a class="btn btn-secondary" href="/reports">{{ t("common.cta_analysis_continue") }}</a>
+                    </div>
+                </article>
+                {% else %}
+                <article class="next-product-card">
+                    <div class="next-product-label">Daha derin seçenek</div>
+                    <h3>{{ t("common.consultation_full_name") }}</h3>
+                    <p>Birden fazla soru aynı anda aktifse veya karar kişisel bağlam gerektiriyorsa, 60 dk birebir vedik astroloji danışmanlığı rapor bilgisini daha geniş bir senteze taşır.</p>
+                    <div class="next-product-actions">
+                        <a class="btn btn-secondary" href="/personal-consultation">{{ t("common.cta_personal_consultation") }}</a>
+                    </div>
+                </article>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</section>
+
 {% if related_articles %}
 <section class="page-section" style="padding-top:0;">
     <div class="container">
-        <div class="glass-card card-pad">
+        <div class="glass-card card-pad result-section-card result-section-card--support">
             <div class="row-between">
                 <div>
                     <h2 class="section-title">{{ t("result.related_title", ui_lang) }}</h2>
@@ -860,10 +1551,15 @@
 
 <section class="page-section">
     <div class="container">
-        <div class="glass-card card-pad">
-            <div class="row-between">
-                <h2 class="section-title" data-result-text="ai_title">AI Stratejik Yorum</h2>
-                <div style="display:flex; gap:12px; flex-wrap:wrap;">
+        <div class="glass-card card-pad result-section-card result-section-card--wide result-section-card--editorial">
+            <div class="section-header">
+                <div class="result-header-row">
+                    <div class="result-header-copy">
+                        <div class="section-kicker" data-result-text="ai_eyebrow">Daha derin yorum</div>
+                        <h2 class="section-title" data-result-text="ai_title">AI Stratejik Yorum</h2>
+                        <p class="section-lead technical-intro" data-result-text="ai_intro">Bu bölüm, okumanın üst katmanlarını daha geniş bir anlatıya dönüştürür.</p>
+                    </div>
+                    <div class="result-header-actions">
                     {% if access.can_download_pdf %}
                     <button class="btn btn-secondary" id="pdf-export-btn" type="button" data-result-text="pdf_export">PDF Olustur</button>
                     {% endif %}
@@ -871,32 +1567,33 @@
                     <button class="btn btn-secondary" id="pdf-preview-btn" type="button" data-result-text="pdf_preview">PDF Onizleme</button>
                     {% endif %}
                     {% if generated_report_id %}
-                    <a class="btn btn-secondary" href="/reports">View later</a>
+                    <a class="btn btn-secondary" href="/reports">{{ "Daha sonra görüntüle" if ui_lang == "tr" else "View later" }}</a>
                     {% endif %}
                     {% if access.can_view_full_report %}
                     <button class="btn btn-primary" id="interpret-btn" type="button" data-result-text="get_ai">Yapay Zeka Yorumu Al</button>
                     {% endif %}
+                    </div>
                 </div>
             </div>
             <div id="interpret-loading" class="muted" style="display:none; margin-top:16px;" data-result-text="loading_text">Yorum hazirlaniyor...</div>
             <div class="interpret-layout" style="margin-top:24px;">
-                <div class="glass-card soft card-pad ai-output" id="interpret-output">
+                <div class="glass-card soft card-pad ai-output ai-reading-surface" id="interpret-output">
                     {% if access.can_view_full_report %}
                     <span class="empty" data-result-text="empty_ai">Henuz yorum uretilmedi.</span>
                     {% else %}
                     <div class="locked-ai-card">
-                        <div class="premium-status">Full interpretation</div>
-                        <p class="locked-copy">The strategic AI reading stays locked in preview mode so the free experience remains useful without revealing the complete report.</p>
+                        <div class="premium-status">{{ "Tam yorum" if ui_lang == "tr" else "Full interpretation" }}</div>
+                        <p class="locked-copy">{{ "Stratejik AI yorumu önizleme modunda kilitli kalır; böylece ücretsiz deneyim faydalı olur ancak tam raporun tamamını açmaz." if ui_lang == "tr" else "The strategic AI reading stays locked in preview mode so the free experience remains useful without revealing the complete report." }}</p>
                         <div class="locked-shell">
                             <div class="blur-line"></div>
                             <div class="blur-line short"></div>
                             <div class="blur-line"></div>
                         </div>
-                        <p class="locked-copy">Continue to your complete reading to open the full interpretation and personalized PDF report.</p>
+                        <p class="locked-copy">{{ "Tam yorumu ve kişiselleştirilmiş PDF raporu açmak için tam okumaya devam edin." if ui_lang == "tr" else "Continue to your complete reading to open the full interpretation and personalized PDF report." }}</p>
                     </div>
                     {% endif %}
                 </div>
-                <div class="meta-stack">
+                <div class="meta-stack ai-context-rail">
                     <div class="metric-card"><div class="metric-label" data-result-text="tone_mode">Ton modu</div><div class="metric-value" data-dynamic="tone_mode_label_meta"></div></div>
                     <div class="metric-card"><div class="metric-label" data-result-text="timing_strategy">Zamanlama stratejisi</div><div class="metric-value" data-dynamic="timing_strategy_label_meta"></div></div>
                     <div class="metric-card"><div class="metric-label" data-result-text="primary_focus_meta">Ana alan</div><div class="metric-value" data-dynamic="primary_focus_meta">{{ primary_focus }}</div></div>
@@ -914,18 +1611,27 @@
 {% if access.can_view_full_report %}
 <section class="page-section">
     <div class="container">
-        <div class="grid-2">
-            <div class="glass-card card-pad"><h3 class="card-title" data-result-text="do_title">Yap</h3><ul class="decision-list" id="do-list"></ul></div>
-            <div class="glass-card card-pad"><h3 class="card-title" data-result-text="avoid_title">Kacin</h3><ul class="decision-list" id="avoid-list"></ul></div>
+        <div class="glass-card card-pad result-section-card result-section-card--application">
+            <div class="section-header">
+                <div class="section-kicker" data-result-text="application_eyebrow">Pratik kullanım</div>
+                <h2 class="section-title" data-result-text="application_title">Bunu günlük hayatta nasıl kullanmalı?</h2>
+                <p class="technical-intro" data-result-text="application_intro">Bu katman, okumanın ana çizgisini tempo, karar ve önceliklere çevirir.</p>
+            </div>
+            <div class="grid-2">
+                <div class="result-action-card result-action-card--do"><h3 class="card-title" data-result-text="do_title">Yap</h3><ul class="decision-list" id="do-list"></ul></div>
+                <div class="result-action-card result-action-card--avoid"><h3 class="card-title" data-result-text="avoid_title">Kacin</h3><ul class="decision-list" id="avoid-list"></ul></div>
+            </div>
         </div>
     </div>
 </section>
 {% elif access.is_preview %}
 <section class="page-section">
     <div class="container">
-        <div class="locked-teaser-card">
-            <div class="premium-status">Actionable guidance</div>
-            <p class="locked-copy">The free preview stops before the full do / avoid decision layer. Continue to your complete reading to open the full action guidance.</p>
+        <div class="glass-card card-pad result-section-card result-section-card--application">
+            <div class="locked-teaser-card">
+                <div class="premium-status">{{ "Uygulanabilir rehberlik" if ui_lang == "tr" else "Actionable guidance" }}</div>
+                <p class="locked-copy">{{ "Ücretsiz önizleme, tam yap / kaçın karar katmanından önce durur. Tam aksiyon rehberliğini açmak için okumaya devam edin." if ui_lang == "tr" else "The free preview stops before the full do / avoid decision layer. Continue to your complete reading to open the full action guidance." }}</p>
+            </div>
         </div>
     </div>
 </section>
@@ -934,7 +1640,7 @@
 {% if access.is_preview and generated_report_id %}
 <section class="page-section" style="padding-top:0;">
     <div class="container">
-        <div class="glass-card soft">
+        <div class="glass-card soft result-feedback-card">
             <div class="beta-feedback-block">
                 <div>
                     <h3 class="beta-feedback-title">{{ t("result.feedback_preview_title", ui_lang) }}</h3>
@@ -973,9 +1679,9 @@
 {% if access.is_preview %}
 <section class="page-section" style="padding-top:0;">
     <div class="container">
-        <div class="premium-value-card">
+        <div class="premium-value-card result-conversion-card">
             <div>
-                <div class="premium-status">Complete reading</div>
+                <div class="premium-status">{{ "Tam okuma" if ui_lang == "tr" else "Complete reading" }}</div>
                 <h2 class="section-title" style="margin-top:12px;">{{ t("result.final_title_child", ui_lang) if is_parent_child_report else t("result.final_title_personal", ui_lang) }}</h2>
                 <p class="premium-note">{{ t("result.final_copy_child", ui_lang) if is_parent_child_report else t("result.final_copy_personal", ui_lang) }}</p>
             </div>
@@ -1003,9 +1709,13 @@
 
 <section class="page-section">
     <div class="container">
-        <div class="glass-card card-pad">
-            <h2 class="section-title" data-result-text="basis_title">Bu yorum neye dayaniyor?</h2>
-            <div class="grid-4" style="margin-top:24px;">
+        <div class="glass-card card-pad result-section-card result-section-card--technical">
+            <div class="section-header">
+                <div class="section-kicker" data-result-text="basis_eyebrow">Okuma çerçevesi</div>
+                <h2 class="section-title" data-result-text="basis_title">Bu yorum neye dayaniyor?</h2>
+                <p class="technical-intro" data-result-text="basis_intro">Bu bölüm, yorumun hangi ana eksenlerden kurulduğunu daha hafif bir çerçevede gösterir.</p>
+            </div>
+            <div class="grid-4 technical-metric-grid">
                 <div class="metric-card"><div class="metric-label" data-result-text="dominant_life_area">Baskin yasam alani</div><div class="metric-value" data-dynamic="dominant_life_area">{{ dominant_life_area }}</div></div>
                 <div class="metric-card"><div class="metric-label" data-result-text="strongest_narrative">En guclu anlati</div><div class="metric-value" data-dynamic="dominant_narrative_basis">{{ dominant_narrative }}</div></div>
                 <div class="metric-card"><div class="metric-label" data-result-text="timing_model">Ana zamanlama modeli</div><div class="metric-value" data-dynamic="timing_strategy_label_basis"></div></div>
@@ -1017,8 +1727,12 @@
 
 <section class="page-section">
     <div class="container">
-        <div class="glass-card card-pad">
-            <h2 class="section-title" data-result-text="technical_layers">Teknik katmanlar</h2>
+        <div class="glass-card card-pad result-section-card result-section-card--technical">
+            <div class="section-header">
+                <div class="section-kicker" data-result-text="technical_eyebrow">Derin katmanlar</div>
+                <h2 class="section-title" data-result-text="technical_layers">Teknik katmanlar</h2>
+                <p class="technical-intro" data-result-text="technical_intro">İsterseniz bu bölümde hesaplamanın daha derin katmanlarını inceleyebilirsiniz. Okumanın özü için zorunlu değildir.</p>
+            </div>
             <div class="tab-buttons" style="margin-top:20px;">
                 <button class="tab-button active" type="button" data-tab="natal" data-result-text="tab_natal">Natal</button>
                 <button class="tab-button" type="button" data-tab="dasha" data-result-text="tab_dasha">Dasha</button>
@@ -1048,7 +1762,7 @@
 {% if access.can_view_full_report and generated_report_id %}
 <section class="page-section" style="padding-top:0;">
     <div class="container">
-        <div class="glass-card soft">
+        <div class="glass-card soft result-feedback-card">
             <div class="beta-feedback-block">
                 <div>
                     <h3 class="beta-feedback-title">{{ t("result.feedback_full_title", ui_lang) }}</h3>
@@ -1090,11 +1804,53 @@
 
 <section class="page-section">
     <div class="container">
-        <div class="grid-4">
-            <div class="glass-card card-pad"><h3 class="card-title" data-result-text="cta_pdf">PDF Raporu</h3><p class="muted" data-result-text="cta_pdf_text">Yazdirmaya hazir rapor onizlemesini yeni sekmede ac.</p></div>
-            <div class="glass-card card-pad"><h3 class="card-title" data-result-text="cta_share">Paylas</h3><p class="muted" data-result-text="cta_share_text">Sonucu danismanla veya kendinle paylas.</p></div>
-            <div class="glass-card card-pad"><h3 class="card-title" data-result-text="cta_guidance">Aylik rehberlik</h3><p class="muted" data-result-text="cta_guidance_text">Bu analizi duzenli icgoruye donustur.</p></div>
-            <div class="glass-card card-pad"><h3 class="card-title" data-result-text="cta_question">Yeni soru sor</h3><p class="muted" data-result-text="cta_question_text">Belirli bir alana odaklanmak icin yeni analiz baslat.</p></div>
+        <div class="consultation-bridge consultation-bridge--strong">
+            <div class="section-kicker">Sonraki derinlik</div>
+            <h2>Bu okumayı daha derin bir çerçeveye taşıyın.</h2>
+            <p>
+                Haritanızdaki bu ilk okuma önemli bir başlangıç noktasıdır. Eğer konu karar, zamanlama veya yön değişimiyle ilgiliyse,
+                kişisel danışmanlık sonucu daha bilinçli ve uygulanabilir bir çerçeveye taşır.
+            </p>
+            <div class="result-reassurance-grid">
+                <div class="result-reassurance-item">
+                    <strong>Doğum saatim net değilse?</strong>
+                    <span>Analiz yine yapılabilir; belirsizlik payı yorumun içinde daha dikkatli belirtilir.</span>
+                </div>
+                <div class="result-reassurance-item">
+                    <strong>Sadece yazılı analiz mümkün mü?</strong>
+                    <span>Evet. Görüşme zorunlu değildir; ihtiyaç derinliğine göre yazılı analizle de ilerlenebilir.</span>
+                </div>
+                <div class="result-reassurance-item">
+                    <strong>En çok hangi konularda işe yarar?</strong>
+                    <span>Kariyer, ilişki, geçiş dönemleri ve zamanlama kararlarında daha fazla netlik sağlar.</span>
+                </div>
+                <div class="result-reassurance-item">
+                    <strong>Bu rapor boşa mı çıkıyor?</strong>
+                    <span>Hayır. Danışmanlık bu raporu temel alır ve gördüğünüz temaları kişisel bağlama yerleştirir.</span>
+                </div>
+            </div>
+            <div class="conversion-actions">
+                <a class="btn btn-primary" href="/personal-consultation">{{ t("common.cta_personal_consultation") }}</a>
+                <span class="premium-note">Önemli kararları yalnızca genel yorumla değil, daha derin bağlamla değerlendirin.</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad result-section-card result-section-card--support">
+            <div class="section-header">
+                <div class="section-kicker" data-result-text="utility_eyebrow">Devam et</div>
+                <h2 class="section-title" data-result-text="utility_title">Bu okumayı yakınında tut</h2>
+                <p class="technical-intro result-utility-intro" data-result-text="utility_intro">Raporu kaydedin, yeniden açın ya da yeni bir soruyla bu okumayı genişletin.</p>
+            </div>
+            <div class="grid-4 result-utility-grid">
+                <div class="glass-card card-pad"><h3 class="card-title" data-result-text="cta_pdf">PDF Raporu</h3><p class="muted" data-result-text="cta_pdf_text">Yazdirmaya hazir rapor onizlemesini yeni sekmede ac.</p></div>
+                <div class="glass-card card-pad"><h3 class="card-title" data-result-text="cta_share">Paylas</h3><p class="muted" data-result-text="cta_share_text">Sonucu danismanla veya kendinle paylas.</p></div>
+                <div class="glass-card card-pad"><h3 class="card-title" data-result-text="cta_guidance">Aylik rehberlik</h3><p class="muted" data-result-text="cta_guidance_text">Bu analizi duzenli icgoruye donustur.</p></div>
+                <div class="glass-card card-pad"><h3 class="card-title" data-result-text="cta_question">Yeni soru sor</h3><p class="muted" data-result-text="cta_question_text">Belirli bir alana odaklanmak icin yeni analiz baslat.</p></div>
+            </div>
         </div>
     </div>
 </section>
@@ -1131,7 +1887,9 @@ const resultTranslations = {
         peak_window: "Zirve Donemi",
         opportunity_window: "Firsat Donemi",
         pressure_window: "Baski Donemi",
-        ai_title: "AI Stratejik Yorum",
+        ai_eyebrow: "Daha derin yorum",
+        ai_title: "Daha Derin Yorum",
+        ai_intro: "Bu bölüm, üstte gördüğünüz temaları daha geniş bir anlatıya dönüştürür.",
         get_ai: "Yapay Zeka Yorumu Al",
         pdf_export: "PDF Olustur",
         pdf_preview: "PDF Onizleme",
@@ -1141,14 +1899,21 @@ const resultTranslations = {
         ai_unavailable: "AI yorum servisi su anda kullanilamiyor. Lutfen GEMINI_API_KEY ayarini kontrol edip tekrar dene.",
         primary_focus_meta: "Ana alan",
         dominant_narrative: "Baskin anlati",
-        do_title: "Yap",
-        avoid_title: "Kacin",
-        basis_title: "Bu yorum neye dayaniyor?",
+        application_eyebrow: "Pratik kullanım",
+        application_title: "Bunu günlük hayatta nasıl kullanmalı?",
+        application_intro: "Bu katman, okumanın ana temasını tempo, karar ve önceliklere çevirir.",
+        do_title: "Destekleyen adımlar",
+        avoid_title: "Daha dikkatli yaklaş",
+        basis_eyebrow: "Okuma çerçevesi",
+        basis_title: "Bu yorumun dayandığı ana eksenler",
+        basis_intro: "Bu bölüm, yorumun hangi ana alanlar ve zamanlama çizgileri üzerinden kurulduğunu gösterir.",
         dominant_life_area: "Baskin yasam alani",
         strongest_narrative: "En guclu anlati",
         timing_model: "Ana zamanlama modeli",
         decision_logic: "Karar mantigi",
-        technical_layers: "Teknik katmanlar",
+        technical_eyebrow: "Derin katmanlar",
+        technical_layers: "Daha derin teknik katmanlar",
+        technical_intro: "İsterseniz bu bölümde hesaplamanın arka planına daha yakından bakabilirsiniz. Okumanın özü için zorunlu değildir.",
         tab_natal: "Natal",
         tab_dasha: "Dasha",
         tab_navamsa: "Navamsa",
@@ -1177,6 +1942,9 @@ const resultTranslations = {
         empty_navamsa: "Navamsa verisi bulunamadi.",
         empty_transits: "Transit verisi bulunamadi.",
         empty_eclipses: "Tutulma verisi bulunamadi.",
+        utility_eyebrow: "Devam et",
+        utility_title: "Bu okumayı yakınınızda tutun",
+        utility_intro: "Raporu kaydedin, tekrar dönün ya da yeni bir soruyla okumayı genişletin.",
         cta_pdf: "PDF indir",
         cta_pdf_text: "Yazdirmaya hazir rapor onizlemesini yeni sekmede ac.",
         cta_share: "Paylas",
@@ -1208,7 +1976,20 @@ const resultTranslations = {
         strategy_mixed: "Karma zamanlama modeli",
         confidence_high: "Yuksek",
         confidence_moderate: "Orta",
-        confidence_low: "Dusuk"
+        confidence_low: "Dusuk",
+        feedback_theme_saved: "Bu tema icin geri bildiriminiz zaten kaydedildi.",
+        feedback_theme_missing: "Kaydetmeden once bir ilgi secenegi isaretleyin.",
+        feedback_saving_inline: "Kaydediliyor...",
+        feedback_theme_success: "Tesekkurler - bu, gelecek yorumlarin daha ilgili olmasina yardim eder.",
+        feedback_save_error_inline: "Geri bildirim kaydedilemedi. Lutfen tekrar deneyin.",
+        feedback_recommendation_saved: "Bu oneri icin geri bildiriminiz zaten kaydedildi.",
+        feedback_recommendation_missing: "Kaydetmeden once bir fayda secenegi isaretleyin.",
+        feedback_recommendation_success: "Tesekkurler - bu, onerilerinizi gelistirmemize yardim eder.",
+        feedback_saved_button: "Kaydedildi",
+        email_missing_inline: "Bu okumayi kaydetmek icin e-postanizi girin.",
+        email_saving_inline: "Kaydediliyor...",
+        email_success_inline: "Okumaniz daha sonra bakmak uzere kaydedildi.",
+        email_error_inline: "E-posta kaydedilemedi. Lutfen tekrar deneyin."
     },
     en: {
         hero_title: "Main theme of this period",
@@ -1226,7 +2007,9 @@ const resultTranslations = {
         peak_window: "Peak Window",
         opportunity_window: "Opportunity Window",
         pressure_window: "Pressure Window",
-        ai_title: "AI Strategic Interpretation",
+        ai_eyebrow: "Deeper interpretation",
+        ai_title: "Deeper Interpretation",
+        ai_intro: "This layer turns the themes above into a wider narrative you can sit with more calmly.",
         get_ai: "Get AI Interpretation",
         pdf_export: "Create PDF",
         pdf_preview: "PDF Preview",
@@ -1236,14 +2019,21 @@ const resultTranslations = {
         ai_unavailable: "The AI interpretation service is currently unavailable. Please verify the GEMINI_API_KEY setup and try again.",
         primary_focus_meta: "Primary focus",
         dominant_narrative: "Dominant narrative",
-        do_title: "Do",
-        avoid_title: "Avoid",
-        basis_title: "What this interpretation is based on",
+        application_eyebrow: "Practical reading",
+        application_title: "How to use this in real life",
+        application_intro: "This layer translates the reading into pacing, decisions, and practical emphasis.",
+        do_title: "Supportive moves",
+        avoid_title: "Move more carefully here",
+        basis_eyebrow: "Reading framework",
+        basis_title: "What this reading is built on",
+        basis_intro: "A softer overview of the main life areas and timing logic shaping this interpretation.",
         dominant_life_area: "Dominant life area",
         strongest_narrative: "Strongest narrative",
         timing_model: "Timing model",
         decision_logic: "Decision logic",
-        technical_layers: "Technical layers",
+        technical_eyebrow: "Deeper layers",
+        technical_layers: "Deeper technical layers",
+        technical_intro: "For readers who want more depth, this section keeps the calculation layer available without making it feel like required reading.",
         tab_natal: "Natal",
         tab_dasha: "Dasha",
         tab_navamsa: "Navamsa",
@@ -1272,6 +2062,9 @@ const resultTranslations = {
         empty_navamsa: "Navamsa data is unavailable.",
         empty_transits: "Transit data is unavailable.",
         empty_eclipses: "Eclipse data is unavailable.",
+        utility_eyebrow: "Keep going",
+        utility_title: "Keep this reading close",
+        utility_intro: "Save the report, return to it later, or continue with a more focused question.",
         cta_pdf: "Download PDF",
         cta_pdf_text: "Open the print-ready report preview in a new tab.",
         cta_share: "Share",
@@ -1303,7 +2096,20 @@ const resultTranslations = {
         strategy_mixed: "Mixed timing model",
         confidence_high: "High",
         confidence_moderate: "Moderate",
-        confidence_low: "Low"
+        confidence_low: "Low",
+        feedback_theme_saved: "You already saved feedback for this theme.",
+        feedback_theme_missing: "Please choose one relevance option before saving.",
+        feedback_saving_inline: "Saving...",
+        feedback_theme_success: "Thanks - this helps us improve the relevance of future interpretations.",
+        feedback_save_error_inline: "We could not save your feedback. Please try again.",
+        feedback_recommendation_saved: "You already saved feedback for this recommendation.",
+        feedback_recommendation_missing: "Please choose one usefulness option before saving.",
+        feedback_recommendation_success: "Thanks - this helps us improve your recommendations.",
+        feedback_saved_button: "Saved",
+        email_missing_inline: "Please enter your email to save this reading.",
+        email_saving_inline: "Saving...",
+        email_success_inline: "Your reading has been saved for later.",
+        email_error_inline: "We could not save your email. Please try again."
     }
 };
 
@@ -1646,12 +2452,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (isSubmitting || !input) return;
                 const email = input.value.trim();
                 if (!email) {
-                    setCaptureStatus("Please enter your email to save this reading.", "error");
+                    setCaptureStatus(t("email_missing_inline"), "error");
                     return;
                 }
                 isSubmitting = true;
                 if (submitButton) submitButton.disabled = true;
-                setCaptureStatus("Saving...");
+                setCaptureStatus(t("email_saving_inline"));
                 try {
                     const payload = payloadEl ? JSON.parse(payloadEl.value || "{}") : {};
                     const response = await fetch("/api/v1/email-capture", {
@@ -1670,9 +2476,9 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (!response.ok || !data.ok) {
                         throw new Error((data && data.error) || "email_capture_failed");
                     }
-                    setCaptureStatus((data && data.message) || "Your reading has been saved for later.", "success");
+                    setCaptureStatus((data && data.message) || t("email_success_inline"), "success");
                 } catch (_error) {
-                    setCaptureStatus("We could not save your email. Please try again.", "error");
+                    setCaptureStatus(t("email_error_inline"), "error");
                     if (submitButton) submitButton.disabled = false;
                     isSubmitting = false;
                     return;
@@ -1859,13 +2665,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (isSaved) {
             submitButton.disabled = true;
-            submitButton.textContent = "Saved";
+            submitButton.textContent = t("feedback_saved_button");
             choices.forEach((choice) => {
                 choice.disabled = true;
             });
             if (ratingField) ratingField.disabled = true;
             if (commentField) commentField.disabled = true;
-            setFeedbackStatus("You already saved feedback for this theme.", "success");
+            setFeedbackStatus(t("feedback_theme_saved"), "success");
         }
 
         form.addEventListener("submit", async (event) => {
@@ -1874,7 +2680,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 return;
             }
             if (!hiddenLabel.value) {
-                setFeedbackStatus("Please choose one relevance option before saving.", "error");
+                setFeedbackStatus(t("feedback_theme_missing"), "error");
                 return;
             }
 
@@ -1892,7 +2698,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             isSubmitting = true;
             submitButton.disabled = true;
-            setFeedbackStatus("Saving...");
+            setFeedbackStatus(t("feedback_saving_inline"));
 
             try {
                 const response = await fetch("/api/v1/interpretation-feedback", {
@@ -1908,17 +2714,17 @@ document.addEventListener("DOMContentLoaded", () => {
                     throw new Error(data.error || "save_failed");
                 }
                 isSaved = true;
-                submitButton.textContent = "Saved";
+                submitButton.textContent = t("feedback_saved_button");
                 choices.forEach((choice) => {
                     choice.disabled = true;
                 });
                 if (ratingField) ratingField.disabled = true;
                 if (commentField) commentField.disabled = true;
-                setFeedbackStatus("Thanks — this helps us improve the relevance of future interpretations.", "success");
+                setFeedbackStatus(t("feedback_theme_success"), "success");
             } catch (_error) {
                 submitButton.disabled = false;
                 isSubmitting = false;
-                setFeedbackStatus("We could not save your feedback. Please try again.", "error");
+                setFeedbackStatus(t("feedback_save_error_inline"), "error");
                 return;
             }
 
@@ -1958,14 +2764,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (isSaved) {
             submitButton.disabled = true;
-            submitButton.textContent = "Saved";
+            submitButton.textContent = t("feedback_saved_button");
             choices.forEach((choice) => {
                 choice.disabled = true;
             });
             form.querySelectorAll("input, select, textarea").forEach((field) => {
                 field.disabled = true;
             });
-            setRecommendationStatus("You already saved feedback for this recommendation.", "success");
+            setRecommendationStatus(t("feedback_recommendation_saved"), "success");
         }
 
         form.addEventListener("submit", async (event) => {
@@ -1974,7 +2780,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 return;
             }
             if (!hiddenLabel.value) {
-                setRecommendationStatus("Please choose one usefulness option before saving.", "error");
+                setRecommendationStatus(t("feedback_recommendation_missing"), "error");
                 return;
             }
 
@@ -1994,7 +2800,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             isSubmitting = true;
             submitButton.disabled = true;
-            setRecommendationStatus("Saving...");
+            setRecommendationStatus(t("feedback_saving_inline"));
 
             try {
                 const response = await fetch("/api/v1/recommendation-feedback", {
@@ -2010,18 +2816,18 @@ document.addEventListener("DOMContentLoaded", () => {
                     throw new Error(data.error || "save_failed");
                 }
                 isSaved = true;
-                submitButton.textContent = "Saved";
+                submitButton.textContent = t("feedback_saved_button");
                 choices.forEach((choice) => {
                     choice.disabled = true;
                 });
                 form.querySelectorAll("input, select, textarea").forEach((field) => {
                     field.disabled = true;
                 });
-                setRecommendationStatus("Thanks — this helps us improve your recommendations.", "success");
+                setRecommendationStatus(t("feedback_recommendation_success"), "success");
             } catch (_error) {
                 submitButton.disabled = false;
                 isSubmitting = false;
-                setRecommendationStatus("We could not save your feedback. Please try again.", "error");
+                setRecommendationStatus(t("feedback_save_error_inline"), "error");
                 return;
             }
 

@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Randevu Oluştur{% endblock %}
+
+{% block extra_head %}
+<style>
+    .booking-shell { display:grid; gap:clamp(28px, 5vw, 46px); }
+    .booking-hero {
+        display:grid;
+        grid-template-columns:minmax(0, 1.05fr) minmax(280px, .95fr);
+        gap:24px;
+        align-items:center;
+        padding:clamp(32px, 5vw, 54px);
+        border-radius:var(--radius);
+        border:1px solid rgba(223,192,112,.14);
+        background:
+            radial-gradient(circle at 82% 18%, rgba(223,192,112,.13), transparent 28%),
+            radial-gradient(circle at 18% 82%, rgba(54,82,126,.16), transparent 30%),
+            linear-gradient(180deg, rgba(32,51,84,.58), rgba(14,24,44,.38));
+        box-shadow:0 20px 48px rgba(0,0,0,.18);
+    }
+    .booking-copy,
+    .booking-panel,
+    .booking-details { display:grid; gap:16px; }
+    .booking-panel {
+        padding:clamp(22px, 3vw, 30px);
+        border-radius:calc(var(--radius) - 6px);
+        background:linear-gradient(180deg, rgba(38,61,98,.24), rgba(20,34,58,.18));
+    }
+    .booking-details {
+        grid-template-columns:repeat(3, minmax(0, 1fr));
+        gap:18px;
+    }
+    .booking-detail {
+        padding-left:16px;
+        border-left:1px solid rgba(223,192,112,.14);
+        color:var(--text-soft);
+        line-height:1.68;
+    }
+    .booking-detail strong {
+        display:block;
+        margin-bottom:6px;
+        color:var(--gold-light);
+    }
+    .booking-actions { display:flex; flex-wrap:wrap; gap:14px; align-items:center; }
+    @media (max-width: 960px) {
+        .booking-hero,
+        .booking-details { grid-template-columns:1fr; }
+    }
+    @media (max-width: 760px) {
+        .booking-hero { padding:clamp(24px, 7vw, 34px); }
+        .booking-actions,
+        .booking-actions .btn { width:100%; justify-content:center; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="booking-shell">
+            <section class="booking-hero">
+                <div class="booking-copy">
+                    <div class="chip-row">
+                        <span class="chip">Focus Astrology</span>
+                        <span class="chip">60 dk birebir danışmanlık</span>
+                    </div>
+                    <h1 class="hero-title">Uygun zamanı seçerek danışmanlık randevunuzu oluşturun.</h1>
+                    <p class="hero-text">
+                        Bu adım önce uygun zamanı seçmeniz için hazırlanmıştır. Calendly üzerinden randevu saatini belirledikten sonra ödeme adımına geçerek 60 dakikalık birebir danışmanlığı kesinleştirebilirsiniz.
+                    </p>
+                    <div class="booking-actions">
+                        {% if calendly_url %}
+                        <a class="btn btn-primary" href="{{ calendly_url }}" target="_blank" rel="noopener">Uygun Zamanı Seç</a>
+                        {% else %}
+                        <a class="btn btn-primary" href="mailto:{{ booking_contact_email }}?subject=60 dk danışmanlık randevu talebi">Randevu Talebi Gönder</a>
+                        {% endif %}
+                        <a class="btn btn-secondary" href="/checkout/consultation">Randevumu Seçtim, Ödemeye Geç</a>
+                    </div>
+                </div>
+                <aside class="booking-panel">
+                    <div class="section-kicker">Randevu öncesi</div>
+                    <h2 class="section-title" style="font-size:clamp(1.9rem, 3vw, 2.5rem);">Sakin, yapılandırılmış ve 60 dakikalık bir görüşme.</h2>
+                    <p class="muted">
+                        Randevudan önce doğum bilgileriniz ve varsa ana sorunuz alınır. Görüşmede haritanız zamanlama, yön ve karar bağlamında birlikte değerlendirilir.
+                    </p>
+                </aside>
+            </section>
+
+            <section class="booking-details" aria-label="Randevu bilgileri">
+                <div class="booking-detail">
+                    <strong>Format</strong>
+                    60 dk birebir Vedik astroloji danışmanlığı.
+                </div>
+                <div class="booking-detail">
+                    <strong>Hazırlık</strong>
+                    Doğum tarihi, saati, yeri ve odak sorunuz görüşme öncesinde değerlendirilir.
+                </div>
+                <div class="booking-detail">
+                    <strong>Esneklik</strong>
+                    Randevu seçimi tek başına satın alma tamamlandığı anlamına gelmez. Ödeme adımı danışmanlığı kesinleştirir. Randevular, planlanan saatten en az 24 saat önce ücretsiz olarak iptal edilebilir veya yeniden planlanabilir.
+                </div>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

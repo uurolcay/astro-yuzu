@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}Jyotish | Order #{{ order.id }}{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <div class="row-between">
+                <div>
+                    <p class="eyebrow">Internal Order</p>
+                    <h1 class="hero-title" style="font-size:2.2rem;">#{{ order.id }} · {{ product.title }}</h1>
+                    <p class="muted">{{ order.service_type }} · {{ order.product_type }} · <strong>{{ order.status }}</strong></p>
+                </div>
+                <a class="chip" href="/admin/orders">Back to Orders</a>
+            </div>
+
+            {% if notice %}
+            <div class="metric-card" style="margin-top:18px; border-color:rgba(223,192,112,.32);">Updated: {{ notice }}</div>
+            {% endif %}
+            {% if error %}
+            <div class="metric-card" style="margin-top:18px; border-color:rgba(224,108,117,.45); color:#f1b5b5;">{{ error }}</div>
+            {% endif %}
+
+            <div class="grid-2" style="margin-top:24px;">
+                <div class="metric-card">
+                    <h2 class="section-title" style="font-size:1.45rem;">Customer</h2>
+                    <p><strong>{{ order.customer_name or payload.full_name or "-" }}</strong></p>
+                    <p class="muted">{{ order.customer_email or payload.email or "-" }}</p>
+                    {% if order.service_type == "report" %}
+                    <p class="muted">Birth: {{ order.birth_date or payload.birth_date or "-" }} · {{ order.birth_time or payload.birth_time or "-" }}</p>
+                    <p class="muted">Place: {{ order.birth_place or payload.birth_city or "-" }}</p>
+                    <p class="muted">Question: {{ order.optional_note or payload.optional_note or "-" }}</p>
+                    {% endif %}
+                </div>
+                <div class="metric-card">
+                    <h2 class="section-title" style="font-size:1.45rem;">Payment & Timing</h2>
+                    <p class="muted">Amount: <strong>{{ order.amount_label or order.amount or "-" }}</strong> {{ order.currency or "" }}</p>
+                    <p class="muted">Paid at: {{ order.paid_at or "-" }}</p>
+                    <p class="muted">Provider: {{ order.provider_name or order.payment_provider or "-" }}</p>
+                    <p class="muted">Payment ID: {{ order.provider_payment_id or order.payment_reference or "-" }}</p>
+                    <p class="muted">Refund: {{ order.refund_status or "-" }} · {{ order.refund_amount or "-" }} · {{ order.refunded_at or "-" }}</p>
+                    {% if order.service_type == "consultation" %}
+                    <p class="muted">Scheduled: {{ order.scheduled_start or "-" }} → {{ order.scheduled_end or "-" }}</p>
+                    <p class="muted">Calendly: {% if order.calendly_event_uri %}<a href="{{ order.calendly_event_uri }}">{{ order.calendly_event_uri }}</a>{% else %}-{% endif %}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="grid-2" style="margin-top:24px;">
+                <div class="metric-card">
+                    <h2 class="section-title" style="font-size:1.45rem;">Admin Actions</h2>
+                    {% if order.service_type == "report" %}
+                    <form method="post" action="/admin/orders/{{ order.id }}/transition" class="chip-row" style="margin-top:12px;">
+                        <button class="btn btn-secondary" name="action" value="mark_draft_ready" type="submit">Mark Draft Ready</button>
+                        <button class="btn btn-secondary" name="action" value="mark_under_review" type="submit">Mark Under Review</button>
+                        <button class="btn btn-secondary" name="action" value="mark_ready_to_send" type="submit">Mark Ready to Send</button>
+                        <button class="btn btn-secondary" name="action" value="mark_delivered" type="submit">Mark Delivered</button>
+                    </form>
+                    <form method="post" action="/admin/orders/{{ order.id }}/send-report" style="margin-top:14px;">
+                        <button class="btn btn-primary" type="submit">Send Final Report</button>
+                        <p class="muted" style="margin-top:8px;">Requires ready_to_send. Delivery is marked only after the email provider accepts the message.</p>
+                    </form>
+                    {% else %}
+                    <form method="post" action="/admin/orders/{{ order.id }}/transition" class="chip-row" style="margin-top:12px;">
+                        <button class="btn btn-secondary" name="action" value="mark_confirmed" type="submit">Mark Confirmed</button>
+                        <button class="btn btn-secondary" name="action" value="mark_prepared" type="submit">Mark Prepared</button>
+                        <button class="btn btn-primary" name="action" value="mark_completed" type="submit">Mark Completed</button>
+                    </form>
+                    <form method="post" action="/admin/orders/{{ order.id }}/mark-no-show" style="margin-top:14px;">
+                        <input type="text" name="no_show_reason" placeholder="No-show note" style="width:100%; margin-bottom:10px;">
+                        <button class="btn btn-secondary" type="submit">Mark No-Show</button>
+                    </form>
+                    {% endif %}
+                </div>
+                <div class="metric-card">
+                    <h2 class="section-title" style="font-size:1.45rem;">Workflow Timestamps</h2>
+                    <p class="muted">Draft: {{ order.ai_draft_created_at or "-" }}</p>
+                    <p class="muted">Review started: {{ order.review_started_at or "-" }}</p>
+                    <p class="muted">Ready to send: {{ order.ready_to_send_at or "-" }}</p>
+                    <p class="muted">Delivered: {{ order.delivered_at or "-" }}</p>
+                    <p class="muted">Confirmed: {{ order.confirmed_at or "-" }}</p>
+                    <p class="muted">Prepared: {{ order.prepared_at or "-" }}</p>
+                    <p class="muted">Completed: {{ order.completed_at or "-" }}</p>
+                    <p class="muted">Cancelled: {{ order.cancelled_at or "-" }}</p>
+                    <p class="muted">No-show: {{ order.no_show_at or "-" }}</p>
+                </div>
+            </div>
+
+            <div class="grid-2" style="margin-top:24px;">
+                <div class="metric-card">
+                    <h2 class="section-title" style="font-size:1.45rem;">Refund / Cancellation</h2>
+                    <form method="post" action="/admin/orders/{{ order.id }}/refund" style="display:grid; gap:10px;">
+                        <input type="text" name="refund_amount" placeholder="Refund amount, blank for full">
+                        <input type="text" name="refund_reason" placeholder="Refund reason">
+                        <select name="refund_mode">
+                            <option value="provider">Iyzico refund API</option>
+                            <option value="manual">Manual refund record</option>
+                        </select>
+                        <button class="btn btn-secondary" type="submit">Record Refund</button>
+                    </form>
+                    <form method="post" action="/admin/orders/{{ order.id }}/cancel" style="display:grid; gap:10px; margin-top:16px;">
+                        <input type="text" name="cancellation_reason" placeholder="Cancellation reason">
+                        <label class="muted"><input type="checkbox" name="admin_override" value="1"> Admin override for late consultation cancellation</label>
+                        <button class="btn btn-secondary" type="submit">Cancel Order</button>
+                    </form>
+                </div>
+                <div class="metric-card">
+                    <h2 class="section-title" style="font-size:1.45rem;">Payment Reconciliation</h2>
+                    <p class="muted">Use when callback/webhook delivery failed but iyzico can still be retrieved server-side.</p>
+                    <form method="post" action="/admin/orders/{{ order.id }}/reconcile-payment" style="display:grid; gap:10px;">
+                        <input type="text" name="payment_token" placeholder="Iyzico token, blank uses stored token">
+                        <input type="text" name="conversation_id" placeholder="Conversation ID, blank uses stored conversation">
+                        <button class="btn btn-secondary" type="submit">Reconcile Payment</button>
+                    </form>
+                    {% if order.reconciliation_notes %}
+                    <p class="muted" style="margin-top:12px;">{{ order.reconciliation_notes }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="glass-card card-pad" style="margin-top:24px;">
+                <h2 class="section-title" style="font-size:1.45rem;">Internal Notes</h2>
+                <form method="post" action="/admin/orders/{{ order.id }}/notes">
+                    <textarea name="internal_notes" rows="7" style="width:100%; margin-top:12px;">{{ order.internal_notes or "" }}</textarea>
+                    <button class="btn btn-secondary" type="submit" style="margin-top:12px;">Save Internal Notes</button>
+                </form>
+            </div>
+
+            {% if order.service_type == "report" %}
+            <div class="glass-card card-pad" style="margin-top:24px;">
+                <h2 class="section-title" style="font-size:1.45rem;">AI-Assisted Draft</h2>
+                <p class="muted">Version {{ order.ai_draft_version or 1 }} · {{ order.draft_status or "draft" }}</p>
+                <pre style="white-space:pre-wrap; line-height:1.6; background:rgba(255,255,255,.025); padding:18px; border-radius:16px; overflow:auto;">{{ order.ai_draft_text or "No draft stored yet." }}</pre>
+            </div>
+            {% endif %}
+
+            <div class="glass-card card-pad" style="margin-top:24px;">
+                <h2 class="section-title" style="font-size:1.45rem;">Action History</h2>
+                {% for log in logs %}
+                <div class="metric-card" style="margin-top:12px;">
+                    <strong>{{ log.action }}</strong>
+                    <div class="muted">{{ log.actor or "admin" }} · {{ log.created_at }}</div>
+                    {% if log.metadata_json %}<div class="muted">{{ log.metadata_json }}</div>{% endif %}
+                </div>
+                {% else %}
+                <p class="muted">No admin actions recorded yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

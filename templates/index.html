@@ -4,262 +4,634 @@
 
 {% block extra_head %}
 <style>
-    .landing-stack, .section-stack { display: grid; gap: 36px; }
-    .landing-stack { position: relative; }
-    .hero-shell, .preview-card, .step-card, .about-shell {
-        border-radius: var(--radius);
-        border: 1px solid var(--border);
-        background: rgba(30,50,86,.30);
-    }
-    .hero-shell {
-        position: relative;
-        min-height: calc(100vh - var(--nav-height) - 40px);
-        display: flex;
+    .homepage-shell { position: relative; display: grid; gap: clamp(34px, 5vw, 56px); isolation: isolate; }
+    .homepage-shell > section { position: relative; z-index: 1; }
+    .homepage-watermarks { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+    .watermark-glyph { position: absolute; width: min(620px, 52vw); opacity: .09; }
+    .watermark-glyph svg { display: block; width: 100%; height: auto; }
+    .watermark-glyph--top { top: 2%; right: -7%; }
+    .watermark-glyph--mid { top: 32%; left: -11%; width: min(540px, 44vw); }
+    .watermark-glyph--low { top: 71%; right: -9%; width: min(580px, 46vw); }
+
+    .hero-panel {
+        min-height: calc(100vh - var(--nav-height) - 24px);
+        display: grid;
         align-items: center;
-        overflow: hidden;
-        padding: 44px 36px;
-        background: radial-gradient(ellipse at 58% 38%, rgba(30,50,86,0.74) 0%, rgba(26,42,68,0.92) 55%, rgba(15,30,52,1) 100%);
+        padding: clamp(42px, 5vw, 78px);
+        background:
+            radial-gradient(circle at 78% 18%, rgba(223, 192, 112, 0.12), transparent 30%),
+            linear-gradient(180deg, rgba(28, 46, 76, 0.95) 0%, rgba(27, 45, 74, 0.92) 44%, rgba(16, 30, 54, 0.96) 100%);
+        border: 1px solid rgba(223,192,112,.1);
+        box-shadow: 0 22px 48px rgba(0,0,0,.14);
     }
-    .hero-shell::before {
+
+    .hero-layout,
+    .concept-grid,
+    .report-preview-grid,
+    .credibility-grid,
+    .articles-preview-grid,
+    .final-cta-grid {
+        display: grid;
+        gap: 22px;
+    }
+
+    .hero-layout { grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr); align-items: end; }
+    .concept-grid,
+    .credibility-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .report-preview-grid { grid-template-columns: 1.05fr 0.95fr; }
+    .final-cta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .articles-preview-grid { grid-template-columns: minmax(0, 760px); }
+
+    .hero-copy,
+    .hero-side,
+    .concept-card,
+    .report-preview-card,
+    .consultation-highlight,
+    .credibility-card,
+    .article-preview-card,
+    .final-cta-card {
+        display: grid;
+        gap: 16px;
+    }
+
+    .hero-copy { max-width: 760px; }
+    .hero-brandrow { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-bottom: 4px; }
+    .hero-mark { display: inline-flex; align-items: center; justify-content: center; width: clamp(98px, 12vw, 132px); padding: 8px 0; opacity: .92; }
+    .hero-mark svg { display: block; width: 100%; height: auto; filter: drop-shadow(0 16px 28px rgba(0,0,0,.22)); }
+    .hero-copy .hero-title { max-width: 11ch; }
+    .hero-actions,
+    .hero-signals,
+    .report-preview-actions,
+    .consultation-actions,
+    .article-preview-actions,
+    .final-cta-actions { display: flex; flex-wrap: wrap; gap: 14px; }
+
+    .hero-side,
+    .concept-card,
+    .report-preview-card,
+    .consultation-highlight,
+    .credibility-card,
+    .article-preview-card,
+    .final-cta-card {
+        padding: clamp(24px, 3vw, 32px);
+        border-radius: var(--radius);
+        border: 1px solid rgba(223,192,112,.10);
+        background: rgba(20,34,58,.34);
+        box-shadow: 0 14px 34px rgba(0,0,0,.12);
+    }
+
+    .hero-side {
+        align-self: stretch;
+        justify-content: end;
+        background: linear-gradient(180deg, rgba(38,61,98,.26), rgba(20,34,58,.22));
+    }
+
+    .concept-card,
+    .credibility-card {
+        padding: 0 0 0 18px;
+        border: 0;
+        border-left: 1px solid rgba(223,192,112,.13);
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+    }
+
+    .signal-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        border: 1px solid rgba(223, 192, 112, 0.16);
+        background: rgba(255,255,255,.03);
+        color: var(--text-soft);
+        font-size: .94rem;
+    }
+
+    .signal-pill::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: 999px;
+        background: var(--gold-light);
+        box-shadow: 0 0 0 5px rgba(223,192,112,.08);
+    }
+
+    .card-eyebrow {
+        display: inline-flex;
+        align-items: center;
+        padding: 7px 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(223,192,112,.2);
+        color: var(--gold-light);
+        font-family: "Cinzel", serif;
+        font-size: .72rem;
+        letter-spacing: .18em;
+        text-transform: uppercase;
+    }
+
+    .concept-card h3,
+    .report-preview-card h3,
+    .consultation-highlight h2,
+    .credibility-card h3,
+    .article-preview-card h3,
+    .final-cta-card h2,
+    .hero-side h2 {
+        margin: 0;
+        font-family: "Cormorant Garamond", serif;
+        font-size: clamp(1.9rem, 3vw, 2.5rem);
+        line-height: 1.08;
+        font-weight: 300;
+    }
+
+    .report-preview-list,
+    .credibility-points {
+        margin: 0;
+        padding-left: 18px;
+        color: var(--text-soft);
+        display: grid;
+        gap: 10px;
+        line-height: 1.72;
+    }
+
+    .hero-animate { opacity: 0; animation: heroFadeUp .92s cubic-bezier(.22,1,.36,1) forwards; will-change: transform, opacity; }
+    .hero-animate--1 { animation-delay: .08s; }
+    .hero-animate--2 { animation-delay: .22s; }
+    .hero-animate--3 { animation-delay: .38s; }
+    .hero-animate--4 { animation-delay: .54s; }
+    .hero-animate--5 { animation-delay: .7s; }
+
+    @keyframes heroFadeUp {
+        from { opacity: 0; transform: translate3d(0, 28px, 0); }
+        to { opacity: 1; transform: translate3d(0, 0, 0); }
+    }
+
+    .report-preview-grid--cards {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+    }
+
+    .report-preview-card ul { margin: 0; }
+    .report-preview-actions { margin-top: auto; }
+    .report-preview-actions .btn { min-width: min(100%, 220px); justify-content: center; }
+
+    .consultation-highlight {
+        background:
+            radial-gradient(circle at 82% 18%, rgba(223,192,112,.12), transparent 30%),
+            linear-gradient(180deg, rgba(32, 51, 84, 0.52), rgba(17, 30, 54, 0.34));
+    }
+
+    .consultation-meta-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+    .consultation-meta-item {
+        padding: 0 0 0 18px;
+        border-left: 1px solid rgba(223,192,112,.18);
+        display: grid;
+        gap: 8px;
+    }
+
+    .consultation-meta-item strong {
+        font-family: "Cinzel", serif;
+        font-size: .76rem;
+        letter-spacing: .16em;
+        text-transform: uppercase;
+        color: var(--gold-light);
+        font-weight: 500;
+    }
+
+    .consultation-highlight--flagship {
+        padding: clamp(34px, 4vw, 48px);
+        border: 1px solid rgba(223,192,112,.22);
+        background:
+            radial-gradient(circle at 82% 18%, rgba(223,192,112,.14), transparent 28%),
+            radial-gradient(circle at 18% 82%, rgba(54,82,126,.18), transparent 30%),
+            linear-gradient(180deg, rgba(32, 51, 84, 0.62), rgba(14, 24, 44, 0.42));
+        box-shadow: 0 24px 56px rgba(0,0,0,.24);
+    }
+
+    .consultation-highlight--flagship .section-title {
+        max-width: 12ch;
+    }
+
+    .consultation-highlight--flagship .consultation-meta-item { border-color: rgba(223,192,112,.2); }
+
+    .consultation-highlight--flagship .consultation-actions {
+        margin-top: 10px;
+    }
+
+    .credibility-card--visual {
+        display: none;
+    }
+
+    .credibility-card--visual svg {
+        width: min(440px, 72%);
+        opacity: .2;
+    }
+
+    .article-preview-card {
+        min-height: 100%;
+        overflow: hidden;
+        border-color: rgba(223,192,112,.08);
+        background: rgba(18,31,61,.28);
+        box-shadow: none;
+    }
+
+    .article-preview-cover {
+        position: relative;
+        min-height: 260px;
+        margin: calc(clamp(24px, 3vw, 32px) * -1);
+        margin-bottom: 0;
+        padding: 22px;
+        display: flex;
+        align-items: end;
+        background-color: #0d1a38;
+        background-image: var(--article-cover-image);
+        background-size: cover;
+        background-position: center;
+        isolation: isolate;
+    }
+
+    .article-preview-cover::after {
         content: "";
         position: absolute;
         inset: 0;
-        background: linear-gradient(90deg, rgba(15,30,52,0.04), transparent 42%);
-        pointer-events: none;
+        background:
+            linear-gradient(180deg, rgba(5,10,22,.08) 0%, rgba(5,10,22,.24) 28%, rgba(5,10,22,.90) 100%),
+            linear-gradient(90deg, rgba(8,16,35,.74) 0%, rgba(8,16,35,.18) 70%);
+        z-index: -1;
     }
-    .about-shell { padding: 34px 30px; }
-    .hero-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 28px; }
-    .eyebrow {
-        font-family: "Cinzel", serif;
-        text-transform: uppercase;
-        letter-spacing: 0.5em;
-        font-size: 0.68rem;
-        color: var(--gold);
-        opacity: .74;
-        display: inline-flex;
-        align-items: center;
-        gap: 14px;
+
+    .article-preview-copy {
+        width: min(100%, 30rem);
+        display: grid;
+        gap: 10px;
     }
-    .eyebrow::before {
-        content: "";
-        width: 28px;
-        height: 1px;
-        background: var(--gold);
-        opacity: .42;
-    }
-    .hero-brand {
-        display: flex;
-        align-items: center;
-        justify-content: flex-start;
-        margin-bottom: 16px;
-    }
-    .hero-brand-logo {
-        width: 320px;
-        height: auto;
-        object-fit: contain;
-        filter: drop-shadow(0 16px 34px rgba(0, 0, 0, 0.22));
-    }
-    .brand-watermark {
-        position: absolute;
-        right: -2%;
-        top: 50%;
-        transform: translateY(-50%);
-        width: min(760px, 62vw);
-        opacity: 0.055;
-        pointer-events: none;
-        filter: saturate(0.9);
-        z-index: 0;
-    }
-    .landing-stack > * {
-        position: relative;
-        z-index: 1;
-    }
-    .cta-row { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 16px; }
-    .signal-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
-    .signal-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 9px 13px;
-        border-radius: 999px;
-        border: 1px solid rgba(223,192,112,.18);
-        background: rgba(223,192,112,.05);
-        color: var(--text-soft);
-        font-size: 0.94rem;
-    }
-    .signal-chip::before {
-        content: "";
-        width: 7px;
-        height: 7px;
-        border-radius: 999px;
-        background: rgba(223,192,112,.92);
-        box-shadow: 0 0 0 4px rgba(223,192,112,.12);
-    }
-    .section-header { display: grid; gap: 10px; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
-    .section-title { margin: 0; }
-    .three-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
-    .preview-card, .step-card { padding: 30px 28px; }
-    .preview-card h3, .step-card h3 {
-        margin: 0 0 12px;
+
+    .article-preview-title {
+        margin: 0;
         font-family: "Cormorant Garamond", serif;
         font-size: 2rem;
-        font-style: italic;
-        font-weight: 300;
-        line-height: 1.25;
+        line-height: 1.06;
+        font-weight: 500;
+        color: var(--white);
+        text-wrap: balance;
     }
-    .pill {
-        display: inline-flex;
-        padding: 7px 12px;
-        border-radius: 999px;
-        border: 1px solid rgba(223,192,112,.24);
-        color: var(--gold-light);
-        font-size: 0.72rem;
-        text-transform: uppercase;
-        letter-spacing: 0.18em;
+
+    .article-preview-title a { color: inherit; }
+
+    .article-preview-meta {
         font-family: "Cinzel", serif;
+        font-size: .68rem;
+        letter-spacing: .18em;
+        text-transform: uppercase;
+        color: rgba(248,245,240,.82);
     }
-    .pill-row { display:flex; flex-wrap: wrap; gap: 10px; }
-    .form-fields { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:18px; margin-top:24px; }
-    .field-full { grid-column: 1 / -1; }
-    label { display:block; margin-bottom:10px; font-size:0.92rem; font-weight:600; }
-    input, select { width:100%; min-height:52px; padding:0 16px; border-radius:14px; border:1px solid rgba(201,168,76,0.18); background:rgba(255,255,255,0.03); color:var(--text); font:inherit; }
-    .form-select { appearance:none; -webkit-appearance:none; -moz-appearance:none; padding-right:42px; color-scheme:dark;
-        background-image: linear-gradient(45deg, transparent 50%, var(--gold-light) 50%), linear-gradient(135deg, var(--gold-light) 50%, transparent 50%);
-        background-position: calc(100% - 22px) calc(50% - 3px), calc(100% - 16px) calc(50% - 3px);
-        background-size: 6px 6px, 6px 6px; background-repeat:no-repeat; }
-    .form-select:focus, input:focus { outline:none; border-color:rgba(240,192,96,0.62); box-shadow:0 0 0 3px rgba(201,168,76,0.16); background-color:rgba(255,255,255,0.05); }
-    .form-select option { background:#111522; color:var(--text); }
-    .autocomplete-shell { position:relative; }
-    .autocomplete-status { margin-top:8px; font-size:0.82rem; color:var(--muted); }
-    .autocomplete-status.warning { color:#f6d27a; }
-    .suggestion-list { position:absolute; top:calc(100% + 8px); left:0; right:0; z-index:20; margin:0; padding:8px; list-style:none; border-radius:16px; border:1px solid rgba(201,168,76,0.18); background:rgba(12,12,16,0.96); box-shadow:0 18px 48px rgba(0,0,0,0.35); display:none; }
-    .suggestion-list.active { display:block; }
-    .suggestion-item { width:100%; padding:12px 14px; border:0; border-radius:12px; background:transparent; color:var(--text); text-align:left; cursor:pointer; }
-    .suggestion-item:hover, .suggestion-item.active, .suggestion-item:focus { background:rgba(201,168,76,0.1); outline:none; }
-    .suggestion-main { display:block; font-weight:600; }
-    .suggestion-sub { display:block; margin-top:4px; font-size:0.82rem; color:var(--muted); }
-    .section-text, .muted { color: var(--text-soft); font-size: 1.08rem; line-height: 1.84; }
-    @media (max-width: 960px) {
-        .hero-grid, .three-grid { grid-template-columns:1fr; }
-        .field-full { grid-column:auto; }
-        .hero-brand-logo { width: 220px; }
-        .brand-watermark {
-            width: min(520px, 88vw);
-            top: 60%;
-            opacity: 0.05;
+
+    .home-anchor { scroll-margin-top: calc(var(--nav-height) + 18px); }
+
+    @media (max-width: 1120px) {
+        .hero-layout,
+        .report-preview-grid,
+        .credibility-grid,
+        .articles-preview-grid,
+        .final-cta-grid,
+        .concept-grid,
+        .report-preview-grid--cards,
+        .consultation-meta-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 760px) {
+        .hero-panel { min-height: auto; padding: 30px 22px; }
+        .watermark-glyph { width: min(480px, 88vw); }
+        .watermark-glyph--top { right: -18%; }
+        .watermark-glyph--mid { left: -22%; }
+        .hero-brandrow { gap: 14px; }
+        .hero-mark { width: 112px; }
+        .hero-side,
+        .consultation-highlight--flagship,
+        .final-cta-card { padding: clamp(24px, 7vw, 34px); }
+        .hero-actions,
+        .consultation-actions,
+        .final-cta-actions { width: 100%; }
+        .hero-actions .btn,
+        .consultation-actions .btn,
+        .final-cta-actions .btn {
+            width: 100%;
+            justify-content: center;
         }
+        .article-preview-cover { min-height: 220px; }
+        .article-preview-title { font-size: 1.7rem; }
     }
 </style>
 {% endblock %}
 
 {% block content %}
+{% set homepage_articles = latest_articles if latest_articles is defined else [] %}
+{% set featured_article_covers = {
+    'venus-transiti-degisim-kacinilmaz': '/static/articles/venus_transiti.jpg',
+    'merkur-transiti-planla-ve-harekete-gec': '/static/articles/merkur_transiti.jpg',
+    'jupiter-transiti-jupiter-acele-etme-diyor': '/static/articles/jüpiter_transiti.jpg'
+} %}
 <section class="page-section">
     <div class="container">
-        <div class="landing-stack">
-            <img class="brand-watermark" src="/static/focus-logo.png" alt="" aria-hidden="true">
-            <section class="hero-shell glass-card">
-                <div class="hero-grid">
-                    <div class="section-stack">
-                        <div class="hero-brand">
-                            <img class="hero-brand-logo" src="/static/focus-logo.png" alt="Focus Astrology logo">
+        <div class="homepage-shell">
+            <div class="homepage-watermarks" aria-hidden="true">
+                {% for glyph_class in ["watermark-glyph--top", "watermark-glyph--mid", "watermark-glyph--low"] %}
+                <div class="watermark-glyph {{ glyph_class }}">
+                    <svg viewBox="0 0 600 430" fill="none">
+                        <line x1="80" y1="30" x2="80" y2="400" stroke="#DFC070" stroke-width="8" stroke-linecap="round"/>
+                        <line x1="52" y1="30" x2="108" y2="30" stroke="#DFC070" stroke-width="5.5" stroke-linecap="round"/>
+                        <line x1="52" y1="400" x2="108" y2="400" stroke="#DFC070" stroke-width="5.5" stroke-linecap="round"/>
+                        <line x1="80" y1="82" x2="196" y2="82" stroke="#DFC070" stroke-width="7" stroke-linecap="round"/>
+                        <line x1="80" y1="215" x2="146" y2="215" stroke="#DFC070" stroke-width="6.5" stroke-linecap="round"/>
+                        <circle cx="146" cy="215" r="9" fill="#F0DC95" opacity="0.9"/>
+                        <circle cx="342" cy="215" r="196" stroke="#DFC070" stroke-width="8" fill="none"/>
+                        <ellipse cx="342" cy="215" rx="196" ry="52" stroke="#DFC070" stroke-width="2.5" opacity="0.52" fill="none" transform="rotate(-10 342 215)"/>
+                        <ellipse cx="342" cy="215" rx="83" ry="196" stroke="#DFC070" stroke-width="2.2" opacity="0.38" fill="none" transform="rotate(-10 342 215)"/>
+                    </svg>
+                </div>
+                {% endfor %}
+            </div>
+
+            <section class="section-shell hero-panel">
+                <div class="hero-layout">
+                    <div class="hero-copy">
+                        <div class="hero-brandrow hero-animate hero-animate--1">
+                            <div class="hero-mark" aria-hidden="true">
+                                <svg viewBox="0 0 160 110" fill="none">
+                                    <line x1="28" y1="16" x2="28" y2="94" stroke="#DFC070" stroke-width="3.6" stroke-linecap="round"/>
+                                    <line x1="20" y1="16" x2="36" y2="16" stroke="#DFC070" stroke-width="2.4" stroke-linecap="round"/>
+                                    <line x1="20" y1="94" x2="36" y2="94" stroke="#DFC070" stroke-width="2.4" stroke-linecap="round"/>
+                                    <line x1="28" y1="34" x2="56" y2="34" stroke="#DFC070" stroke-width="2.8" stroke-linecap="round"/>
+                                    <line x1="28" y1="56" x2="44" y2="56" stroke="#DFC070" stroke-width="2.7" stroke-linecap="round"/>
+                                    <circle cx="44" cy="56" r="3.2" fill="#F0DC95" opacity="0.92"/>
+                                    <circle cx="84" cy="56" r="38" stroke="#DFC070" stroke-width="3.6" fill="none"/>
+                                    <ellipse cx="84" cy="56" rx="38" ry="10.5" stroke="#DFC070" stroke-width="1.2" opacity="0.52" fill="none" transform="rotate(-10 84 56)"/>
+                                    <ellipse cx="84" cy="56" rx="16" ry="38" stroke="#DFC070" stroke-width="1.05" opacity="0.38" fill="none" transform="rotate(-10 84 56)"/>
+                                    <g transform="rotate(-10 92 27)">
+                                        <line x1="92" y1="18" x2="92" y2="36" stroke="#DFC070" stroke-width="1.2" opacity="0.62" stroke-linecap="round"/>
+                                        <line x1="83" y1="27" x2="101" y2="27" stroke="#DFC070" stroke-width="1.2" opacity="0.62" stroke-linecap="round"/>
+                                    </g>
+                                    <circle cx="92" cy="27" r="2.5" fill="#F0DC95" opacity="0.86"/>
+                                </svg>
+                            </div>
+                            <div class="section-kicker" style="margin:0;">{{ t("index.hero_eyebrow") }}</div>
                         </div>
-                        <div class="eyebrow">{{ t("index.hero_eyebrow") }}</div>
-                        <h1 class="hero-title">{{ t("index.hero_title") }}</h1>
-                        <p class="hero-text">{{ t("index.hero_text") }}</p>
-                        <div class="signal-row">
-                            <span class="signal-chip">{{ t("index.hero_signal_1") }}</span>
-                            <span class="signal-chip">{{ t("index.hero_signal_2") }}</span>
-                            <span class="signal-chip">{{ t("index.hero_signal_3") }}</span>
+
+                        <h1 class="hero-title hero-animate hero-animate--2">
+                            {{ t("index.hero_decision_title_1") }}<br>
+                            {{ t("index.hero_decision_title_2") }}
+                        </h1>
+
+                        <p class="hero-text hero-animate hero-animate--3">
+                            {{ t("index.hero_decision_text") }}
+                        </p>
+
+                        <div class="hero-signals hero-animate hero-animate--4">
+                            <span class="signal-pill">{{ t("index.hero_signal_1") }}</span>
+                            <span class="signal-pill">{{ t("index.hero_signal_2") }}</span>
+                            <span class="signal-pill">{{ t("index.hero_signal_3") }}</span>
                         </div>
-                        <div class="cta-row">
+                        <div class="hero-actions hero-animate hero-animate--5">
                             <a class="btn btn-primary" href="/calculator">{{ t("index.cta_start") }}</a>
-                            <a class="btn btn-secondary" href="/articles">{{ t("index.cta_articles") }}</a>
+                            <a class="btn btn-secondary" href="/personal-consultation">{{ t("common.consultation_full_name") }}</a>
                         </div>
                     </div>
-                    <div class="about-shell">
-                        <div class="pill">{{ t("index.about_eyebrow") }}</div>
-                        <h3 class="card-title" style="margin-top:14px;">{{ t("index.editorial_title") }}</h3>
-                        <p class="muted">{{ t("index.editorial_text") }}</p>
-                    </div>
+                    <aside class="hero-side hero-animate hero-animate--5">
+                        <div class="card-eyebrow">{{ t("index.hero_side_eyebrow") }}</div>
+                        <h2>{{ t("index.hero_side_title") }}</h2>
+                        <p class="muted">
+                            {{ t("index.hero_side_text") }}
+                        </p>
+                        <ul class="credibility-points">
+                            <li>{{ t("index.hero_side_point_1") }}</li>
+                            <li>{{ t("index.hero_side_point_2") }}</li>
+                            <li>{{ t("index.hero_side_point_3") }}</li>
+                        </ul>
+                    </aside>
                 </div>
             </section>
 
-            <section class="glass-card card-pad">
+            <section class="section-shell card-pad">
                 <div class="section-header">
-                    <div class="eyebrow">{{ t("index.preview_eyebrow") }}</div>
+                    <div class="section-kicker">{{ t("index.preview_eyebrow") }}</div>
                     <h2 class="section-title">{{ t("index.preview_title") }}</h2>
+                    <p class="section-text">{{ t("index.faq_text") }}</p>
                 </div>
-                <div class="three-grid">
-                    <article class="preview-card">
-                        <div class="pill">{{ t("index.theme_1_label") }}</div>
+                <div class="concept-grid">
+                    <article class="concept-card">
+                        <div class="card-eyebrow">{{ t("index.theme_1_label") }}</div>
                         <h3>{{ t("index.theme_1_title") }}</h3>
                         <p class="muted">{{ t("index.theme_1_text") }}</p>
                     </article>
-                    <article class="preview-card">
-                        <div class="pill">{{ t("index.theme_2_label") }}</div>
+                    <article class="concept-card">
+                        <div class="card-eyebrow">{{ t("index.theme_2_label") }}</div>
                         <h3>{{ t("index.theme_2_title") }}</h3>
                         <p class="muted">{{ t("index.theme_2_text") }}</p>
                     </article>
-                    <article class="preview-card">
-                        <div class="pill">{{ t("index.theme_3_label") }}</div>
+                    <article class="concept-card">
+                        <div class="card-eyebrow">{{ t("index.theme_3_label") }}</div>
                         <h3>{{ t("index.theme_3_title") }}</h3>
                         <p class="muted">{{ t("index.theme_3_text") }}</p>
                     </article>
                 </div>
             </section>
 
-            <section class="glass-card card-pad">
+            <section class="section-shell card-pad home-anchor" id="reports-preview">
                 <div class="section-header">
-                    <div class="eyebrow">{{ t("index.focus_eyebrow") }}</div>
-                    <h2 class="section-title">{{ t("index.focus_title") }}</h2>
+                    <div class="section-kicker">{{ t("common.nav_reports") }}</div>
+                    <h2 class="section-title">{{ t("reports.catalog_title") }}</h2>
+                    <p class="section-text">{{ t("reports.intro") }}</p>
                 </div>
-                <div class="three-grid">
-                    <article class="preview-card">
-                        <div class="pill">{{ t("index.focus_1_label") }}</div>
-                        <h3>{{ t("index.focus_1_title") }}</h3>
-                        <p class="muted">{{ t("index.focus_1_text") }}</p>
+                <div class="report-preview-grid">
+                    <article class="report-preview-card">
+                        <div class="card-eyebrow">{{ t("reports.decision_title") }}</div>
+                        <h3>{{ t("reports.bundle_title") }}</h3>
+                        <p class="muted">{{ t("reports.bundle_copy_1") }}</p>
+                        <ul class="report-preview-list">
+                            <li>{{ t("reports.bundle_copy_2") }}</li>
+                            <li>{{ t("reports.decision_personal") }}</li>
+                            <li>{{ t("reports.decision_child") }}</li>
+                        </ul>
+                        <div class="report-preview-actions">
+                            <a class="btn btn-secondary" href="/reports">{{ t("index.mid_cta_primary") }}</a>
+                        </div>
                     </article>
-                    <article class="preview-card">
-                        <div class="pill">{{ t("index.focus_2_label") }}</div>
-                        <h3>{{ t("index.focus_2_title") }}</h3>
-                        <p class="muted">{{ t("index.focus_2_text") }}</p>
-                    </article>
-                    <article class="preview-card">
-                        <div class="pill">{{ t("index.focus_3_label") }}</div>
-                        <h3>{{ t("index.focus_3_title") }}</h3>
-                        <p class="muted">{{ t("index.focus_3_text") }}</p>
-                    </article>
+                    <div class="report-preview-grid--cards">
+                        <article class="report-preview-card">
+                            <div class="card-eyebrow">{{ t("reports.home_foundation_label") }}</div>
+                            <h3>{{ t("reports.home_birth_title") }}</h3>
+                            <p class="muted">{{ t("reports.home_birth_summary") }}</p>
+                            <p class="muted">{{ t("reports.home_birth_detail") }}</p>
+                        </article>
+                        <article class="report-preview-card">
+                            <div class="card-eyebrow">{{ t("reports.home_timing_label") }}</div>
+                            <h3>{{ t("reports.home_transit_title") }}</h3>
+                            <p class="muted">{{ t("reports.home_transit_summary") }}</p>
+                        </article>
+                        <article class="report-preview-card">
+                            <div class="card-eyebrow">{{ t("reports.home_career_label") }}</div>
+                            <h3>{{ t("reports.home_career_title") }}</h3>
+                            <p class="muted">{{ t("reports.home_career_summary") }}</p>
+                            <p class="muted">{{ t("reports.home_career_detail") }}</p>
+                        </article>
+                        <article class="report-preview-card">
+                            <div class="card-eyebrow">{{ t("reports.home_family_label") }}</div>
+                            <h3>{{ t("reports.home_child_title") }}</h3>
+                            <p class="muted">{{ t("reports.home_child_summary") }}</p>
+                        </article>
+                    </div>
                 </div>
             </section>
 
-            <section class="about-shell" id="about-focus">
-                <div class="section-header" style="margin-bottom:0;">
-                    <div class="eyebrow">{{ t("index.about_eyebrow") }}</div>
-                    <h3 class="card-title">{{ t("index.about_title") }}</h3>
-                    <p class="muted">{{ t("index.about_text") }}</p>
+            <section class="section-shell">
+                <div class="consultation-highlight consultation-highlight--flagship">
+                    <div class="section-header" style="margin-bottom:0; padding-bottom:0; border-bottom:none;">
+                        <div class="section-kicker">{{ t("consultation.eyebrow") }}</div>
+                        <h2 class="section-title">{{ t("common.consultation_full_name") }}</h2>
+                        <p class="section-text">
+                            {{ t("index.consultation_flagship_text") }}
+                        </p>
+                    </div>
+
+                    <div class="consultation-meta-grid">
+                        <div class="consultation-meta-item">
+                            <strong>{{ t("index.consultation_meta_1_title") }}</strong>
+                            <p class="muted" style="margin:0;">
+                                {{ t("index.consultation_meta_1_text") }}
+                            </p>
+                        </div>
+                        <div class="consultation-meta-item">
+                            <strong>{{ t("index.consultation_meta_2_title") }}</strong>
+                            <p class="muted" style="margin:0;">
+                                {{ t("index.consultation_meta_2_text") }}
+                            </p>
+                        </div>
+                        <div class="consultation-meta-item">
+                            <strong>{{ t("index.consultation_meta_3_title") }}</strong>
+                            <p class="muted" style="margin:0;">
+                                {{ t("index.consultation_meta_3_text") }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <ul class="credibility-points" style="margin-top: 6px;">
+                        <li>{{ t("index.consultation_point_1") }}</li>
+                        <li>{{ t("index.consultation_point_2") }}</li>
+                        <li>{{ t("index.consultation_point_3") }}</li>
+                    </ul>
+
+                    <div class="consultation-actions">
+                        <a class="btn btn-primary" href="/personal-consultation">{{ t("consultation.closing_primary") }}</a>
+                        <a class="btn btn-secondary" href="/personal-consultation#consultation-pricing">{{ t("consultation.anchor_view_details") }}</a>
+                    </div>
                 </div>
             </section>
 
-            <section class="glass-card card-pad" id="how-it-works">
+            <section class="section-shell card-pad home-anchor" id="how-it-works">
                 <div class="section-header">
-                    <div class="eyebrow">{{ t("index.method_eyebrow") }}</div>
-                    <h2 class="section-title">{{ t("index.method_title") }}</h2>
+                    <div class="section-kicker">{{ t("about.eyebrow") }}</div>
+                    <h2 class="section-title">{{ t("about.title") }}</h2>
+                    <p class="section-text">{{ t("about.text") }}</p>
                 </div>
-                <div class="three-grid">
-                    <article class="step-card">
-                        <div class="pill">{{ t("index.step_1_label") }}</div>
-                        <h3>{{ t("index.step_1_title") }}</h3>
-                        <p class="muted">{{ t("index.step_1_text") }}</p>
+                <div class="credibility-grid">
+                    <article class="credibility-card">
+                        <div class="card-eyebrow">{{ t("about.what_label") }}</div>
+                        <h3>{{ t("about.what_title") }}</h3>
+                        <p class="muted">{{ t("about.what_text") }}</p>
                     </article>
-                    <article class="step-card">
-                        <div class="pill">{{ t("index.step_2_label") }}</div>
-                        <h3>{{ t("index.step_2_title") }}</h3>
-                        <p class="muted">{{ t("index.step_2_text") }}</p>
+                    <article class="credibility-card">
+                        <div class="card-eyebrow">{{ t("about.philosophy_label") }}</div>
+                        <h3>{{ t("about.philosophy_title") }}</h3>
+                        <p class="muted">{{ t("about.philosophy_text") }}</p>
                     </article>
-                    <article class="step-card">
-                        <div class="pill">{{ t("index.step_3_label") }}</div>
-                        <h3>{{ t("index.step_3_title") }}</h3>
-                        <p class="muted">{{ t("index.step_3_text") }}</p>
+                    <article class="credibility-card">
+                        <div class="card-eyebrow">{{ t("about.method_label") }}</div>
+                        <h3>{{ t("about.method_title") }}</h3>
+                        <p class="muted">{{ t("about.method_text_1") }}</p>
+                    </article>
+                    <article class="credibility-card credibility-card--visual" aria-hidden="true">
+                        <svg viewBox="0 0 600 430" fill="none">
+                            <line x1="80" y1="30" x2="80" y2="400" stroke="#DFC070" stroke-width="8" stroke-linecap="round"/>
+                            <line x1="52" y1="30" x2="108" y2="30" stroke="#DFC070" stroke-width="5.5" stroke-linecap="round"/>
+                            <line x1="52" y1="400" x2="108" y2="400" stroke="#DFC070" stroke-width="5.5" stroke-linecap="round"/>
+                            <line x1="80" y1="82" x2="196" y2="82" stroke="#DFC070" stroke-width="7" stroke-linecap="round"/>
+                            <line x1="80" y1="215" x2="146" y2="215" stroke="#DFC070" stroke-width="6.5" stroke-linecap="round"/>
+                            <circle cx="146" cy="215" r="9" fill="#F0DC95" opacity="0.9"/>
+                            <circle cx="342" cy="215" r="196" stroke="#DFC070" stroke-width="8" fill="none"/>
+                            <ellipse cx="342" cy="215" rx="196" ry="52" stroke="#DFC070" stroke-width="2.5" opacity="0.52" fill="none" transform="rotate(-10 342 215)"/>
+                            <ellipse cx="342" cy="215" rx="83" ry="196" stroke="#DFC070" stroke-width="2.2" opacity="0.38" fill="none" transform="rotate(-10 342 215)"/>
+                        </svg>
+                    </article>
+                </div>
+                <div class="hero-actions">
+                    <a class="btn btn-secondary" href="/about">{{ t("common.nav_about") }}</a>
+                </div>
+            </section>
+
+            {% if homepage_articles %}
+            <section class="section-shell card-pad">
+                <div class="section-header">
+                    <div class="section-kicker">{{ t("common.nav_articles") }}</div>
+                    <h2 class="section-title">{{ t("articles.hero_default_title") }}</h2>
+                    <p class="section-text">{{ t("articles.hero_default_text") }}</p>
+                </div>
+                <div class="hero-actions">
+                    <a class="btn btn-secondary" href="/articles">{{ t("common.nav_articles") }}</a>
+                </div>
+                <div class="articles-preview-grid">
+                    {% for article in homepage_articles[:1] %}
+                    {% if article.cover_image %}
+                        {% if article.cover_image[:1] == '/' %}
+                            {% set article_cover = article.cover_image %}
+                        {% else %}
+                            {% set article_cover = '/static/articles/' ~ article.cover_image %}
+                        {% endif %}
+                    {% elif article.slug in featured_article_covers %}
+                        {% set article_cover = featured_article_covers[article.slug] %}
+                    {% else %}
+                        {% set article_cover = '/static/articles/' ~ article.slug ~ '.jpg' %}
+                    {% endif %}
+                    <article class="article-preview-card">
+                        <div class="article-preview-cover" style="--article-cover-image: linear-gradient(180deg, rgba(6,12,28,.12), rgba(6,12,28,.12)), url('{{ article_cover }}');">
+                            <div class="article-preview-copy">
+                                <div class="article-preview-meta">{{ t("article_categories." ~ article.category.slug) }}{% if article.published_at %} | {{ article.published_at }}{% endif %}</div>
+                                <h3 class="article-preview-title"><a href="/articles/{{ article.slug }}">{{ article.title }}</a></h3>
+                            </div>
+                        </div>
+                        <p class="muted">{{ article.excerpt }}</p>
+                        <div class="article-preview-actions">
+                            <a class="btn btn-secondary" href="/articles/{{ article.slug }}">{{ t("articles.read_article") }}</a>
+                        </div>
+                    </article>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endif %}
+
+            <section class="section-shell card-pad">
+                <div class="final-cta-grid">
+                    <article class="final-cta-card">
+                        <div class="card-eyebrow">{{ t("index.value_pill") }}</div>
+                        <h2>{{ t("index.value_title") }}</h2>
+                        <p class="muted">{{ t("index.value_text") }}</p>
+                        <div class="final-cta-actions">
+                            <a class="btn btn-primary" href="/calculator">{{ t("index.cta_start") }}</a>
+                            <a class="btn btn-secondary" href="/reports">{{ t("common.nav_reports") }}</a>
+                        </div>
+                    </article>
+                    <article class="final-cta-card">
+                        <div class="card-eyebrow">{{ t("consultation.eyebrow") }}</div>
+                        <h2>{{ t("consultation.closing_title") }}</h2>
+                        <p class="muted">{{ t("consultation.closing_text") }}</p>
+                        <div class="final-cta-actions">
+                            <a class="btn btn-secondary" href="/personal-consultation">{{ t("consultation.closing_primary") }}</a>
+                        </div>
                     </article>
                 </div>
             </section>

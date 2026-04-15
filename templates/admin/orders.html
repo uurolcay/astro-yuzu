@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Jyotish | Admin Orders{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <div class="row-between">
+                <div>
+                    <p class="eyebrow">Internal Fulfillment</p>
+                    <h1 class="hero-title" style="font-size:2.3rem;">Service Orders</h1>
+                    <p class="muted">Paid report and consultation orders only by default. Unpaid states appear only when explicitly filtered.</p>
+                </div>
+                <a class="chip" href="/admin">Admin Home</a>
+            </div>
+
+            <form method="get" style="display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:12px; margin-top:20px;">
+                <select name="order_type">
+                    <option value="">All paid workflows</option>
+                    <option value="report" {% if filters.order_type == "report" %}selected{% endif %}>Reports</option>
+                    <option value="consultation" {% if filters.order_type == "consultation" %}selected{% endif %}>Consultations</option>
+                </select>
+                <select name="product_type">
+                    <option value="">All products</option>
+                    {% for product_type in product_types %}
+                    <option value="{{ product_type }}" {% if filters.product_type == product_type %}selected{% endif %}>{{ product_type }}</option>
+                    {% endfor %}
+                </select>
+                <select name="status">
+                    <option value="">Active paid statuses</option>
+                    {% for status in statuses %}
+                    <option value="{{ status }}" {% if filters.status == status %}selected{% endif %}>{{ status }}</option>
+                    {% endfor %}
+                    <option value="awaiting_payment" {% if filters.status == "awaiting_payment" %}selected{% endif %}>awaiting_payment</option>
+                    <option value="booking_pending_payment" {% if filters.status == "booking_pending_payment" %}selected{% endif %}>booking_pending_payment</option>
+                    <option value="booking_expired" {% if filters.status == "booking_expired" %}selected{% endif %}>booking_expired</option>
+                </select>
+                <button class="btn btn-secondary" type="submit">Filter</button>
+            </form>
+
+            <div style="overflow:auto; margin-top:24px;">
+                <table style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr class="muted" style="text-align:left;">
+                            <th style="padding:10px;">ID</th>
+                            <th style="padding:10px;">Created</th>
+                            <th style="padding:10px;">Customer</th>
+                            <th style="padding:10px;">Workflow</th>
+                            <th style="padding:10px;">Product</th>
+                            <th style="padding:10px;">Status</th>
+                            <th style="padding:10px;">Amount</th>
+                            <th style="padding:10px;">Paid</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for order in orders %}
+                        <tr style="border-top:1px solid rgba(223,192,112,.12);">
+                            <td style="padding:12px;"><a href="/admin/orders/{{ order.id }}">#{{ order.id }}</a></td>
+                            <td style="padding:12px;">{{ order.created_at }}</td>
+                            <td style="padding:12px;">
+                                <strong>{{ order.customer_name }}</strong><br>
+                                <span class="muted">{{ order.customer_email }}</span>
+                            </td>
+                            <td style="padding:12px;">{{ order.service_type }}</td>
+                            <td style="padding:12px;">{{ order.product_type }}</td>
+                            <td style="padding:12px;"><span class="chip">{{ order.status }}</span></td>
+                            <td style="padding:12px;">{{ order.amount }}</td>
+                            <td style="padding:12px;">{{ order.paid_at or "-" }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="8" class="muted" style="padding:18px;">No matching orders.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

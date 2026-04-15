@@ -1,0 +1,7 @@
+İptal kaydı
+
+{{ product.title }}
+
+Talebiniz yönetici tarafından iptal edildi. İade gerekiyorsa ayrıca değerlendirilir ve açık şekilde kaydedilir.
+
+Bu mesaj otomatik teslim veya otomatik iade anlamına gelmez; operasyon kaydının bilgilendirme mesajıdır.

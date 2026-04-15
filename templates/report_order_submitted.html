@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Rapor Talebi Alındı{% endblock %}
+
+{% block extra_head %}
+<style>
+    .submitted-shell {
+        display:grid;
+        gap:clamp(24px, 4vw, 38px);
+        max-width:920px;
+        margin:0 auto;
+    }
+    .submitted-card {
+        display:grid;
+        gap:18px;
+        padding:clamp(32px, 5vw, 54px);
+        border-radius:var(--radius);
+        border:1px solid rgba(223,192,112,.14);
+        background:
+            radial-gradient(circle at 82% 18%, rgba(223,192,112,.13), transparent 28%),
+            linear-gradient(180deg, rgba(32,51,84,.56), rgba(14,24,44,.34));
+        box-shadow:0 20px 48px rgba(0,0,0,.18);
+    }
+    .submitted-list {
+        margin:0;
+        padding-left:18px;
+        display:grid;
+        gap:10px;
+        color:var(--text-soft);
+        line-height:1.72;
+    }
+    .submitted-actions { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+    @media (max-width: 760px) {
+        .submitted-card { padding:clamp(24px, 7vw, 34px); }
+        .submitted-actions,
+        .submitted-actions .btn { width:100%; justify-content:center; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="submitted-shell">
+            <section class="submitted-card">
+                <div class="chip-row">
+                    <span class="chip">Talep alındı</span>
+                    <span class="chip">{{ product.title }}</span>
+                </div>
+                <h1 class="hero-title">Rapor talebiniz inceleme sürecine alındı.</h1>
+                <p class="hero-text">
+                    Paylaştığınız bilgilerle AI destekli rapor taslağı oluşturuldu ve yönetici incelemesine yönlendirildi. Taslak müşteriye otomatik gönderilmez; rapor insan değerlendirmesi sonrası e-posta ile teslim edilir.
+                </p>
+                <ul class="submitted-list">
+                    <li><strong>Rapor:</strong> {{ product.title }}</li>
+                    <li><strong>Teslim:</strong> Raporlar, hazırlık sürecinin ardından en geç 7 gün içinde e-posta ile teslim edilir.</li>
+                    <li><strong>İletişim:</strong> Teslim ve olası takip soruları için {{ order.email }} adresi kullanılır.</li>
+                </ul>
+                <div class="submitted-actions">
+                    <a class="btn btn-primary" href="/reports">Raporlara Dön</a>
+                    <a class="btn btn-secondary" href="/personal-consultation">Danışmanlıkla Derinleştir</a>
+                </div>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

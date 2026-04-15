@@ -1,32 +1,106 @@
 {% extends "base.html" %}
 
-{% block title %}Jyotish | Kayit Ol{% endblock %}
+{% block title %}{{ t("auth.signup_page_title") }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    .auth-shell { display:grid; gap:24px; }
+    .auth-layout { display:grid; grid-template-columns:minmax(0, 1.04fr) minmax(280px, .84fr); gap:22px; align-items:stretch; }
+    .auth-main {
+        display:grid;
+        gap:18px;
+        padding: clamp(28px, 4vw, 38px);
+        border-radius: var(--radius);
+        border: 1px solid rgba(223,192,112,.10);
+        box-shadow: 0 14px 34px rgba(0,0,0,.12);
+    }
+    .auth-support { display:grid; gap:12px; padding: clamp(8px, 2vw, 14px) 0; align-content:center; }
+    .auth-main {
+        background:
+            radial-gradient(circle at 84% 18%, rgba(223,192,112,.12), transparent 26%),
+            linear-gradient(180deg, rgba(31,50,84,.34), rgba(15,26,46,.22));
+    }
+    .auth-form { display:grid; gap:16px; margin-top:4px; }
+    .auth-form label { display:block; color:var(--text); font-weight:600; }
+    .auth-form-actions { display:flex; gap:12px; flex-wrap:wrap; padding-top:6px; }
+    .auth-support-title {
+        margin:0;
+        font-family:"Cormorant Garamond", serif;
+        font-size:clamp(1.72rem, 2.4vw, 2.18rem);
+        font-weight:300;
+        line-height:1.08;
+        color:var(--text);
+    }
+    .auth-support-points {
+        margin:0;
+        padding-left:18px;
+        color:var(--text-soft);
+        display:grid;
+        gap:10px;
+        line-height:1.62;
+    }
+    .auth-switch { margin:0; color:var(--text-soft); }
+    .auth-switch a { color:var(--text); }
+    .auth-error { margin:0; color:#efb1b1; }
+    @media (max-width: 980px) {
+        .auth-layout { grid-template-columns:1fr; }
+    }
+    @media (max-width: 760px) {
+        .auth-main,
+        .auth-support { padding: clamp(24px, 7vw, 34px); }
+        .auth-form-actions { width:100%; }
+        .auth-form-actions .btn {
+            width:100%;
+            justify-content:center;
+        }
+    }
+</style>
+{% endblock %}
 
 {% block content %}
 <section class="page-section">
-    <div class="container" style="max-width:680px;">
-        <div class="glass-card card-pad">
-            <h1 class="hero-title" style="font-size:2.4rem;">Hesap Olustur</h1>
-            <p class="hero-text">Raporlarini kaydetmek, plan bazli ozellikleri kullanmak ve dashboard'una ulasmak icin hizlica kaydol.</p>
-            {% if error_message %}
-            <p class="muted" style="color:#efb1b1;">{{ error_message }}</p>
-            {% endif %}
-            <form action="/signup" method="post" style="display:grid; gap:16px; margin-top:20px;">
-                <div>
-                    <label for="name">Ad</label>
-                    <input id="name" name="name" type="text" value="{{ form_data.name if form_data else '' }}" style="width:100%; margin-top:8px;">
+    <div class="container">
+        <div class="auth-shell">
+            <section class="auth-layout">
+                <div class="auth-main">
+                    <div class="chip-row">
+                        <span class="chip">Focus Astrology</span>
+                        <span class="chip">{{ t("auth.signup_cta") }}</span>
+                    </div>
+                    <h1 class="hero-title" style="font-size:2.6rem;">{{ t("auth.signup_title") }}</h1>
+                    <p class="hero-text">{{ t("auth.signup_text") }}</p>
+                    {% if error_message %}
+                    <p class="auth-error">{{ error_message }}</p>
+                    {% endif %}
+                    <form action="/signup" method="post" class="auth-form">
+                        <div>
+                            <label for="name">{{ t("auth.name_label") }}</label>
+                            <input id="name" name="name" type="text" value="{{ form_data.name if form_data else '' }}" style="width:100%; margin-top:8px;">
+                        </div>
+                        <div>
+                            <label for="email">{{ t("auth.email_label") }}</label>
+                            <input id="email" name="email" type="email" value="{{ form_data.email if form_data else '' }}" required style="width:100%; margin-top:8px;">
+                        </div>
+                        <div>
+                            <label for="password">{{ t("auth.password_label") }}</label>
+                            <input id="password" name="password" type="password" required style="width:100%; margin-top:8px;">
+                        </div>
+                        <div class="auth-form-actions">
+                            <button class="btn btn-primary" type="submit">{{ t("auth.signup_cta") }}</button>
+                            <a class="btn btn-secondary" href="/login">{{ t("auth.login_cta") }}</a>
+                        </div>
+                    </form>
+                    <p class="auth-switch">{{ t("auth.signup_switch") }} <a href="/login">{{ t("auth.login_cta") }}</a></p>
                 </div>
-                <div>
-                    <label for="email">E-posta</label>
-                    <input id="email" name="email" type="email" value="{{ form_data.email if form_data else '' }}" required style="width:100%; margin-top:8px;">
-                </div>
-                <div>
-                    <label for="password">Sifre</label>
-                    <input id="password" name="password" type="password" required style="width:100%; margin-top:8px;">
-                </div>
-                <button class="btn btn-primary" type="submit">Kayit Ol</button>
-            </form>
-            <p class="muted" style="margin-top:18px;">Zaten hesabin var mi? <a href="/login">Giris yap</a></p>
+                <aside class="auth-support">
+                    <h2 class="auth-support-title">{{ t("auth.signup_support_title") }}</h2>
+                    <p class="muted" style="margin:0;">{{ t("auth.signup_support_text") }}</p>
+                    <ul class="auth-support-points">
+                        <li>{{ t("auth.signup_support_point_1") }}</li>
+                        <li>{{ t("auth.signup_support_point_2") }}</li>
+                    </ul>
+                </aside>
+            </section>
         </div>
     </div>
 </section>

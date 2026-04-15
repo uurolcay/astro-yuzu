@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block title %}Ödeme Adımı{% endblock %}
+
+{% block extra_head %}
+<style>
+    .checkout-shell {
+        display:grid;
+        gap:clamp(24px, 4vw, 40px);
+        max-width:980px;
+        margin:0 auto;
+    }
+    .checkout-card {
+        display:grid;
+        grid-template-columns:minmax(0, 1.04fr) minmax(280px, .96fr);
+        gap:24px;
+        align-items:center;
+        padding:clamp(32px, 5vw, 54px);
+        border-radius:var(--radius);
+        border:1px solid rgba(223,192,112,.14);
+        background:
+            radial-gradient(circle at 82% 18%, rgba(223,192,112,.12), transparent 28%),
+            linear-gradient(180deg, rgba(32,51,84,.56), rgba(14,24,44,.34));
+        box-shadow:0 20px 48px rgba(0,0,0,.18);
+    }
+    .checkout-copy,
+    .checkout-summary,
+    .checkout-steps { display:grid; gap:16px; }
+    .checkout-summary {
+        padding:clamp(20px, 3vw, 28px);
+        border-radius:calc(var(--radius) - 6px);
+        background:rgba(255,255,255,.024);
+    }
+    .checkout-line {
+        display:flex;
+        justify-content:space-between;
+        gap:18px;
+        padding:10px 0;
+        border-bottom:1px solid rgba(223,192,112,.10);
+        color:var(--text-soft);
+    }
+    .checkout-line:last-child { border-bottom:none; }
+    .checkout-line strong { color:var(--text); }
+    .checkout-price {
+        color:var(--gold-light);
+        font-family:"Cormorant Garamond", serif;
+        font-size:clamp(2rem, 3vw, 2.8rem);
+        line-height:1;
+        font-weight:300;
+    }
+    .checkout-notice {
+        padding:14px 16px;
+        border-radius:18px;
+        border:1px solid rgba(223,192,112,.16);
+        background:rgba(223,192,112,.06);
+        color:var(--text-soft);
+        line-height:1.65;
+    }
+    .checkout-actions { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+    .checkout-upsell {
+        display:grid;
+        gap:12px;
+        padding:clamp(20px, 3vw, 28px);
+        border-radius:calc(var(--radius) - 6px);
+        border:1px solid rgba(223,192,112,.12);
+        background:rgba(255,255,255,.022);
+    }
+    .checkout-upsell h2 {
+        margin:0;
+        color:var(--text);
+        font-family:"Cormorant Garamond", serif;
+        font-size:clamp(1.7rem, 2.5vw, 2.35rem);
+        font-weight:300;
+        line-height:1.08;
+    }
+    .checkout-upsell p {
+        margin:0;
+        color:var(--text-soft);
+        line-height:1.7;
+    }
+    .checkout-steps {
+        grid-template-columns:repeat(3, minmax(0, 1fr));
+        color:var(--text-soft);
+        line-height:1.68;
+    }
+    .checkout-steps div {
+        padding-left:16px;
+        border-left:1px solid rgba(223,192,112,.14);
+    }
+    .checkout-steps strong {
+        display:block;
+        margin-bottom:6px;
+        color:var(--gold-light);
+    }
+    @media (max-width: 960px) {
+        .checkout-card,
+        .checkout-steps { grid-template-columns:1fr; }
+    }
+    @media (max-width: 760px) {
+        .checkout-card { padding:clamp(24px, 7vw, 34px); }
+        .checkout-actions,
+        .checkout-actions .btn { width:100%; justify-content:center; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="checkout-shell">
+            <section class="checkout-card">
+                <div class="checkout-copy">
+                    <div class="chip-row">
+                        <span class="chip">Ödeme adımı</span>
+                        <span class="chip">{{ provider_name|upper }}</span>
+                    </div>
+                    {% if service_kind == "consultation" %}
+                    <h1 class="hero-title">Randevu seçiminizi ödeme adımıyla kesinleştirin.</h1>
+                    <p class="hero-text">
+                        60 dakikalık birebir danışmanlıkta önce uygun zaman seçilir; ardından ödeme adımı randevuyu kesinleştirir. Ödeme tamamlanmadan danışmanlık satın alımı tamamlanmış sayılmaz.
+                    </p>
+                    {% else %}
+                    <h1 class="hero-title">Rapor talebiniz ödeme sonrası inceleme sürecine alınır.</h1>
+                    <p class="hero-text">
+                        Ödeme tamamlandıktan sonra AI destekli taslak hazırlanır ve yalnızca yönetici incelemesine gönderilir. Rapor, insan değerlendirmesi sonrası en geç 7 gün içinde e-posta ile teslim edilir.
+                    </p>
+                    {% endif %}
+
+                    {% if checkout_notice %}
+                    <div class="checkout-notice">
+                        {% if checkout_notice == "payments_unavailable" %}
+                        Online ödeme bağlantısı bu ortamda henüz aktif değil. Bu akış iyzico payment link entegrasyonu için hazırlandı; ödeme canlı olduğunda aynı adım güvenli iyzico ödeme bağlantısına yönlenecek.
+                        {% elif checkout_notice == "checkout_failed" %}
+                        Ödeme oturumu başlatılamadı. Lütfen bilgileri koruyarak tekrar deneyin veya destek ekibiyle iletişime geçin.
+                        {% elif checkout_notice == "verification_failed" %}
+                        Ödeme doğrulaması tamamlanamadı. Güvenliğiniz için sipariş süreci başlatılmadı.
+                        {% elif checkout_notice == "cancelled" %}
+                        Ödeme adımı iptal edildi. Siparişiniz henüz işleme alınmadı.
+                        {% else %}
+                        Ödeme adımı şu anda tamamlanamadı. Lütfen daha sonra tekrar deneyin.
+                        {% endif %}
+                    </div>
+                    {% elif not payments_enabled %}
+                    <div class="checkout-notice">
+                        Online ödeme şu anda canlı değil. Bu sayfa, iyzico payment link entegrasyonu aktif edildiğinde güvenli ödeme bağlantısına yönlenecek şekilde hazırlanmıştır.
+                    </div>
+                    {% endif %}
+
+                    <form class="checkout-actions" method="post" action="{% if service_kind == 'consultation' %}/checkout/consultation{% else %}/checkout/report/{{ order.order_token }}{% endif %}">
+                        <button class="btn btn-primary" type="submit" {% if not payments_enabled %}disabled aria-disabled="true"{% endif %}>
+                            {% if service_kind == "consultation" %}Ödemeyi Başlat{% else %}Rapor Ödemesini Başlat{% endif %}
+                        </button>
+                        <a class="btn btn-secondary" href="{% if service_kind == 'consultation' %}/personal-consultation{% else %}/reports{% endif %}">Geri Dön</a>
+                    </form>
+                </div>
+                <aside class="checkout-summary">
+                    <div class="section-kicker">Sipariş özeti</div>
+                    <h2 class="section-title" style="font-size:clamp(1.9rem, 3vw, 2.5rem);">{{ product.title }}</h2>
+                    <p class="muted">{{ product.summary }}</p>
+                    <div class="checkout-line">
+                        <span>Durum</span>
+                        <strong>{% if order %}{{ order.status }}{% elif service_kind == "consultation" %}booking_pending_payment{% else %}awaiting_payment{% endif %}</strong>
+                    </div>
+                    <div class="checkout-line">
+                        <span>Tutar</span>
+                        <strong class="checkout-price">{{ product.price }}</strong>
+                    </div>
+                </aside>
+            </section>
+
+            <section class="checkout-steps" aria-label="Ödeme sonrası süreç">
+                {% if service_kind == "consultation" %}
+                <div><strong>1. Randevu</strong>Önce Calendly üzerinden uygun zamanı seçersiniz.</div>
+                <div><strong>2. Ödeme</strong>Ardından iyzico ödeme bağlantısıyla randevuyu kesinleştirirsiniz.</div>
+                <div><strong>3. Görüşme</strong>60 dakikalık birebir danışmanlık gerçekleşir.</div>
+                {% else %}
+                <div><strong>1. Ödeme</strong>Rapor talebi ödeme sonrası geçerli hale gelir.</div>
+                <div><strong>2. Taslak</strong>AI destekli taslak yönetici incelemesine gönderilir.</div>
+                <div><strong>3. Teslim</strong>Rapor en geç 7 gün içinde e-posta ile teslim edilir.</div>
+                {% endif %}
+            </section>
+
+            {% if checkout_upsell %}
+            <section class="checkout-upsell" aria-label="Akıllı sonraki seçenek">
+                <div class="section-kicker">{{ checkout_upsell.eyebrow }}</div>
+                <h2>{{ checkout_upsell.title }}</h2>
+                <p>{{ checkout_upsell.text }}</p>
+                <div class="checkout-actions">
+                    <a class="btn btn-secondary" href="{{ checkout_upsell.primary_href }}">{{ checkout_upsell.primary_label }}</a>
+                    {% if checkout_upsell.secondary_href %}
+                    <a class="btn btn-secondary" href="{{ checkout_upsell.secondary_href }}">{{ checkout_upsell.secondary_label }}</a>
+                    {% endif %}
+                </div>
+            </section>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endblock %}
