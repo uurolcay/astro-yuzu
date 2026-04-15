@@ -13,6 +13,6 @@ geonamescache
 timezonefinder
 pyswisseph
 openai
-google-generativeai
+google-genai
 google-api-python-client
 weasyprint
