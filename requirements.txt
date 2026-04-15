@@ -1,4 +1,4 @@
-Flask
+fastapi
+uvicorn
 gunicorn
 pytz
-uvicorn
