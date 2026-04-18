@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Focus Astrology | Admin Consultations{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <div class="row-between">
+                <div>
+                    <p class="eyebrow">Consultation Monitoring</p>
+                    <h1 class="hero-title" style="font-size:2.3rem;">Consultations</h1>
+                    <p class="muted">Calendly-linked consultation orders only. Report orders are excluded.</p>
+                </div>
+                <div class="chip-row">
+                    <a class="chip" href="/admin/dashboard">Dashboard</a>
+                    <a class="chip" href="/admin/orders">All Orders</a>
+                </div>
+            </div>
+
+            <form method="get" style="display:grid; grid-template-columns:1fr auto; gap:12px; margin-top:20px;">
+                <input type="text" name="status" placeholder="Status" value="{{ filters.status }}">
+                <button class="btn btn-secondary" type="submit">Filter</button>
+            </form>
+
+            <div style="overflow:auto; margin-top:24px;">
+                <table style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr class="muted" style="text-align:left;">
+                            <th style="padding:10px;">Customer Name</th>
+                            <th style="padding:10px;">Email</th>
+                            <th style="padding:10px;">Date</th>
+                            <th style="padding:10px;">Time</th>
+                            <th style="padding:10px;">Paid</th>
+                            <th style="padding:10px;">Status</th>
+                            <th style="padding:10px;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in consultations %}
+                        <tr style="border-top:1px solid rgba(223,192,112,.12);">
+                            <td style="padding:12px;">{{ item.customer_name }}</td>
+                            <td style="padding:12px;">{{ item.customer_email }}</td>
+                            <td style="padding:12px;">{{ item.scheduled_start.date() if item.scheduled_start else "-" }}</td>
+                            <td style="padding:12px;">{{ item.scheduled_start.time() if item.scheduled_start else "-" }}</td>
+                            <td style="padding:12px;">{{ item.paid_label }}</td>
+                            <td style="padding:12px;"><span class="chip">{{ item.status }}</span></td>
+                            <td style="padding:12px;"><a class="chip" href="/admin/orders/{{ item.id }}">View</a></td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="muted" style="padding:18px;">No consultation orders match this filter.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

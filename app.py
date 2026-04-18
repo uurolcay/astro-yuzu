@@ -1,5 +1,6 @@
 import csv
 import copy
+import html as html_lib
 import hmac
 import hashlib
 import json
@@ -19,16 +20,17 @@ from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import urlencode
 
+from dotenv import load_dotenv
 import pytz
 import uvicorn
 from jinja2 import pass_context
-from fastapi import Depends, FastAPI, Form, HTTPException
+from fastapi import Depends, FastAPI, Form, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import inspect as sa_inspect, or_
+from sqlalchemy import func, inspect as sa_inspect, or_
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -92,7 +94,20 @@ except ImportError:
     engines_fullmoons = None
 
 
-SESSION_SECRET_KEY = os.getenv("APP_SECRET_KEY", "jyotish-dev-secret-change-me")
+load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
+
+
+def _env_flag_value(name, default=False):
+    raw = str(os.getenv(name, "true" if default else "false")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+TRUST_PROXY = _env_flag_value("TRUST_PROXY", default=False)
+SESSION_SECRET_KEY = (
+    os.getenv("SECRET_KEY")
+    or os.getenv("APP_SECRET_KEY")
+    or "jyotish-dev-secret-change-me"
+)
 
 app = FastAPI(title="Astro-Yuzu Intelligence Core", version="5.3")
 templates = Jinja2Templates(directory="templates")
@@ -124,6 +139,63 @@ app.add_middleware(
 
 db_mod.init_db()
 logger = logging.getLogger(__name__)
+if SESSION_SECRET_KEY == "jyotish-dev-secret-change-me":
+    logger.warning("Using development session secret. Set SECRET_KEY or APP_SECRET_KEY in production.")
+if payments.payments_enabled() and payments.payment_provider() == "iyzico":
+    missing_iyzico_config = [
+        name
+        for name in ("IYZICO_API_KEY", "IYZICO_SECRET_KEY")
+        if not str(os.getenv(name, "")).strip()
+    ]
+    if missing_iyzico_config:
+        logger.warning("iyzico payments are enabled but missing config keys=%s", ",".join(missing_iyzico_config))
+if not (str(os.getenv("GEMINI_API_KEY", "")).strip() or str(os.getenv("OPENAI_API_KEY", "")).strip()):
+    logger.info("No AI provider key detected; interpretation endpoints depend on provider environment configuration.")
+
+
+def _bootstrap_admin_user_from_env():
+    admin_email = (
+        str(os.getenv("ADMIN_EMAIL", "")).strip().lower()
+        or str(os.getenv("ADMIN_USERNAME", "")).strip().lower()
+    )
+    admin_password = str(os.getenv("ADMIN_PASSWORD", "") or "")
+    if not admin_email or not admin_password:
+        return {"status": "skipped", "reason": "missing_env"}
+    if "@" not in admin_email:
+        logger.warning("ADMIN_EMAIL/ADMIN_USERNAME must be an email address; admin bootstrap skipped.")
+        return {"status": "skipped", "reason": "invalid_email"}
+    if len(admin_password) < 8:
+        logger.warning("ADMIN_PASSWORD must be at least 8 characters; admin bootstrap skipped.")
+        return {"status": "skipped", "reason": "weak_password"}
+
+    db = db_mod.SessionLocal()
+    try:
+        user = db.query(db_mod.AppUser).filter(db_mod.AppUser.email == admin_email).first()
+        created = False
+        if not user:
+            user = db_mod.AppUser(
+                email=admin_email,
+                password_hash=generate_password_hash(admin_password),
+                name=admin_email.split("@")[0],
+                plan_code="free",
+                is_admin=True,
+                is_active=True,
+            )
+            db.add(user)
+            created = True
+        else:
+            user.is_admin = True
+            user.is_active = True
+            if _env_flag_value("ADMIN_RESET_PASSWORD", default=False):
+                user.password_hash = generate_password_hash(admin_password)
+        db.commit()
+        logger.info("Admin bootstrap %s email=%s", "created" if created else "verified", admin_email)
+        return {"status": "created" if created else "verified", "email": admin_email}
+    finally:
+        db.close()
+
+
+_bootstrap_admin_user_from_env()
 BASE_DIR = Path(__file__).resolve().parent
 GTK_RUNTIME_DIR = Path(r"C:\Program Files\GTK3-Runtime Win64")
 GTK_BIN_DIR = GTK_RUNTIME_DIR / "bin"
@@ -688,14 +760,82 @@ def _admin_email_allowlist():
 
 def _client_ip(request):
     try:
-        forwarded = request.headers.get("x-forwarded-for", "").strip()
-        if forwarded:
-            return forwarded.split(",")[0].strip()
+        if TRUST_PROXY:
+            cf_ip = request.headers.get("cf-connecting-ip", "").strip()
+            if cf_ip:
+                return cf_ip
+            forwarded = request.headers.get("x-forwarded-for", "").strip()
+            if forwarded:
+                return forwarded.split(",")[0].strip()
+            real_ip = request.headers.get("x-real-ip", "").strip()
+            if real_ip:
+                return real_ip
         if request.client and getattr(request.client, "host", None):
             return request.client.host
     except Exception:
         pass
     return "-"
+
+
+_RATE_LIMIT_BUCKETS = {}
+CSRF_SESSION_KEY = "_csrf_token"
+CSRF_FORM_FIELD = "csrf_token"
+
+
+def enforce_rate_limit(request, scope, limit=10, window_seconds=600):
+    """Small per-process abuse guard for expensive MVP routes; not a distributed quota."""
+    now = time.monotonic()
+    client_ip = _client_ip(request)
+    key = (str(scope or "default"), client_ip)
+    window_start = now - max(int(window_seconds or 1), 1)
+    timestamps = [ts for ts in _RATE_LIMIT_BUCKETS.get(key, []) if ts >= window_start]
+    if len(timestamps) >= int(limit):
+        logger.warning("Rate limit exceeded scope=%s client_ip=%s limit=%s window=%s", scope, client_ip, limit, window_seconds)
+        raise HTTPException(status_code=429, detail="Too many requests. Please try again shortly.")
+    timestamps.append(now)
+    _RATE_LIMIT_BUCKETS[key] = timestamps
+
+    if len(_RATE_LIMIT_BUCKETS) > 1000:
+        for bucket_key, bucket_values in list(_RATE_LIMIT_BUCKETS.items()):
+            recent_values = [ts for ts in bucket_values if ts >= window_start]
+            if recent_values:
+                _RATE_LIMIT_BUCKETS[bucket_key] = recent_values
+            else:
+                _RATE_LIMIT_BUCKETS.pop(bucket_key, None)
+
+
+def ensure_csrf_token(request):
+    if "session" not in getattr(request, "scope", {}):
+        return ""
+    token = request.session.get(CSRF_SESSION_KEY)
+    if not token:
+        token = secrets.token_urlsafe(32)
+        request.session[CSRF_SESSION_KEY] = token
+    return token
+
+
+async def validate_csrf_token(request, submitted_token=None):
+    expected = ensure_csrf_token(request)
+    candidate = (
+        str(submitted_token or "").strip()
+        or str(request.headers.get("x-csrf-token", "")).strip()
+        or str(request.headers.get("x-focus-csrf-token", "")).strip()
+    )
+    if not candidate:
+        content_type = str(request.headers.get("content-type", "")).lower()
+        if "application/x-www-form-urlencoded" in content_type or "multipart/form-data" in content_type:
+            try:
+                form = await request.form()
+                candidate = str(form.get(CSRF_FORM_FIELD, "") or "").strip()
+            except Exception:
+                candidate = ""
+    if not expected or not candidate or not hmac.compare_digest(str(expected), str(candidate)):
+        logger.warning("CSRF validation failed path=%s client_ip=%s", getattr(getattr(request, "url", None), "path", "-"), _client_ip(request))
+        raise HTTPException(status_code=403, detail="Invalid form token.")
+    return True
+
+
+templates.env.globals["csrf_token_for"] = ensure_csrf_token
 
 
 def _app_base_url(request=None):
@@ -722,7 +862,7 @@ def _generate_order_token(prefix):
 
 def _amount_decimal(value):
     raw = str(value or "").strip()
-    raw = raw.replace("₺", "").replace("TRY", "").replace("TL", "").replace(" ", "")
+    raw = raw.replace("₺", "").replace("â‚º", "").replace("TRY", "").replace("TL", "").replace(" ", "")
     if "," in raw:
         raw = raw.replace(".", "").replace(",", ".")
     elif "." in raw and len(raw.rsplit(".", 1)[-1]) == 3:
@@ -1232,6 +1372,238 @@ def create_consultation_payment_session(order, request=None):
     return _create_service_checkout_session(order, request=request)
 
 
+def _calendly_signature_header(headers):
+    return (
+        headers.get("calendly-webhook-signature")
+        or headers.get("Calendly-Webhook-Signature")
+        or headers.get("x-calendly-webhook-signature")
+        or headers.get("X-Calendly-Webhook-Signature")
+        or ""
+    )
+
+
+def verify_calendly_webhook_signature(raw_body, headers):
+    secret = str(os.getenv("CALENDLY_WEBHOOK_SIGNING_KEY", "") or "").strip()
+    if not secret:
+        return True
+    signature_header = str(_calendly_signature_header(headers) or "").strip()
+    if not signature_header:
+        return False
+    parts = {}
+    for chunk in signature_header.split(","):
+        if "=" in chunk:
+            key, value = chunk.split("=", 1)
+            parts[key.strip()] = value.strip()
+    timestamp = parts.get("t")
+    expected_signature = parts.get("v1") or signature_header
+    signed_payload = raw_body if not timestamp else f"{timestamp}.{raw_body.decode('utf-8')}".encode("utf-8")
+    digest = hmac.new(secret.encode("utf-8"), signed_payload, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(digest, expected_signature)
+
+
+def _parse_calendly_datetime(value):
+    if not value:
+        return None
+    raw = str(value).strip()
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(pytz.UTC).replace(tzinfo=None)
+    return parsed
+
+
+def _calendly_scheduled_event(payload):
+    scheduled = payload.get("scheduled_event")
+    if isinstance(scheduled, Mapping):
+        return scheduled
+    return {}
+
+
+def _calendly_event_uri(payload):
+    scheduled = _calendly_scheduled_event(payload)
+    event_value = payload.get("event")
+    if isinstance(event_value, Mapping):
+        return event_value.get("uri") or scheduled.get("uri")
+    return scheduled.get("uri") or event_value or payload.get("event_uri")
+
+
+def _calendly_invitee_uri(payload):
+    invitee = payload.get("invitee")
+    if isinstance(invitee, Mapping):
+        return invitee.get("uri")
+    return payload.get("uri") or payload.get("invitee_uri")
+
+
+def _calendly_invitee_email(payload):
+    invitee = payload.get("invitee")
+    if isinstance(invitee, Mapping) and invitee.get("email"):
+        return str(invitee.get("email")).strip().lower()
+    return str(payload.get("email") or "").strip().lower()
+
+
+def _calendly_start_end(payload):
+    scheduled = _calendly_scheduled_event(payload)
+    return (
+        _parse_calendly_datetime(scheduled.get("start_time") or payload.get("start_time")),
+        _parse_calendly_datetime(scheduled.get("end_time") or payload.get("end_time")),
+    )
+
+
+def _calendly_event_type_uri(payload):
+    scheduled = _calendly_scheduled_event(payload)
+    event_type = scheduled.get("event_type") or payload.get("event_type")
+    if isinstance(event_type, Mapping):
+        return event_type.get("uri")
+    return event_type
+
+
+def _consultation_payload_json_from_calendly(payload, order=None):
+    scheduled_start = getattr(order, "scheduled_start", None) if order else None
+    scheduled_end = getattr(order, "scheduled_end", None) if order else None
+    return json.dumps(
+        {
+            "service_type": "consultation",
+            "product_type": CONSULTATION_PRODUCT["product_type"],
+            "submitted_at": datetime.now(pytz.UTC).isoformat(),
+            "booking_source": "calendly",
+            "calendly": {
+                "event_uri": getattr(order, "calendly_event_uri", None) if order else _calendly_event_uri(payload),
+                "invitee_uri": getattr(order, "calendly_invitee_uri", None) if order else _calendly_invitee_uri(payload),
+                "event_type_uri": getattr(order, "calendly_event_type_uri", None) if order else _calendly_event_type_uri(payload),
+                "scheduled_start": scheduled_start.isoformat() if scheduled_start else None,
+                "scheduled_end": scheduled_end.isoformat() if scheduled_end else None,
+            },
+            "service_model": {
+                "duration": "60 dakika",
+                "sequence": "Calendly randevu seçimi sonrası iyzico ödeme adımı",
+                "cancellation": "Randevular, planlanan saatten en az 24 saat önce ücretsiz olarak iptal edilebilir veya yeniden planlanabilir.",
+            },
+        },
+        ensure_ascii=False,
+    )
+
+
+def _find_calendly_consultation_order(db, event_uri=None, invitee_uri=None, email=None, scheduled_start=None):
+    query = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.service_type == "consultation")
+    if invitee_uri:
+        order = query.filter(db_mod.ServiceOrder.calendly_invitee_uri == invitee_uri).first()
+        if order:
+            return order
+    if event_uri:
+        order = query.filter(db_mod.ServiceOrder.calendly_event_uri == event_uri).first()
+        if order:
+            return order
+    if email and scheduled_start:
+        return query.filter(
+            db_mod.ServiceOrder.customer_email == email,
+            db_mod.ServiceOrder.scheduled_start == scheduled_start,
+            db_mod.ServiceOrder.status.in_({"booking_pending_payment", "paid", "confirmed", "prepared"}),
+        ).first()
+    return None
+
+
+def sync_calendly_invitee_created(db, payload):
+    event_uri = _calendly_event_uri(payload)
+    invitee_uri = _calendly_invitee_uri(payload)
+    email = _calendly_invitee_email(payload)
+    name = str(payload.get("name") or payload.get("first_name") or "").strip()
+    scheduled_start, scheduled_end = _calendly_start_end(payload)
+    event_type_uri = _calendly_event_type_uri(payload)
+    order = _find_calendly_consultation_order(db, event_uri, invitee_uri, email, scheduled_start)
+    action = "consultation_booking_updated" if order else "consultation_booking_created"
+    if not order:
+        order = db_mod.ServiceOrder(
+            order_token=_generate_order_token("consult"),
+            service_type="consultation",
+            product_type=CONSULTATION_PRODUCT["product_type"],
+            status="booking_pending_payment",
+            amount=_amount_decimal(CONSULTATION_PRODUCT["price"]),
+            amount_label=CONSULTATION_PRODUCT["price"],
+            currency="TRY",
+        )
+        order.public_token = order.order_token
+        db.add(order)
+        db.flush()
+    elif order.status in {"initiated", "booking_expired", "awaiting_payment"} and not order.paid_at:
+        order.status = "booking_pending_payment"
+    order.customer_name = name or order.customer_name
+    order.customer_email = email or order.customer_email
+    order.calendly_event_uri = event_uri or order.calendly_event_uri
+    order.calendly_invitee_uri = invitee_uri or order.calendly_invitee_uri
+    order.calendly_event_type_uri = event_type_uri or order.calendly_event_type_uri
+    order.calendly_status = "created"
+    order.booking_source = "calendly"
+    order.scheduled_start = scheduled_start or order.scheduled_start
+    order.scheduled_end = scheduled_end or order.scheduled_end
+    order.payload_json = _consultation_payload_json_from_calendly(payload, order=order)
+    log_admin_action(
+        db,
+        order,
+        action,
+        actor="calendly",
+        metadata={
+            "calendly_event_uri": order.calendly_event_uri,
+            "calendly_invitee_uri": order.calendly_invitee_uri,
+            "invitee_email": order.customer_email,
+            "scheduled_start": order.scheduled_start.isoformat() if order.scheduled_start else None,
+            "checkout_url": f"/checkout/consultation/{order.order_token}",
+        },
+    )
+    db.commit()
+    db.refresh(order)
+    return {"order": order, "action": action, "checkout_url": f"/checkout/consultation/{order.order_token}"}
+
+
+def sync_calendly_invitee_canceled(db, payload):
+    event_uri = _calendly_event_uri(payload)
+    invitee_uri = _calendly_invitee_uri(payload)
+    email = _calendly_invitee_email(payload)
+    scheduled_start, _scheduled_end = _calendly_start_end(payload)
+    order = _find_calendly_consultation_order(db, event_uri, invitee_uri, email, scheduled_start)
+    if not order:
+        return {"order": None, "action": "ignored"}
+    canceled_at = _parse_calendly_datetime(payload.get("canceled_at")) or datetime.utcnow()
+    order.calendly_status = "canceled"
+    order.calendly_canceled_at = canceled_at
+    order.cancelled_at = order.cancelled_at or canceled_at
+    reason = payload.get("cancellation", {}).get("reason") if isinstance(payload.get("cancellation"), Mapping) else payload.get("cancel_reason")
+    if reason:
+        order.cancellation_reason = str(reason)
+    if order.status == "booking_pending_payment" and not order.paid_at:
+        order.status = "booking_expired"
+    elif order.paid_at:
+        note = f"Calendly cancellation received at {canceled_at.isoformat()}; admin review required before any refund."
+        order.internal_notes = ((order.internal_notes or "").rstrip() + "\n" + note).strip()
+    log_admin_action(
+        db,
+        order,
+        "consultation_booking_canceled",
+        actor="calendly",
+        metadata={
+            "calendly_event_uri": event_uri,
+            "calendly_invitee_uri": invitee_uri,
+            "invitee_email": email,
+            "scheduled_start": scheduled_start.isoformat() if scheduled_start else None,
+            "paid": bool(order.paid_at),
+        },
+    )
+    db.commit()
+    db.refresh(order)
+    return {"order": order, "action": "consultation_booking_canceled"}
+
+
+def process_calendly_webhook_event(db, event_type, payload):
+    if event_type == "invitee.created":
+        return sync_calendly_invitee_created(db, payload)
+    if event_type == "invitee.canceled":
+        return sync_calendly_invitee_canceled(db, payload)
+    return {"order": None, "action": "ignored"}
+
+
 def _finalize_report_purchase(report, payment_data):
     provider = payments.get_payment_provider()
     changed = provider.finalize_purchase(report, payment_data)
@@ -1736,6 +2108,25 @@ def _email_log_view(log):
         "error_message": log.error_message,
         "created_at": log.created_at.strftime("%Y-%m-%d %H:%M") if log.created_at else None,
     }
+
+
+def _email_log_admin_view(db, log):
+    view = _email_log_view(log)
+    related_order = None
+    event_key = str(log.related_event_key or "")
+    candidate = event_key.rsplit(":", 1)[-1].strip() if event_key else ""
+    if candidate:
+        query = db.query(db_mod.ServiceOrder)
+        related_order = query.filter(
+            or_(
+                db_mod.ServiceOrder.order_token == candidate,
+                db_mod.ServiceOrder.public_token == candidate,
+            )
+        ).first()
+        if related_order is None and candidate.isdigit():
+            related_order = query.filter(db_mod.ServiceOrder.id == int(candidate)).first()
+    view["related_order_id"] = related_order.id if related_order else None
+    return view
 
 
 def _safe_truncate_text(value, max_len=2500):
@@ -2957,7 +3348,7 @@ def _create_email_log(db, *, user_id, email_type, recipient_email, subject, stat
     return log_entry
 
 
-def safe_send_template_email(db, *, user, email_type, template_name, subject, event_type=None, event_key=None, **context):
+def safe_send_template_email(db, *, user, email_type, template_name, subject, event_type=None, event_key=None, attachments=None, **context):
     recipient_email = getattr(user, "email", "") if user else context.get("to_email", "")
     if not recipient_email:
         logger.warning("Email skipped because recipient is missing email_type=%s", email_type)
@@ -2968,11 +3359,14 @@ def safe_send_template_email(db, *, user, email_type, template_name, subject, ev
         logger.info("Duplicate email suppressed email_type=%s recipient=%s event_key=%s", email_type, recipient_email, event_key)
         return {"status": "skipped", "reason": "duplicate", "email_log_id": existing.id}
 
+    email_context = dict(context)
+    email_context.pop("to_email", None)
     result = email_utils.send_template_email(
         recipient_email,
         template_name,
         subject,
-        **_email_base_context(user, **context),
+        attachments=attachments,
+        **_email_base_context(user, **email_context),
     )
     log_entry = _create_email_log(
         db,
@@ -2990,19 +3384,11 @@ def safe_send_template_email(db, *, user, email_type, template_name, subject, ev
 
 
 def _report_order_admin_email():
-    configured = str(os.getenv("REPORT_ORDER_ADMIN_EMAIL", "")).strip()
+    configured = str(os.getenv("INTERNAL_REVIEW_EMAIL", "")).strip()
     if configured:
         return configured
-    config = email_utils.get_email_config()
-    for candidate in (
-        config.get("support_email"),
-        config.get("billing_email"),
-        config.get("from_address"),
-    ):
-        if candidate:
-            return candidate
-    allowlist = sorted(_admin_email_allowlist())
-    return allowlist[0] if allowlist else ""
+    legacy_configured = str(os.getenv("REPORT_ORDER_ADMIN_EMAIL", "")).strip()
+    return legacy_configured or "info@focusastrology.com"
 
 
 def _build_report_order_payload(order_data, product):
@@ -3047,18 +3433,25 @@ def _generate_report_order_draft(order_payload):
     return fallback, "draft_unavailable"
 
 
+def _record_order_task_error(order, task_name, exc):
+    order.last_task_error = f"{task_name}: {exc}"
+    logger.exception("Service order task failed task=%s order_id=%s", task_name, getattr(order, "id", None))
+
+
 def send_report_draft_to_admin(db, *, order_data, product, draft_text, draft_status):
+    logger.info("Internal review email disabled; report draft is reviewed in Admin > Reports.")
+    return {"status": "skipped", "reason": "admin_reports_queue"}
     admin_email = _report_order_admin_email()
     if not admin_email:
         logger.warning("Report order admin email skipped because no admin email is configured")
         return {"status": "skipped", "reason": "missing_admin_email"}
 
-    event_key = "report_order:{email}:{report_type}:{submitted_at}".format(
-        email=order_data["email"].strip().lower(),
-        report_type=order_data["report_type"],
-        submitted_at=order_data["submitted_at"],
-    )
-    subject = f"Yeni rapor talebi: {product['title']} - {order_data['full_name']}"
+    event_key = f"internal_review:{order_data.get('order_token') or order_data['email'].strip().lower()}:{order_data['report_type']}"
+    subject = f"İç inceleme hazır: {product['title']} - {order_data['full_name']}"
+    attachments = []
+    pdf_path = Path(order_data.get("final_pdf_path") or "")
+    if order_data.get("pdf_status") in {"completed", "ready"} and pdf_path.exists() and pdf_path.is_file():
+        attachments.append({"path": str(pdf_path), "filename": f"internal_review_report_{order_data.get('order_id') or 'draft'}.pdf"})
     return safe_send_template_email(
         db,
         user=None,
@@ -3068,63 +3461,116 @@ def send_report_draft_to_admin(db, *, order_data, product, draft_text, draft_sta
         subject=subject,
         event_type="report_order",
         event_key=event_key,
+        attachments=attachments or None,
         order=order_data,
         product=product,
-        draft_text=draft_text,
+        draft_text=_safe_truncate_text(draft_text, 6000),
         draft_status=draft_status,
     )
 
 
 def _order_data_from_service_order(order):
     payload = _service_order_payload(order)
+    email_config = email_utils.get_email_config()
+    app_base_url = str(email_config.get("app_base_url") or "").rstrip("/")
     return {
+        "order_id": order.id,
+        "order_token": order.order_token or order.public_token or "",
         "full_name": order.customer_name or payload.get("full_name") or "",
         "email": order.customer_email or payload.get("email") or "",
         "birth_date": order.birth_date or payload.get("birth_date") or "",
         "birth_time": order.birth_time or payload.get("birth_time") or "",
-        "birth_city": order.birth_place or payload.get("birth_city") or "",
+        "birth_city": payload.get("birth_city") or payload.get("city") or order.birth_place or "",
+        "birth_district": payload.get("birth_district") or payload.get("district") or "",
+        "birth_place": order.birth_place or payload.get("birth_place") or payload.get("birth_city") or "",
         "optional_note": order.optional_note or payload.get("optional_note") or "",
         "report_type": order.product_type,
         "report_title": payload.get("report_title") or _service_order_product(order).get("title", ""),
         "submitted_at": payload.get("submitted_at") or (order.created_at.isoformat() if order.created_at else datetime.now(pytz.UTC).isoformat()),
         "source": payload.get("source") or "paid_report_order",
+        "admin_detail_url": f"{app_base_url}/admin/reports/{order.id}" if app_base_url else f"/admin/reports/{order.id}",
+        "pdf_status": order.pdf_status or "",
+        "final_pdf_path": order.final_pdf_path or "",
     }
+
+
+def generate_ai_draft_for_order(db, order):
+    if order.service_type != "report":
+        raise ValueError("AI draft generation is only valid for report orders.")
+    if getattr(order, "ai_draft_text", None):
+        order.ai_draft_status = order.ai_draft_status or order.draft_status or "generated"
+        db.commit()
+        return {"status": "skipped", "reason": "already_exists"}
+    product = _service_order_product(order)
+    order.status = "draft_pending" if order.status == "paid" else order.status
+    order.ai_draft_status = "started"
+    db.commit()
+    order_data = _order_data_from_service_order(order)
+    order_payload = _build_report_order_payload(order_data, product)
+    try:
+        draft_text, draft_status = _generate_report_order_draft(order_payload)
+    except Exception as exc:
+        order.ai_draft_status = "failed"
+        _record_order_task_error(order, "generate_ai_draft_for_order", exc)
+        db.commit()
+        raise
+    order.ai_draft_text = draft_text
+    order.ai_draft_created_at = datetime.utcnow()
+    order.ai_draft_version = (getattr(order, "ai_draft_version", None) or 0) + 1
+    order.draft_status = draft_status
+    order.ai_draft_status = draft_status
+    order.status = "draft_ready" if draft_status in {"generated", "draft_unavailable"} else order.status
+    order.last_task_error = None
+    db.commit()
+    return {"status": draft_status, "order_id": order.id}
+
+
+def send_admin_notification_for_order(db, order):
+    if order.service_type != "report":
+        raise ValueError("Admin draft notification is only valid for report orders.")
+    logger.info("Admin draft email disabled order_id=%s; use /admin/reports for review.", order.id)
+    return {"status": "skipped", "reason": "admin_reports_queue"}
+    if getattr(order, "draft_sent_at", None):
+        return {"status": "skipped", "reason": "already_sent"}
+    if not getattr(order, "ai_draft_text", None):
+        generate_ai_draft_for_order(db, order)
+        db.refresh(order)
+    product = _service_order_product(order)
+    order_data = _order_data_from_service_order(order)
+    result = send_report_draft_to_admin(
+        db,
+        order_data=order_data,
+        product=product,
+        draft_text=order.ai_draft_text or "",
+        draft_status=order.draft_status or order.ai_draft_status or "generated",
+    )
+    if result.get("status") == "sent":
+        order.draft_sent_at = datetime.utcnow()
+    if result.get("status") in {"sent", "skipped"} and order.status in {"paid", "draft_pending"}:
+        order.status = "draft_ready"
+    db.commit()
+    return result
 
 
 def finalize_report_order_after_payment(db, order, payment_data=None):
     payment_data = payment_data or {}
-    if order.status == "draft_sent_to_admin":
+    if getattr(order, "ai_draft_text", None) and getattr(order, "draft_sent_at", None):
         return {"status": "skipped", "reason": "already_sent"}
-    product = _service_order_product(order)
-    order.status = "draft_pending"
     order.payment_provider = payment_data.get("provider") or order.payment_provider
     order.payment_session_id = payment_data.get("session_id") or order.payment_session_id
     order.payment_reference = payment_data.get("payment_reference") or order.payment_reference
-    order_data = _order_data_from_service_order(order)
-    order_payload = _build_report_order_payload(order_data, product)
-    draft_text, draft_status = _generate_report_order_draft(order_payload)
-    order.ai_draft_text = draft_text
-    order.ai_draft_created_at = datetime.utcnow()
-    order.ai_draft_version = (getattr(order, "ai_draft_version", None) or 0) + 1
-    admin_delivery = send_report_draft_to_admin(
-        db,
-        order_data=order_data,
-        product=product,
-        draft_text=draft_text,
-        draft_status=draft_status,
-    )
-    order.draft_status = draft_status
-    order.status = "draft_ready" if admin_delivery.get("status") in {"sent", "skipped"} else "draft_pending"
-    order.draft_sent_at = datetime.utcnow() if admin_delivery.get("status") == "sent" else order.draft_sent_at
     db.commit()
-    return admin_delivery
+    draft_result = generate_ai_draft_for_order(db, order)
+    return {"status": "completed", "draft": draft_result}
 
 
 def send_report_customer_confirmation(db, order):
+    if getattr(order, "customer_confirmation_sent_at", None):
+        return {"status": "skipped", "reason": "already_sent"}
     order_data = _order_data_from_service_order(order)
     if not order_data.get("email"):
         return {"status": "skipped", "reason": "missing_customer_email"}
-    return safe_send_template_email(
+    result = safe_send_template_email(
         db,
         user=None,
         to_email=order_data["email"],
@@ -3136,6 +3582,72 @@ def send_report_customer_confirmation(db, order):
         order=order_data,
         product=_service_order_product(order),
     )
+    if result.get("status") == "sent":
+        order.customer_confirmation_sent_at = datetime.utcnow()
+        db.commit()
+    return result
+
+
+def send_customer_confirmation_for_order(db, order):
+    if order.service_type != "report":
+        raise ValueError("Customer confirmation is only valid for report orders.")
+    return send_report_customer_confirmation(db, order)
+
+
+def _service_order_pdf_context(order):
+    order_data = _order_data_from_service_order(order)
+    product = _service_order_product(order)
+    title = product.get("title") or order_data.get("report_title") or "Vedik Astroloji Raporu"
+    text = html_lib.escape(order.ai_draft_text or "Rapor taslağı henüz hazır değil.").replace("\n", "<br>")
+    return {
+        "title": title,
+        "client_name": order_data.get("full_name") or order.customer_name or "Danışan",
+        "generated_at": datetime.utcnow().strftime("%Y-%m-%d"),
+        "body_html": text,
+    }
+
+
+def generate_pdf_for_order(db, order):
+    if order.service_type != "report":
+        raise ValueError("PDF generation is only valid for report orders.")
+    pdf_path = Path(getattr(order, "final_pdf_path", "") or "")
+    if order.pdf_status in {"completed", "ready"} and pdf_path.exists():
+        return {"status": "skipped", "reason": "already_ready", "path": str(pdf_path)}
+    if not getattr(order, "ai_draft_text", None):
+        generate_ai_draft_for_order(db, order)
+        db.refresh(order)
+    order.pdf_status = "processing"
+    db.commit()
+    context = _service_order_pdf_context(order)
+    html_content = (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        "<style>body{font-family:serif;color:#18263f;line-height:1.6;padding:48px}"
+        "h1{font-size:28px;margin-bottom:8px}.meta{color:#6f6042;margin-bottom:28px}"
+        ".report{font-size:15px}</style></head><body>"
+        f"<h1>{html_lib.escape(context['title'])}</h1>"
+        f"<div class='meta'>{html_lib.escape(context['client_name'])} · {context['generated_at']}</div>"
+        f"<div class='report'>{context['body_html']}</div></body></html>"
+    )
+    try:
+        _ensure_pdf_runtime_environment()
+        from weasyprint import HTML
+        pdf_bytes = HTML(string=html_content, base_url=str(BASE_DIR)).write_pdf()
+        if not _validate_pdf_bytes(pdf_bytes):
+            raise ai_logic.AIServiceError("Generated service order PDF is invalid.")
+        output_dir = BASE_DIR / "data" / "service_order_pdfs"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / f"service_order_{order.id}.pdf"
+        output_path.write_bytes(pdf_bytes)
+    except Exception as exc:
+        order.pdf_status = "failed"
+        _record_order_task_error(order, "generate_pdf_for_order", exc)
+        db.commit()
+        raise
+    order.pdf_status = "completed"
+    order.final_pdf_path = str(output_path)
+    order.last_task_error = None
+    db.commit()
+    return {"status": "ready", "path": str(output_path)}
 
 
 def send_consultation_confirmation(db, order):
@@ -3161,7 +3673,13 @@ def _iyzico_payload_value(payload, key):
     return None
 
 
+def _payment_env_flag(name, default=False):
+    raw = str(os.getenv(name, "true" if default else "false")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
 def _validate_iyzico_retrieve_payload(order, retrieve_payload):
+    payments.IyzicoProvider.verify_response_signature_payload("checkout_retrieve", retrieve_payload)
     status = str(_iyzico_payload_value(retrieve_payload, "status") or "").lower()
     payment_status = str(_iyzico_payload_value(retrieve_payload, "paymentStatus") or "").lower()
     conversation_id = str(_iyzico_payload_value(retrieve_payload, "conversationId") or "")
@@ -3211,7 +3729,23 @@ def _validate_iyzico_retrieve_payload(order, retrieve_payload):
 def finalize_paid_order_if_valid(db, order, retrieve_payload):
     payment_data = _validate_iyzico_retrieve_payload(order, retrieve_payload)
     payment_id = payment_data["payment_id"]
-    if getattr(order, "provider_payment_id", None) == payment_id and getattr(order, "status", None) in {"paid", "draft_sent_to_admin", "completed"}:
+    paid_or_later_statuses = {
+        "paid",
+        "draft_pending",
+        "draft_sent_to_admin",
+        "draft_ready",
+        "under_review",
+        "ready_to_send",
+        "delivered",
+        "confirmed",
+        "prepared",
+        "completed",
+        "cancelled",
+        "no_show",
+        "refunded",
+        "partially_refunded",
+    }
+    if getattr(order, "provider_payment_id", None) == payment_id and getattr(order, "status", None) in paid_or_later_statuses:
         return {"changed": False, "payment_data": payment_data}
     existing = db.query(db_mod.ServiceOrder).filter(
         db_mod.ServiceOrder.provider_payment_id == payment_id,
@@ -3229,6 +3763,18 @@ def finalize_paid_order_if_valid(db, order, retrieve_payload):
     order.payment_verified_at = now
     order.paid_at = now
     order.fraud_status = payment_data["fraud_status"]
+    log_admin_action(
+        db,
+        order,
+        "payment_verified",
+        actor="iyzico",
+        metadata={
+            "payment_id": payment_id,
+            "payment_transaction_id": payment_data.get("payment_transaction_id"),
+            "provider_token": getattr(order, "provider_token", None),
+            "conversation_id": getattr(order, "provider_conversation_id", None),
+        },
+    )
     db.commit()
     return {"changed": True, "payment_data": payment_data}
 
@@ -3245,9 +3791,12 @@ def mark_payment_under_review(db, order, retrieve_payload, actor="iyzico"):
 
 def run_post_payment_triggers(db, order, payment_data):
     if order.service_type == "report":
-        admin_delivery = finalize_report_order_after_payment(db, order, payment_data=payment_data)
-        customer_delivery = send_report_customer_confirmation(db, order)
-        return {"admin_delivery": admin_delivery, "customer_delivery": customer_delivery}
+        order.payment_provider = payment_data.get("provider") or order.payment_provider
+        order.payment_session_id = payment_data.get("session_id") or order.payment_session_id
+        order.payment_reference = payment_data.get("payment_reference") or order.payment_reference
+        order.status = "draft_pending" if order.status == "paid" else order.status
+        db.commit()
+        return {"status": "queued", "tasks": enqueue_report_post_payment_tasks(order)}
     if order.service_type == "consultation":
         confirmation = send_consultation_confirmation(db, order)
         return {"consultation_confirmation": confirmation}
@@ -3393,7 +3942,16 @@ def request_order_refund(db, order, refund_amount=None, reason="", actor=None, r
         raise ValueError("Order has already been fully refunded.")
     amount = _refund_amount_decimal(order, refund_amount)
     mode = str(refund_mode or "provider").strip().lower()
-    provider_result = {"status": "manual_refund_recorded"} if mode == "manual" else refund_service_order_payment(order, amount, reason)
+    log_admin_action(db, order, "refund_requested", actor=actor, metadata={"amount": str(amount), "mode": mode, "reason": reason})
+    if mode == "manual":
+        order.refund_amount = amount
+        order.refund_reason = str(reason or "").strip()
+        order.refund_status = "manual_review_needed"
+        order.refund_provider_status = "manual_review_needed"
+        log_admin_action(db, order, "refund_manual_review_needed", actor=actor, metadata={"amount": str(amount), "reason": reason})
+        db.commit()
+        return {"status": "manual_review_needed", "refund_amount": str(amount)}
+    provider_result = refund_service_order_payment(order, amount, reason)
     now = datetime.utcnow()
     order.refund_amount = amount
     order.refund_reason = str(reason or "").strip()
@@ -3401,6 +3959,8 @@ def request_order_refund(db, order, refund_amount=None, reason="", actor=None, r
     full_refund = amount == _order_amount(order)
     order.refund_status = "refunded" if full_refund else "partially_refunded"
     order.status = order.refund_status
+    order.provider_refund_id = provider_result.get("refund_reference") or order.provider_refund_id
+    order.refund_provider_status = provider_result.get("provider_status") or provider_result.get("status") or order.refund_provider_status
     log_admin_action(db, order, "refund", actor=actor, metadata={"amount": str(amount), "mode": mode, "provider_result": provider_result})
     db.commit()
     send_refund_confirmation_email(db, order, amount)
@@ -3448,15 +4008,29 @@ def mark_consultation_no_show(db, order, reason="", actor=None):
     return order
 
 
-def reconcile_order_payment(db, order, token="", conversation_id="", actor=None):
-    token = str(token or getattr(order, "provider_token", "") or "").strip()
-    if not token:
-        raise ValueError("Payment token is required for iyzico reconciliation.")
+def retrieve_iyzico_payment_detail(order, payment_id="", conversation_id=""):
+    payment_id = str(payment_id or getattr(order, "provider_payment_id", "") or "").strip()
+    if not payment_id:
+        raise ValueError("paymentId is required for iyzico payment detail reconciliation.")
     provider = payments.get_payment_provider()
-    if getattr(provider, "provider_name", "") != "iyzico" or not hasattr(provider, "retrieve_checkout_form"):
-        raise payments.PaymentConfigurationError("Iyzico retrieve API is not configured.")
+    if getattr(provider, "provider_name", "") != "iyzico" or not hasattr(provider, "retrieve_payment_detail"):
+        raise payments.PaymentConfigurationError("Iyzico payment detail API is not configured.")
+    return provider.retrieve_payment_detail(payment_id, conversation_id or getattr(order, "provider_conversation_id", None) or _order_public_token(order))
+
+
+def reconcile_order_payment(db, order, token="", conversation_id="", payment_id="", actor=None):
+    token = str(token or getattr(order, "provider_token", "") or "").strip()
+    payment_id = str(payment_id or "").strip()
+    if not token and not payment_id:
+        raise ValueError("Payment token or paymentId is required for iyzico reconciliation.")
+    provider = payments.get_payment_provider()
     conversation_id = str(conversation_id or getattr(order, "provider_conversation_id", None) or _order_public_token(order))
-    retrieve_payload = provider.retrieve_checkout_form(token, conversation_id)
+    if token:
+        if getattr(provider, "provider_name", "") != "iyzico" or not hasattr(provider, "retrieve_checkout_form"):
+            raise payments.PaymentConfigurationError("Iyzico retrieve API is not configured.")
+        retrieve_payload = provider.retrieve_checkout_form(token, conversation_id)
+    else:
+        retrieve_payload = retrieve_iyzico_payment_detail(order, payment_id=payment_id, conversation_id=conversation_id)
     try:
         result = process_verified_service_payment(db, order, retrieve_payload)
     except payments.PaymentVerificationError as exc:
@@ -3465,7 +4039,7 @@ def reconcile_order_payment(db, order, token="", conversation_id="", actor=None)
         else:
             raise
     order.reconciliation_notes = f"Manual reconciliation by {actor or 'admin'} at {datetime.utcnow().isoformat()}"
-    log_admin_action(db, order, "reconcile_payment", actor=actor, metadata={"token": token, "conversation_id": conversation_id, "result": result})
+    log_admin_action(db, order, "reconcile_payment", actor=actor, metadata={"token": token, "payment_id": payment_id, "conversation_id": conversation_id, "result": result})
     db.commit()
     return result
 
@@ -3485,6 +4059,11 @@ def send_final_report_delivery_email(db, order, actor=None):
         raise ValueError("Report has already been delivered.")
     if order.status != "ready_to_send":
         raise ValueError("Report must be ready_to_send before delivery.")
+    pdf_path = Path(getattr(order, "final_pdf_path", "") or "")
+    if order.pdf_status not in {"completed", "ready"} or not pdf_path.exists() or not pdf_path.is_file():
+        order.last_task_error = "Final report delivery blocked: PDF is not ready."
+        db.commit()
+        raise ValueError("Final PDF must be generated before delivery.")
     order_data = _order_data_from_service_order(order)
     if not order_data.get("email"):
         raise ValueError("Customer email is missing.")
@@ -3497,9 +4076,11 @@ def send_final_report_delivery_email(db, order, actor=None):
         subject=f"Raporunuz hazır: {_service_order_product(order).get('title', '')}",
         event_type="report_delivered",
         event_key=f"final_report_delivery:{order.order_token}",
+        attachments=[{"path": str(pdf_path), "filename": f"vedic_report_{order.id}.pdf"}],
         order=order_data,
         product=_service_order_product(order),
         final_report_text=order.ai_draft_text or "",
+        final_pdf_path=str(pdf_path),
     )
     if result.get("status") != "sent":
         raise ValueError("Delivery email could not be sent.")
@@ -3509,6 +4090,41 @@ def send_final_report_delivery_email(db, order, actor=None):
     log_admin_action(db, order, "send_final_report", actor=actor, metadata={"email_log_id": result.get("email_log_id")})
     db.commit()
     return result
+
+
+def deliver_final_report_for_order(db, order, actor=None):
+    if getattr(order, "delivered_at", None) or order.status == "delivered":
+        return {"status": "skipped", "reason": "already_delivered"}
+    pdf_path = Path(getattr(order, "final_pdf_path", "") or "")
+    if order.pdf_status not in {"completed", "ready"} or not pdf_path.exists() or not pdf_path.is_file():
+        order.last_task_error = "Delivery skipped because final PDF is not ready."
+        db.commit()
+        return {"status": "skipped", "reason": "pdf_not_ready"}
+    return send_final_report_delivery_email(db, order, actor=actor or "celery")
+
+
+def enqueue_report_post_payment_tasks(order):
+    from report_tasks import generate_ai_draft_task
+    from email_tasks import send_customer_confirmation_email_task
+
+    return {
+        "ai_draft": generate_ai_draft_task.delay(order.id).id,
+        "customer_confirmation": send_customer_confirmation_email_task.delay(order.id).id,
+    }
+
+
+def enqueue_final_report_delivery_tasks(order):
+    if order.service_type != "report":
+        raise ValueError("Only report orders can be delivered by report email.")
+    _validate_order_paid(order)
+    if order.status == "delivered":
+        raise ValueError("Report has already been delivered.")
+    if order.status != "ready_to_send":
+        raise ValueError("Report must be ready_to_send before delivery.")
+    from report_tasks import generate_pdf_task
+
+    pdf_result = generate_pdf_task.apply_async(args=(order.id,), kwargs={"deliver_after": True})
+    return {"pdf": pdf_result.id, "delivery": "queued_after_pdf_success"}
 
 
 def maybe_send_welcome_email(db, user):
@@ -3655,6 +4271,10 @@ async def load_user_context(request: Request, call_next):
         request.state.plan_features = get_plan_features(user)
         request.state.lang = get_preferred_language(request, user)
         response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
         return response
     finally:
         db.close()
@@ -4771,7 +5391,11 @@ def _generate_pdf_bytes_from_report(report_context):
 
 
 def _auth_template_context(request, **extra):
-    context = {"request": request, "lang": getattr(request.state, "lang", "en")}
+    context = {
+        "request": request,
+        "lang": getattr(request.state, "lang", "en"),
+        "csrf_token": ensure_csrf_token(request),
+    }
     context.update(extra)
     return context
 
@@ -4904,15 +5528,33 @@ def _article_view(article, language=None):
     }
 
 
-def _published_articles_query(db):
-    return db.query(db_mod.Article).filter(db_mod.Article.is_published.is_(True))
+def _published_articles_query(db, language=None):
+    query = db.query(db_mod.Article).filter(
+        db_mod.Article.is_published.is_(True),
+        func.length(func.trim(func.coalesce(db_mod.Article.title, ""))) > 0,
+        func.length(func.trim(func.coalesce(db_mod.Article.excerpt, ""))) > 0,
+        func.length(func.trim(func.coalesce(db_mod.Article.body, ""))) > 0,
+        db_mod.Article.title != "Premium Timing Note Updated",
+        ~db_mod.Article.slug.like("premium-timing-note%"),
+    )
+    requested_language = str(language or "").strip().lower()
+    if requested_language == "tr":
+        query = query.filter(or_(db_mod.Article.language == "tr", db_mod.Article.language.is_(None), db_mod.Article.language == ""))
+    elif requested_language == "en":
+        localized_slugs = [
+            slug
+            for slug, localized in ARTICLE_LOCALIZED_CONTENT.items()
+            if localized.get("en")
+        ]
+        query = query.filter(or_(db_mod.Article.language == "en", db_mod.Article.slug.in_(localized_slugs)))
+    return query
 
 
 def get_related_articles(db, article, limit=3, language=None):
     if not article:
         return []
     related = (
-        _published_articles_query(db)
+        _published_articles_query(db, language=language)
         .filter(db_mod.Article.category == article.category, db_mod.Article.id != article.id)
         .order_by(db_mod.Article.published_at.desc(), db_mod.Article.created_at.desc())
         .limit(limit)
@@ -4921,7 +5563,7 @@ def get_related_articles(db, article, limit=3, language=None):
     if len(related) < limit:
         seen_ids = {article.id, *[item.id for item in related]}
         fallback = (
-            _published_articles_query(db)
+            _published_articles_query(db, language=language)
             .filter(~db_mod.Article.id.in_(seen_ids))
             .order_by(db_mod.Article.published_at.desc(), db_mod.Article.created_at.desc())
             .limit(limit - len(related))
@@ -4934,7 +5576,7 @@ def get_related_articles(db, article, limit=3, language=None):
 def get_latest_articles(db, limit=3, language=None):
     _seed_articles(db)
     items = (
-        _published_articles_query(db)
+        _published_articles_query(db, language=language)
         .order_by(db_mod.Article.published_at.desc(), db_mod.Article.created_at.desc())
         .limit(limit)
         .all()
@@ -4945,7 +5587,7 @@ def get_latest_articles(db, limit=3, language=None):
 def _match_related_articles_for_result(db, interpretation_context, language=None):
     _seed_articles(db)
     signal_layer = (interpretation_context or {}).get("signal_layer") or {}
-    articles = [_article_view(item, language=language) for item in _published_articles_query(db).all()]
+    articles = [_article_view(item, language=language) for item in _published_articles_query(db, language=language).all()]
     matched = match_articles_to_result(
         signal_layer.get("prioritized_signals") or [],
         signal_layer.get("top_anchors") or [],
@@ -4982,6 +5624,15 @@ async def about(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="about.html",
+        context=_auth_template_context(request),
+    )
+
+
+@app.get("/sss", response_class=HTMLResponse)
+async def faq_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="sss.html",
         context=_auth_template_context(request),
     )
 
@@ -5075,8 +5726,74 @@ async def consultation_checkout_step(request: Request):
     )
 
 
+def _consultation_checkout_context(request, order=None, notice=""):
+    return _auth_template_context(
+        request,
+        order=order,
+        product=CONSULTATION_PRODUCT,
+        service_kind="consultation",
+        payments_enabled=payments.payments_enabled(),
+        provider_name=payments.payment_provider(),
+        checkout_notice=notice,
+        checkout_upsell=_checkout_upsell_context(service_kind="consultation"),
+    )
+
+
+def _start_consultation_payment_for_order(db, order, request):
+    if order.service_type != "consultation":
+        _public_error("Bu ödeme adımı danışmanlık içindir.", 404)
+    if order.status in {"paid", "confirmed", "prepared", "completed"}:
+        return RedirectResponse(url=f"/checkout/consultation/{order.order_token}?notice=already_paid", status_code=303)
+    if order.status in {"booking_expired", "cancelled", "refunded", "no_show"}:
+        return RedirectResponse(url=f"/checkout/consultation/{order.order_token}?notice=booking_inactive", status_code=303)
+    order.status = "booking_pending_payment"
+    try:
+        session = create_consultation_payment_session(order, request=request)
+    except payments.PaymentConfigurationError as exc:
+        logger.warning("Consultation checkout unavailable order_id=%s detail=%s", order.id, exc)
+        db.commit()
+        return RedirectResponse(url=f"/checkout/consultation/{order.order_token}?notice=payments_unavailable", status_code=303)
+    except payments.PaymentError as exc:
+        logger.warning("Consultation checkout failed order_id=%s detail=%s", order.id, exc)
+        db.commit()
+        return RedirectResponse(url=f"/checkout/consultation/{order.order_token}?notice=checkout_failed", status_code=303)
+    order.payment_provider = session.get("provider") or payments.payment_provider()
+    order.provider_name = session.get("provider") or payments.payment_provider()
+    order.provider_token = session.get("provider_token") or session.get("session_id")
+    order.provider_conversation_id = session.get("provider_conversation_id") or _order_public_token(order)
+    order.payment_session_id = session.get("session_id")
+    db.commit()
+    redirect_url = session.get("redirect_url")
+    if redirect_url:
+        return RedirectResponse(url=redirect_url, status_code=303)
+    return RedirectResponse(url=f"/checkout/consultation/{order.order_token}?notice=missing_redirect", status_code=303)
+
+
+@app.get("/checkout/consultation/{order_token}", response_class=HTMLResponse)
+async def consultation_checkout_for_booking(request: Request, order_token: str, db: Session = Depends(get_db)):
+    order = _service_order_by_token_or_404(db, order_token)
+    if order.service_type != "consultation":
+        _public_error("Bu ödeme adımı danışmanlık içindir.", 404)
+    notice = str(request.query_params.get("notice", "")).strip()
+    return templates.TemplateResponse(
+        request=request,
+        name="service_checkout.html",
+        context=_consultation_checkout_context(request, order=order, notice=notice),
+    )
+
+
+@app.post("/checkout/consultation/{order_token}")
+async def start_consultation_checkout_for_booking(request: Request, order_token: str, db: Session = Depends(get_db)):
+    enforce_rate_limit(request, "consultation_checkout", limit=20, window_seconds=600)
+    await validate_csrf_token(request)
+    order = _service_order_by_token_or_404(db, order_token)
+    return _start_consultation_payment_for_order(db, order, request)
+
+
 @app.post("/checkout/consultation")
 async def start_consultation_checkout(request: Request, db: Session = Depends(get_db)):
+    enforce_rate_limit(request, "consultation_checkout", limit=20, window_seconds=600)
+    await validate_csrf_token(request)
     order = db_mod.ServiceOrder(
         order_token=_generate_order_token("consult"),
         service_type="consultation",
@@ -5093,7 +5810,7 @@ async def start_consultation_checkout(request: Request, db: Session = Depends(ge
                 "submitted_at": datetime.now(pytz.UTC).isoformat(),
                 "service_model": {
                     "duration": "60 dakika",
-                    "sequence": "Ödeme sonrası Calendly randevu seçimi",
+                    "sequence": "Calendly randevu seçimi sonrası iyzico ödeme adımı",
                     "cancellation": "Randevular, planlanan saatten en az 24 saat önce ücretsiz olarak iptal edilebilir veya yeniden planlanabilir.",
                 },
             },
@@ -5104,24 +5821,7 @@ async def start_consultation_checkout(request: Request, db: Session = Depends(ge
     db.add(order)
     db.commit()
     db.refresh(order)
-    try:
-        session = create_consultation_payment_session(order, request=request)
-    except payments.PaymentConfigurationError as exc:
-        logger.warning("Consultation checkout unavailable order_id=%s detail=%s", order.id, exc)
-        return RedirectResponse(url="/checkout/consultation?notice=payments_unavailable", status_code=303)
-    except payments.PaymentError as exc:
-        logger.warning("Consultation checkout failed order_id=%s detail=%s", order.id, exc)
-        return RedirectResponse(url="/checkout/consultation?notice=checkout_failed", status_code=303)
-    order.payment_provider = session.get("provider") or payments.payment_provider()
-    order.provider_name = session.get("provider") or payments.payment_provider()
-    order.provider_token = session.get("provider_token") or session.get("session_id")
-    order.provider_conversation_id = session.get("provider_conversation_id") or _order_public_token(order)
-    order.payment_session_id = session.get("session_id")
-    db.commit()
-    redirect_url = session.get("redirect_url")
-    if redirect_url:
-        return RedirectResponse(url=redirect_url, status_code=303)
-    return RedirectResponse(url="/checkout/consultation?notice=missing_redirect", status_code=303)
+    return _start_consultation_payment_for_order(db, order, request)
 
 
 @app.get("/checkout/consultation/success")
@@ -5148,7 +5848,7 @@ async def articles(request: Request, db: Session = Depends(get_db)):
     articles_payload = get_latest_articles(db, limit=24, language=current_language)
     category_counts = {}
     for slug, label in ARTICLE_CATEGORY_LABELS.items():
-        count = _published_articles_query(db).filter(db_mod.Article.category == slug).count()
+        count = _published_articles_query(db, language=current_language).filter(db_mod.Article.category == slug).count()
         category_counts[slug] = {"slug": slug, "label": label, "count": count}
     return templates.TemplateResponse(
         request=request,
@@ -5170,7 +5870,7 @@ async def article_category(request: Request, category_slug: str, db: Session = D
     if not category:
         _public_error("Kategori bulunamadi.", 404)
     items = (
-        _published_articles_query(db)
+        _published_articles_query(db, language=current_language)
         .filter(db_mod.Article.category == category["slug"])
         .order_by(db_mod.Article.published_at.desc(), db_mod.Article.created_at.desc())
         .all()
@@ -5179,7 +5879,7 @@ async def article_category(request: Request, category_slug: str, db: Session = D
         {
             "slug": slug,
             "label": label,
-            "count": _published_articles_query(db).filter(db_mod.Article.category == slug).count(),
+            "count": _published_articles_query(db, language=current_language).filter(db_mod.Article.category == slug).count(),
         }
         for slug, label in ARTICLE_CATEGORY_LABELS.items()
     ]
@@ -5199,7 +5899,7 @@ async def article_category(request: Request, category_slug: str, db: Session = D
 async def article_detail(request: Request, slug: str, db: Session = Depends(get_db)):
     _seed_articles(db)
     current_language = getattr(getattr(request, "state", None), "lang", None) or "en"
-    article = _published_articles_query(db).filter(db_mod.Article.slug == slug).first()
+    article = _published_articles_query(db, language=current_language).filter(db_mod.Article.slug == slug).first()
     if not article:
         _public_error("Makale bulunamadi.", 404)
     article_payload = _article_view(article, language=current_language)
@@ -5397,8 +6097,11 @@ async def submit_report_order(
     birth_city: str = Form(default=""),
     selected_report_type: str = Form(default=""),
     optional_note: str = Form(default=""),
+    csrf_token: str = Form(default=""),
     db: Session = Depends(get_db),
 ):
+    enforce_rate_limit(request, "report_order", limit=12, window_seconds=600)
+    await validate_csrf_token(request, csrf_token)
     normalized = normalize_report_order_type(selected_report_type or report_type)
     if not normalized:
         _public_error("Rapor türü bulunamadı.", 404)
@@ -5504,8 +6207,11 @@ async def submit_report_bundle_order(
     birth_time: str = Form(default=""),
     birth_city: str = Form(default=""),
     optional_note: str = Form(default=""),
+    csrf_token: str = Form(default=""),
     db: Session = Depends(get_db),
 ):
+    enforce_rate_limit(request, "report_order", limit=12, window_seconds=600)
+    await validate_csrf_token(request, csrf_token)
     normalized = normalize_report_bundle_type(bundle_type)
     if not normalized:
         _public_error("Paket türü bulunamadı.", 404)
@@ -5608,6 +6314,8 @@ async def report_checkout_step(request: Request, order_token: str, db: Session =
 
 @app.post("/checkout/report/{order_token}")
 async def start_report_checkout(request: Request, order_token: str, db: Session = Depends(get_db)):
+    enforce_rate_limit(request, "report_checkout", limit=20, window_seconds=600)
+    await validate_csrf_token(request)
     order = _service_order_by_token_or_404(db, order_token)
     if order.service_type != "report":
         _public_error("Bu ödeme adımı rapor siparişleri içindir.", 404)
@@ -5715,7 +6423,6 @@ async def _handle_iyzico_callback(request, db, service_type):
                 request,
                 product=_service_order_product(order),
                 order=payload,
-                admin_delivery=(result.get("post_payment") or {}).get("admin_delivery"),
             ),
         )
     return RedirectResponse(url="/personal-consultation/book?paid=1", status_code=303)
@@ -5731,26 +6438,38 @@ async def iyzico_consultation_callback(request: Request, db: Session = Depends(g
     return await _handle_iyzico_callback(request, db, "consultation")
 
 
-def _iyzico_webhook_signature_valid(body, signature):
+def _iyzico_webhook_signature_valid(payload, signature):
     signature = str(signature or "").strip()
-    if not signature:
-        return True
+    signature_required = _payment_env_flag("IYZICO_WEBHOOK_SIGNATURE_REQUIRED", default=False)
     secret = str(os.getenv("IYZICO_WEBHOOK_SECRET", "") or os.getenv("IYZICO_SECRET_KEY", "")).strip()
+    if not signature:
+        return not signature_required
     if not secret:
         return False
-    expected = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, signature)
+    return payments.IyzicoProvider.verify_hpp_webhook_signature(payload or {}, signature, secret_key=secret)
 
 
 @app.post("/payments/iyzico/webhook")
 async def iyzico_webhook(request: Request, db: Session = Depends(get_db)):
+    content_type = str(request.headers.get("content-type", "")).lower()
+    if "application/json" not in content_type:
+        _public_error("Iyzico webhook requires application/json.", 415)
     body = await request.body()
-    if not _iyzico_webhook_signature_valid(body, request.headers.get("x-iyz-signature-v3", "")):
-        _public_error("Iyzico webhook signature rejected.", 400)
     try:
         payload = json.loads(body.decode("utf-8") or "{}")
     except Exception:
-        payload = {}
+        _public_error("Iyzico webhook payload is not valid JSON.", 400)
+    signature = request.headers.get("x-iyz-signature-v3") or request.headers.get("X-IYZ-SIGNATURE-V3", "")
+    if not _iyzico_webhook_signature_valid(payload, signature):
+        logger.warning(
+            "Iyzico webhook signature rejected event_type=%s payment_id=%s token=%s",
+            payload.get("iyziEventType"),
+            payload.get("iyziPaymentId") or payload.get("paymentId"),
+            payload.get("token"),
+        )
+        _public_error("Iyzico webhook signature rejected.", 400)
+    if not signature:
+        logger.warning("Iyzico webhook accepted without signature because signature requirement is disabled.")
     token = str(payload.get("token") or request.query_params.get("token", "") or "").strip()
     if not token:
         _public_error("Iyzico webhook token is missing.", 400)
@@ -5764,6 +6483,35 @@ async def iyzico_webhook(request: Request, db: Session = Depends(get_db)):
         else:
             raise
     return {"status": "ok", "changed": bool(result.get("changed")), "order_id": order.id}
+
+
+@app.post("/webhooks/calendly")
+async def calendly_webhook(request: Request, db: Session = Depends(get_db)):
+    body = await request.body()
+    if not verify_calendly_webhook_signature(body, request.headers):
+        _public_error("Calendly webhook signature rejected.", 400)
+    try:
+        payload_body = json.loads(body.decode("utf-8") or "{}")
+    except Exception:
+        logger.warning("Calendly webhook ignored malformed JSON.")
+        return {"ok": True, "ignored": True}
+    event_type = str(payload_body.get("event") or "").strip()
+    payload = payload_body.get("payload") if isinstance(payload_body.get("payload"), Mapping) else {}
+    if event_type not in {"invitee.created", "invitee.canceled"}:
+        return {"ok": True, "ignored": True, "event": event_type or None}
+    try:
+        result = process_calendly_webhook_event(db, event_type, payload)
+    except Exception as exc:
+        logger.exception("Calendly webhook processing failed event=%s detail=%s", event_type, exc)
+        _public_error("Calendly webhook could not be processed.", 500)
+    order = result.get("order")
+    return {
+        "ok": True,
+        "event": event_type,
+        "action": result.get("action"),
+        "order_token": getattr(order, "order_token", None),
+        "checkout_url": result.get("checkout_url"),
+    }
 
 
 @app.get("/reports/parent-child", response_class=HTMLResponse)
@@ -5818,6 +6566,7 @@ async def report_revisit(request: Request, report_id: int, db: Session = Depends
 
 @app.post("/api/v1/reports/{report_id}/checkout")
 async def create_report_checkout(request: Request, report_id: int, db: Session = Depends(get_db)):
+    enforce_rate_limit(request, "legacy_report_checkout", limit=20, window_seconds=600)
     user = _require_authenticated_user(request, db)
     if not user:
         return JSONResponse(status_code=401, content={"ok": False, "error": "authentication_required"})
@@ -6027,6 +6776,406 @@ def _admin_order_view(order):
     }
 
 
+def _service_report_row(order):
+    payload = _service_order_payload(order)
+    return {
+        "id": order.id,
+        "created_at": order.created_at,
+        "customer_name": order.customer_name or payload.get("full_name") or "-",
+        "customer_email": order.customer_email or payload.get("email") or "-",
+        "birth_date": order.birth_date or payload.get("birth_date") or "-",
+        "birth_time": order.birth_time or payload.get("birth_time") or "-",
+        "birth_place": order.birth_place or payload.get("birth_place") or payload.get("birth_city") or "-",
+        "product_type": order.product_type or payload.get("report_type") or "-",
+        "status": order.status,
+        "amount": order.amount_label or order.amount or "-",
+        "paid_at": order.paid_at,
+        "delivered_at": order.delivered_at,
+        "pdf_ready": bool(order.final_pdf_path and order.pdf_status in {"completed", "ready"}),
+    }
+
+
+def _consultation_order_row(order):
+    paid = bool(order.paid_at and order.status in SUCCESSFUL_PAID_ORDER_STATUSES)
+    return {
+        "id": order.id,
+        "created_at": order.created_at,
+        "customer_name": order.customer_name or "-",
+        "customer_email": order.customer_email or "-",
+        "scheduled_start": order.scheduled_start,
+        "scheduled_end": order.scheduled_end,
+        "paid": paid,
+        "paid_label": "Yes" if paid else "No",
+        "status": order.status,
+        "calendly_event_uri": order.calendly_event_uri,
+    }
+
+
+def _article_admin_view(article):
+    return {
+        "id": article.id,
+        "title": article.title,
+        "slug": article.slug,
+        "content": article.body or "",
+        "status": "published" if article.is_published else "draft",
+        "updated_at": article.updated_at.strftime("%Y-%m-%d %H:%M") if article.updated_at else "-",
+    }
+
+
+ADMIN_DASHBOARD_RANGE_OPTIONS = {
+    "1d": "Last 24 Hours",
+    "7d": "Last 7 Days",
+    "30d": "Last 30 Days",
+    "all": "All Time",
+}
+ADMIN_DASHBOARD_STATUS_KEYS = [
+    "awaiting_payment",
+    "booking_pending_payment",
+    "paid",
+    "draft_ready",
+    "under_review",
+    "ready_to_send",
+    "delivered",
+    "confirmed",
+    "prepared",
+    "completed",
+    "refunded",
+    "cancelled",
+    "no_show",
+    "payment_under_review",
+]
+PAID_OR_LATER_STATUSES = {
+    "paid",
+    "draft_pending",
+    "draft_sent_to_admin",
+    "draft_ready",
+    "under_review",
+    "ready_to_send",
+    "delivered",
+    "confirmed",
+    "prepared",
+    "completed",
+    "refunded",
+    "partially_refunded",
+}
+SUCCESSFUL_PAID_ORDER_STATUSES = PAID_OR_LATER_STATUSES
+
+
+def _admin_dashboard_range(range_key):
+    normalized = str(range_key or "7d").strip().lower()
+    if normalized == "today":
+        normalized = "1d"
+    if normalized not in ADMIN_DASHBOARD_RANGE_OPTIONS:
+        normalized = "7d"
+    now = datetime.utcnow()
+    if normalized == "1d":
+        start = now - timedelta(days=1)
+    elif normalized == "7d":
+        start = now - timedelta(days=7)
+    elif normalized == "30d":
+        start = now - timedelta(days=30)
+    else:
+        start = None
+    return {
+        "key": normalized,
+        "label": ADMIN_DASHBOARD_RANGE_OPTIONS[normalized],
+        "start": start,
+        "end": now,
+    }
+
+
+def resolve_range(range_key):
+    return _admin_dashboard_range(range_key)
+
+
+def _decimal_amount(value):
+    if value in (None, ""):
+        return Decimal("0.00")
+    try:
+        return Decimal(str(value)).quantize(Decimal("0.01"))
+    except (InvalidOperation, ValueError):
+        return Decimal("0.00")
+
+
+def _money_label(value, currency="TRY"):
+    amount = _decimal_amount(value)
+    prefix = "TRY " if str(currency or "TRY").upper() == "TRY" else f"{currency} "
+    return f"{prefix}{amount:,.2f}"
+
+
+def _dashboard_date_filter(query, column, date_range):
+    start = date_range.get("start")
+    end = date_range.get("end")
+    if start is not None:
+        query = query.filter(column >= start)
+    if end is not None:
+        query = query.filter(column <= end)
+    return query
+
+
+def _paid_orders_query(db):
+    # Paid/revenue metrics use server-verified paid_at plus paid-or-later workflow states.
+    # Pending, failed, cancelled, and no-show orders are excluded from paid-order counts.
+    return db.query(db_mod.ServiceOrder).filter(
+        db_mod.ServiceOrder.paid_at.isnot(None),
+        db_mod.ServiceOrder.status.in_(PAID_OR_LATER_STATUSES),
+    )
+
+
+def get_revenue_metrics(db, date_range):
+    paid_orders = _dashboard_date_filter(_paid_orders_query(db), db_mod.ServiceOrder.paid_at, date_range).all()
+    refund_query = db.query(db_mod.ServiceOrder).filter(
+        db_mod.ServiceOrder.refunded_at.isnot(None),
+        db_mod.ServiceOrder.refund_status.in_(("refunded", "partially_refunded")),
+    )
+    refunded_orders = _dashboard_date_filter(refund_query, db_mod.ServiceOrder.refunded_at, date_range).all()
+
+    # Gross revenue is successful verified payments in the range.
+    # Refunded amount is refunds issued in the range.
+    # Net revenue is gross paid revenue minus actual refunds. Platform/payment fees are not deducted
+    # because fee data is not stored on ServiceOrder.
+    gross_revenue = sum((_decimal_amount(order.amount) for order in paid_orders), Decimal("0.00"))
+    refunded_amount = sum((_decimal_amount(order.refund_amount) for order in refunded_orders), Decimal("0.00"))
+    paid_count = len(paid_orders)
+    average_order_value = (gross_revenue / paid_count).quantize(Decimal("0.01")) if paid_count else Decimal("0.00")
+    return {
+        "gross_revenue": gross_revenue,
+        "refunded_amount": refunded_amount,
+        "net_revenue": gross_revenue - refunded_amount,
+        "paid_order_count": paid_count,
+        "average_order_value": average_order_value,
+        "refund_count": len(refunded_orders),
+        "gross_revenue_label": _money_label(gross_revenue),
+        "refunded_amount_label": _money_label(refunded_amount),
+        "net_revenue_label": _money_label(gross_revenue - refunded_amount),
+        "average_order_value_label": _money_label(average_order_value),
+    }
+
+
+def _paid_orders_for_range(db, date_range):
+    return _dashboard_date_filter(_paid_orders_query(db), db_mod.ServiceOrder.paid_at, date_range).all()
+
+
+def get_consultation_conversion(db, date_range=None):
+    query = db.query(db_mod.ServiceOrder).filter(
+        db_mod.ServiceOrder.service_type == "consultation",
+        or_(
+            db_mod.ServiceOrder.booking_source == "calendly",
+            db_mod.ServiceOrder.calendly_event_uri.isnot(None),
+            db_mod.ServiceOrder.calendly_invitee_uri.isnot(None),
+        ),
+    )
+    if date_range and date_range.get("start") is not None:
+        query = _dashboard_date_filter(query, db_mod.ServiceOrder.created_at, date_range)
+    bookings = query.all()
+    total_bookings = len(bookings)
+    paid_consultations = sum(
+        1
+        for order in bookings
+        if order.paid_at is not None and order.status in PAID_OR_LATER_STATUSES
+    )
+    conversion_rate = (paid_consultations / total_bookings) if total_bookings else 0.0
+    return {
+        "total_bookings": total_bookings,
+        "paid_consultations": paid_consultations,
+        "conversion_rate": conversion_rate,
+        "conversion_rate_label": f"{round(conversion_rate * 100, 1)}%",
+    }
+
+
+def get_product_performance(db, date_range):
+    rows = {}
+    for order in _paid_orders_for_range(db, date_range):
+        key = order.bundle_type or order.product_type or order.service_type or "unknown"
+        product = rows.setdefault(
+            key,
+            {
+                "product_type": key,
+                "product_name": _service_order_product(order).get("title", key),
+                "paid_order_count": 0,
+                "revenue": Decimal("0.00"),
+                "delivered_count": 0,
+                "completed_count": 0,
+            },
+        )
+        product["paid_order_count"] += 1
+        product["revenue"] += max(_decimal_amount(order.amount) - _decimal_amount(order.refund_amount), Decimal("0.00"))
+        if order.service_type == "report" and order.status == "delivered":
+            product["delivered_count"] += 1
+        if order.service_type == "consultation" and order.status == "completed":
+            product["completed_count"] += 1
+
+    performance = list(rows.values())
+    performance.sort(key=lambda item: item["revenue"], reverse=True)
+    for item in performance:
+        item["revenue_label"] = _money_label(item["revenue"])
+    return performance
+
+
+def get_status_breakdown(db, date_range=None):
+    query = db.query(db_mod.ServiceOrder)
+    if date_range and date_range.get("start") is not None:
+        query = _dashboard_date_filter(query, db_mod.ServiceOrder.created_at, date_range)
+    counts = {status: 0 for status in ADMIN_DASHBOARD_STATUS_KEYS}
+    for order in query.all():
+        if order.status in counts:
+            counts[order.status] += 1
+    return [{"status": status, "count": count} for status, count in counts.items()]
+
+
+def get_revenue_timeseries(db, date_range):
+    start = date_range.get("start")
+    end = date_range.get("end") or datetime.utcnow()
+    if start is None:
+        start = end - timedelta(days=30)
+
+    days = []
+    cursor = datetime(start.year, start.month, start.day)
+    end_day = datetime(end.year, end.month, end.day)
+    while cursor <= end_day:
+        days.append(cursor.date())
+        cursor += timedelta(days=1)
+
+    rows = {
+        day: {
+            "date": day.isoformat(),
+            "gross_revenue": Decimal("0.00"),
+            "paid_orders": 0,
+            "refunded_amount": Decimal("0.00"),
+        }
+        for day in days
+    }
+    for order in _dashboard_date_filter(_paid_orders_query(db), db_mod.ServiceOrder.paid_at, {"start": start, "end": end}).all():
+        day = order.paid_at.date()
+        if day in rows:
+            rows[day]["gross_revenue"] += _decimal_amount(order.amount)
+            rows[day]["paid_orders"] += 1
+    refund_query = db.query(db_mod.ServiceOrder).filter(
+        db_mod.ServiceOrder.refunded_at.isnot(None),
+        db_mod.ServiceOrder.refund_status.in_(("refunded", "partially_refunded")),
+    )
+    for order in _dashboard_date_filter(refund_query, db_mod.ServiceOrder.refunded_at, {"start": start, "end": end}).all():
+        day = order.refunded_at.date()
+        if day in rows:
+            rows[day]["refunded_amount"] += _decimal_amount(order.refund_amount)
+
+    output = []
+    for row in rows.values():
+        row["net_revenue"] = row["gross_revenue"] - row["refunded_amount"]
+        row["gross_revenue_label"] = _money_label(row["gross_revenue"])
+        row["refunded_amount_label"] = _money_label(row["refunded_amount"])
+        row["net_revenue_label"] = _money_label(row["net_revenue"])
+        output.append(row)
+    return output
+
+
+def get_recent_activity(db, limit=20):
+    logs = db.query(db_mod.AdminActionLog).order_by(db_mod.AdminActionLog.created_at.desc()).limit(limit).all()
+    activity = []
+    for log in logs:
+        order = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.id == log.order_id).first()
+        activity.append(
+            {
+                "timestamp": log.created_at,
+                "order_id": log.order_id,
+                "customer": getattr(order, "customer_email", None) or getattr(order, "customer_name", None) or "-",
+                "action": log.action,
+                "metadata": log.metadata_json or "",
+            }
+        )
+    if activity:
+        return activity
+
+    fallback_statuses = {"paid", "delivered", "refunded", "partially_refunded", "completed", "payment_under_review"}
+    orders = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.status.in_(fallback_statuses)).order_by(db_mod.ServiceOrder.updated_at.desc()).limit(limit).all()
+    return [
+        {
+            "timestamp": order.updated_at or order.created_at,
+            "order_id": order.id,
+            "customer": order.customer_email or order.customer_name or "-",
+            "action": order.status,
+            "metadata": order.product_type,
+        }
+        for order in orders
+    ]
+
+
+def get_dashboard_metrics(db, range_key="7d"):
+    date_range = resolve_range(range_key)
+    today_range = {
+        "key": "today",
+        "label": "Today",
+        "start": datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0),
+        "end": datetime.utcnow(),
+    }
+    selected_revenue = get_revenue_metrics(db, date_range)
+    today_revenue = get_revenue_metrics(db, today_range)
+    conversion = get_consultation_conversion(db, date_range)
+    active_bookings = db.query(db_mod.ServiceOrder).filter(
+        db_mod.ServiceOrder.service_type == "consultation",
+        db_mod.ServiceOrder.status == "booking_pending_payment",
+    ).count()
+    reports_delivered_query = db.query(db_mod.ServiceOrder).filter(
+        db_mod.ServiceOrder.service_type == "report",
+        db_mod.ServiceOrder.status == "delivered",
+    )
+    consultations_completed_query = db.query(db_mod.ServiceOrder).filter(
+        db_mod.ServiceOrder.service_type == "consultation",
+        db_mod.ServiceOrder.status == "completed",
+    )
+    if date_range.get("start") is not None:
+        reports_delivered_query = _dashboard_date_filter(
+            reports_delivered_query,
+            db_mod.ServiceOrder.delivered_at,
+            date_range,
+        )
+        consultations_completed_query = _dashboard_date_filter(
+            consultations_completed_query,
+            db_mod.ServiceOrder.completed_at,
+            date_range,
+        )
+    reports_delivered = reports_delivered_query.count()
+    consultations_completed = consultations_completed_query.count()
+    under_review_count = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.status == "payment_under_review").count()
+    return {
+        "range": date_range,
+        "range_options": ADMIN_DASHBOARD_RANGE_OPTIONS,
+        "selected_revenue": selected_revenue,
+        "consultation_conversion": conversion,
+        "kpis": [
+            {"label": "Revenue Today", "value": today_revenue["gross_revenue_label"], "note": "Verified paid orders with paid_at today"},
+            {"label": "Net Revenue", "value": selected_revenue["net_revenue_label"], "note": f"Gross paid revenue minus actual refunds in {date_range['label']}; platform fees not deducted"},
+            {"label": "Paid Orders", "value": selected_revenue["paid_order_count"], "note": f"Verified paid orders in {date_range['label']}"},
+            {"label": "Average Order Value", "value": selected_revenue["average_order_value_label"], "note": f"{date_range['label']} gross revenue / paid orders"},
+            {"label": "Active Bookings", "value": active_bookings, "note": "Consultation orders in booking_pending_payment"},
+            {"label": "Consultation Conversion Rate", "value": conversion["conversion_rate_label"], "note": f"{conversion['paid_consultations']} paid / {conversion['total_bookings']} Calendly bookings"},
+            {"label": "Reports Delivered", "value": reports_delivered, "note": "Report orders with delivered status"},
+            {"label": "Consultations Completed", "value": consultations_completed, "note": "Consultation orders with completed status"},
+            {"label": "Refund Count", "value": selected_revenue["refund_count"], "note": f"Refunds issued in {date_range['label']}"},
+            {"label": "Orders Under Review", "value": under_review_count, "note": "Current payment_under_review queue"},
+        ],
+        "product_performance": get_product_performance(db, date_range),
+        "status_breakdown": get_status_breakdown(db, date_range),
+        "recent_activity": get_recent_activity(db, limit=20),
+        "timeseries": get_revenue_timeseries(db, date_range),
+    }
+
+
+@app.get("/admin/dashboard", response_class=HTMLResponse)
+@admin_required
+async def admin_dashboard(
+    request: Request,
+    db: Session = Depends(get_db),
+    range_key: str = Query(default="7d", alias="range"),
+):
+    dashboard = get_dashboard_metrics(db, range_key)
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/dashboard.html",
+        context=_auth_template_context(request, dashboard=dashboard),
+    )
+
+
 @app.get("/admin/orders", response_class=HTMLResponse)
 @admin_required
 async def admin_orders(request: Request, db: Session = Depends(get_db), order_type: str = "", product_type: str = "", status: str = ""):
@@ -6103,10 +7252,12 @@ async def admin_send_report(request: Request, order_id: int, db: Session = Depen
     if not order:
         _public_error("Order not found.", 404)
     try:
-        send_final_report_delivery_email(db, order, actor=_admin_actor(request))
+        tasks = enqueue_final_report_delivery_tasks(order)
+        log_admin_action(db, order, "send_final_report_queued", actor=_admin_actor(request), metadata={"tasks": tasks})
+        db.commit()
     except ValueError as exc:
         return RedirectResponse(url=f"/admin/orders/{order.id}?error={urlencode({'message': str(exc)})}", status_code=303)
-    return RedirectResponse(url=f"/admin/orders/{order.id}?notice=report_sent", status_code=303)
+    return RedirectResponse(url=f"/admin/orders/{order.id}?notice=report_queued", status_code=303)
 
 
 @app.post("/admin/orders/{order_id}/refund")
@@ -6167,6 +7318,7 @@ async def admin_reconcile_payment(
     request: Request,
     order_id: int,
     payment_token: str = Form(default=""),
+    payment_id: str = Form(default=""),
     conversation_id: str = Form(default=""),
     db: Session = Depends(get_db),
 ):
@@ -6174,7 +7326,7 @@ async def admin_reconcile_payment(
     if not order:
         _public_error("Order not found.", 404)
     try:
-        reconcile_order_payment(db, order, token=payment_token, conversation_id=conversation_id, actor=_admin_actor(request))
+        reconcile_order_payment(db, order, token=payment_token, payment_id=payment_id, conversation_id=conversation_id, actor=_admin_actor(request))
     except (ValueError, payments.PaymentError) as exc:
         return RedirectResponse(url=f"/admin/orders/{order.id}?error={urlencode({'message': str(exc)})}", status_code=303)
     return RedirectResponse(url=f"/admin/orders/{order.id}?notice=reconciled", status_code=303)
@@ -6232,26 +7384,34 @@ async def admin_user_detail(request: Request, user_id: int, db: Session = Depend
 @app.get("/admin/reports", response_class=HTMLResponse)
 @admin_required
 async def admin_reports(request: Request, db: Session = Depends(get_db), report_type: str = "", user_email: str = ""):
-    query = db.query(db_mod.GeneratedReport)
+    order_query = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.service_type == "report")
     if report_type.strip():
-        query = query.filter(db_mod.GeneratedReport.report_type == normalize_report_type(report_type))
+        order_query = order_query.filter(db_mod.ServiceOrder.product_type == normalize_report_type(report_type))
     if user_email.strip():
-        query = query.join(db_mod.AppUser, db_mod.GeneratedReport.user_id == db_mod.AppUser.id).filter(db_mod.AppUser.email.ilike(f"%{user_email.strip().lower()}%"))
-    reports = query.order_by(db_mod.GeneratedReport.created_at.desc()).limit(200).all()
-    users = {user.id: user for user in db.query(db_mod.AppUser).filter(db_mod.AppUser.id.in_([report.user_id for report in reports] or [0])).all()}
-    report_rows = []
-    for report in reports:
+        order_query = order_query.filter(db_mod.ServiceOrder.customer_email.ilike(f"%{user_email.strip().lower()}%"))
+    service_reports = order_query.order_by(db_mod.ServiceOrder.created_at.desc()).limit(200).all()
+
+    legacy_query = db.query(db_mod.GeneratedReport)
+    if report_type.strip():
+        legacy_query = legacy_query.filter(db_mod.GeneratedReport.report_type == normalize_report_type(report_type))
+    if user_email.strip():
+        legacy_query = legacy_query.join(db_mod.AppUser, db_mod.GeneratedReport.user_id == db_mod.AppUser.id).filter(db_mod.AppUser.email.ilike(f"%{user_email.strip().lower()}%"))
+    legacy_reports = legacy_query.order_by(db_mod.GeneratedReport.created_at.desc()).limit(50).all()
+    users = {user.id: user for user in db.query(db_mod.AppUser).filter(db_mod.AppUser.id.in_([report.user_id for report in legacy_reports] or [0])).all()}
+    legacy_rows = []
+    for report in legacy_reports:
         row = _report_view(report)
         row["user_email"] = users.get(report.user_id).email if users.get(report.user_id) else "-"
         row["profile_name"] = report.profile.profile_name if report.profile else "-"
-        report_rows.append(row)
+        legacy_rows.append(row)
     return templates.TemplateResponse(
         request=request,
         name="admin/reports.html",
         context=_auth_template_context(
             request,
             dashboard_user=request.state.admin_user,
-            reports=report_rows,
+            reports=[_service_report_row(order) for order in service_reports],
+            legacy_reports=legacy_rows,
             filters={"report_type": report_type, "user_email": user_email},
         ),
     )
@@ -6259,7 +7419,26 @@ async def admin_reports(request: Request, db: Session = Depends(get_db), report_
 
 @app.get("/admin/reports/{report_id}", response_class=HTMLResponse)
 @admin_required
-async def admin_report_detail(request: Request, report_id: int, db: Session = Depends(get_db)):
+async def admin_report_detail(request: Request, report_id: int, db: Session = Depends(get_db), notice: str = "", error: str = ""):
+    order = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.id == report_id, db_mod.ServiceOrder.service_type == "report").first()
+    if order:
+        logs = db.query(db_mod.AdminActionLog).filter(db_mod.AdminActionLog.order_id == order.id).order_by(db_mod.AdminActionLog.created_at.desc()).limit(50).all()
+        return templates.TemplateResponse(
+            request=request,
+            name="admin/report_detail.html",
+            context=_auth_template_context(
+                request,
+                dashboard_user=request.state.admin_user,
+                order=order,
+                report=_service_report_row(order),
+                product=_service_order_product(order),
+                payload=_service_order_payload(order),
+                logs=logs,
+                notice=notice,
+                error=error,
+                is_service_order=True,
+            ),
+        )
     report = db.query(db_mod.GeneratedReport).filter(db_mod.GeneratedReport.id == report_id).first()
     if not report:
         _public_error("Rapor bulunamadi.", 404)
@@ -6275,8 +7454,190 @@ async def admin_report_detail(request: Request, report_id: int, db: Session = De
             report=report_view,
             payload_summary=_report_detail_payload(report.result_payload_json),
             interpretation_summary=_report_detail_payload(report.interpretation_context_json),
+            is_service_order=False,
+            notice=notice,
+            error=error,
         ),
     )
+
+
+@app.post("/admin/reports/{report_id}/approve")
+@admin_required
+async def admin_report_approve(request: Request, report_id: int, db: Session = Depends(get_db)):
+    order = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.id == report_id, db_mod.ServiceOrder.service_type == "report").first()
+    if not order:
+        _public_error("Report order not found.", 404)
+    try:
+        _validate_order_paid(order)
+        if order.status not in {"paid", "draft_pending", "draft_sent_to_admin", "draft_ready", "under_review", "ready_to_send"}:
+            raise ValueError(f"Report cannot be approved from {order.status}.")
+        now = datetime.utcnow()
+        order.status = "ready_to_send"
+        order.review_started_at = order.review_started_at or now
+        order.ready_to_send_at = order.ready_to_send_at or now
+        log_admin_action(db, order, "approve_report", actor=_admin_actor(request), metadata={"to": "ready_to_send"})
+        db.commit()
+    except ValueError as exc:
+        return RedirectResponse(url=f"/admin/reports/{order.id}?error={urlencode({'message': str(exc)})}", status_code=303)
+    return RedirectResponse(url=f"/admin/reports/{order.id}?notice=approved", status_code=303)
+
+
+@app.post("/admin/reports/{report_id}/send")
+@admin_required
+async def admin_report_send(request: Request, report_id: int, db: Session = Depends(get_db)):
+    order = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.id == report_id, db_mod.ServiceOrder.service_type == "report").first()
+    if not order:
+        _public_error("Report order not found.", 404)
+    try:
+        tasks = enqueue_final_report_delivery_tasks(order)
+        log_admin_action(db, order, "send_final_report_queued", actor=_admin_actor(request), metadata={"tasks": tasks})
+        db.commit()
+    except ValueError as exc:
+        return RedirectResponse(url=f"/admin/reports/{order.id}?error={urlencode({'message': str(exc)})}", status_code=303)
+    return RedirectResponse(url=f"/admin/reports/{order.id}?notice=report_queued", status_code=303)
+
+
+@app.post("/admin/reports/{report_id}/regenerate")
+@admin_required
+async def admin_report_regenerate(request: Request, report_id: int, db: Session = Depends(get_db)):
+    order = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.id == report_id, db_mod.ServiceOrder.service_type == "report").first()
+    if not order:
+        _public_error("Report order not found.", 404)
+    try:
+        _validate_order_paid(order)
+        from report_tasks import generate_ai_draft_task
+
+        order.ai_draft_status = "pending"
+        order.last_task_error = None
+        task = generate_ai_draft_task.delay(order.id)
+        log_admin_action(db, order, "regenerate_report_queued", actor=_admin_actor(request), metadata={"task_id": task.id})
+        db.commit()
+    except ValueError as exc:
+        return RedirectResponse(url=f"/admin/reports/{order.id}?error={urlencode({'message': str(exc)})}", status_code=303)
+    return RedirectResponse(url=f"/admin/reports/{order.id}?notice=regeneration_queued", status_code=303)
+
+
+@app.get("/admin/consultations", response_class=HTMLResponse)
+@admin_required
+async def admin_consultations(request: Request, db: Session = Depends(get_db), status: str = ""):
+    query = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.service_type == "consultation")
+    if status.strip():
+        query = query.filter(db_mod.ServiceOrder.status == status.strip())
+    consultations = query.order_by(db_mod.ServiceOrder.scheduled_start.desc().nullslast(), db_mod.ServiceOrder.created_at.desc()).limit(250).all()
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/consultations.html",
+        context=_auth_template_context(
+            request,
+            dashboard_user=request.state.admin_user,
+            consultations=[_consultation_order_row(order) for order in consultations],
+            filters={"status": status},
+        ),
+    )
+
+
+@app.get("/admin/content", response_class=HTMLResponse)
+@admin_required
+async def admin_content(request: Request, db: Session = Depends(get_db)):
+    articles = db.query(db_mod.Article).order_by(db_mod.Article.updated_at.desc(), db_mod.Article.created_at.desc()).limit(250).all()
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/content_list.html",
+        context=_auth_template_context(
+            request,
+            dashboard_user=request.state.admin_user,
+            articles=[_article_admin_view(article) for article in articles],
+        ),
+    )
+
+
+@app.get("/admin/content/new", response_class=HTMLResponse)
+@admin_required
+async def admin_content_new(request: Request, db: Session = Depends(get_db)):
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/content_form.html",
+        context=_auth_template_context(
+            request,
+            dashboard_user=request.state.admin_user,
+            article={"id": None, "title": "", "slug": "", "content": "", "status": "draft"},
+            mode="new",
+            error="",
+        ),
+    )
+
+
+@app.post("/admin/content/new")
+@admin_required
+async def admin_content_create(
+    request: Request,
+    title: str = Form(...),
+    slug: str = Form(default=""),
+    content: str = Form(default=""),
+    status: str = Form(default="draft"),
+    db: Session = Depends(get_db),
+):
+    normalized_status = "published" if status == "published" else "draft"
+    article = db_mod.Article(
+        title=title.strip(),
+        slug=_unique_article_slug(db, slug.strip() or title.strip()),
+        category="general",
+        excerpt=(content or "").strip()[:220],
+        body=(content or "").strip(),
+        is_published=normalized_status == "published",
+        published_at=datetime.utcnow() if normalized_status == "published" else None,
+        author_name="Focus Astrology",
+        language="tr",
+    )
+    db.add(article)
+    db.commit()
+    return RedirectResponse(url="/admin/content", status_code=303)
+
+
+@app.get("/admin/content/{article_id}/edit", response_class=HTMLResponse)
+@admin_required
+async def admin_content_edit(request: Request, article_id: int, db: Session = Depends(get_db)):
+    article = db.query(db_mod.Article).filter(db_mod.Article.id == article_id).first()
+    if not article:
+        _public_error("Content not found.", 404)
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/content_form.html",
+        context=_auth_template_context(
+            request,
+            dashboard_user=request.state.admin_user,
+            article=_article_admin_view(article),
+            mode="edit",
+            error="",
+        ),
+    )
+
+
+@app.post("/admin/content/{article_id}/edit")
+@admin_required
+async def admin_content_update(
+    request: Request,
+    article_id: int,
+    title: str = Form(...),
+    slug: str = Form(default=""),
+    content: str = Form(default=""),
+    status: str = Form(default="draft"),
+    db: Session = Depends(get_db),
+):
+    article = db.query(db_mod.Article).filter(db_mod.Article.id == article_id).first()
+    if not article:
+        _public_error("Content not found.", 404)
+    normalized_status = "published" if status == "published" else "draft"
+    article.title = title.strip()
+    article.slug = _unique_article_slug(db, slug.strip() or title.strip(), article_id=article.id)
+    article.body = (content or "").strip()
+    article.excerpt = article.body[:220]
+    article.is_published = normalized_status == "published"
+    if article.is_published and not article.published_at:
+        article.published_at = datetime.utcnow()
+    article.updated_at = datetime.utcnow()
+    db.commit()
+    return RedirectResponse(url="/admin/content", status_code=303)
 
 
 @app.get("/admin/billing", response_class=HTMLResponse)
@@ -6314,7 +7675,7 @@ async def admin_emails(request: Request, db: Session = Depends(get_db), status: 
         context=_auth_template_context(
             request,
             dashboard_user=request.state.admin_user,
-            email_logs=[_email_log_view(log) for log in logs],
+            email_logs=[_email_log_admin_view(db, log) for log in logs],
             filters={"status": status, "email_type": email_type, "recipient": recipient},
         ),
     )
@@ -7151,8 +8512,11 @@ async def calculate_from_form(
     child_resolved_timezone: str = Form(default=""),
     child_resolved_geocode_provider: str = Form(default=""),
     child_resolved_geocode_confidence: str = Form(default=""),
+    csrf_token: str = Form(default=""),
     db: Session = Depends(get_db),
 ):
+    enforce_rate_limit(request, "calculate", limit=8, window_seconds=600)
+    await validate_csrf_token(request, csrf_token)
     try:
         current_user = get_request_user(request, db)
         current_language = _result_language(request, current_user)
@@ -7566,6 +8930,8 @@ async def calculate_from_form(
 
 @app.post("/interpret")
 async def interpret_from_payload(request: Request, payload_json: str | None = Form(default=None), db: Session = Depends(get_db)):
+    enforce_rate_limit(request, "interpret", limit=8, window_seconds=600)
+    await validate_csrf_token(request)
     try:
         if payload_json is not None:
             payload_data = json.loads(payload_json)
@@ -7604,7 +8970,9 @@ async def interpret_from_payload(request: Request, payload_json: str | None = Fo
 
 
 @app.post("/report/pdf-preview", response_class=HTMLResponse)
-async def report_pdf_preview(request: Request, payload_json: str | None = Form(default=None), language: str | None = Form(default=None), db: Session = Depends(get_db)):
+async def report_pdf_preview(request: Request, payload_json: str | None = Form(default=None), language: str | None = Form(default=None), csrf_token: str = Form(default=""), db: Session = Depends(get_db)):
+    enforce_rate_limit(request, "report_pdf_preview", limit=12, window_seconds=600)
+    await validate_csrf_token(request, csrf_token)
     try:
         if payload_json is not None:
             payload_data = json.loads(payload_json)
@@ -7626,7 +8994,9 @@ async def report_pdf_preview(request: Request, payload_json: str | None = Form(d
 
 
 @app.post("/report/pdf")
-async def report_pdf_export(request: Request, payload_json: str | None = Form(default=None), language: str | None = Form(default=None), db: Session = Depends(get_db)):
+async def report_pdf_export(request: Request, payload_json: str | None = Form(default=None), language: str | None = Form(default=None), csrf_token: str = Form(default=""), db: Session = Depends(get_db)):
+    enforce_rate_limit(request, "report_pdf", limit=6, window_seconds=600)
+    await validate_csrf_token(request, csrf_token)
     render_started_at = time.perf_counter()
     try:
         if payload_json is not None:

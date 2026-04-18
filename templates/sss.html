@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+
+{% block title %}Focus Astrology | Sık Sorulan Sorular{% endblock %}
+
+{% block meta_description %}Vedik astroloji danışmanlığı, doğum haritası raporları ve Focus Astrology hizmetleri hakkında sık sorulan soruların yanıtları.{% endblock %}
+
+{% block extra_head %}
+<style>
+    .faq-shell { display:grid; gap:clamp(28px, 4vw, 44px); }
+
+    .faq-list { display:grid; gap:0; }
+
+    .faq-item {
+        border-bottom: 1px solid var(--border);
+    }
+    .faq-item:first-child {
+        border-top: 1px solid var(--border);
+    }
+
+    .faq-trigger {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        padding: 22px 0;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        text-align: left;
+        color: var(--text);
+    }
+    .faq-trigger:hover { color: var(--gold-light); }
+
+    .faq-question {
+        font-family: "Cormorant Garamond", serif;
+        font-size: clamp(1.25rem, 2vw, 1.55rem);
+        font-weight: 300;
+        line-height: 1.3;
+        color: inherit;
+        margin: 0;
+    }
+
+    .faq-icon {
+        flex-shrink: 0;
+        width: 22px;
+        height: 22px;
+        border: 1px solid var(--border);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: transform 0.28s ease, border-color 0.28s ease;
+    }
+    .faq-icon svg { display:block; }
+    .faq-trigger[aria-expanded="true"] .faq-icon {
+        transform: rotate(45deg);
+        border-color: rgba(223,192,112,.4);
+    }
+
+    .faq-body {
+        display: none;
+        padding: 0 0 22px;
+        max-width: 760px;
+    }
+    .faq-body.is-open { display: block; }
+    .faq-body p {
+        margin: 0;
+        color: var(--text-soft);
+        line-height: 1.84;
+        font-size: 1.08rem;
+    }
+
+    .faq-category-title {
+        margin: 0 0 4px;
+        font-family: "Cinzel", serif;
+        font-size: 0.68rem;
+        letter-spacing: 0.42em;
+        text-transform: uppercase;
+        color: var(--gold);
+        opacity: .78;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+    .faq-category-title::before {
+        content: "";
+        width: 30px;
+        height: 1px;
+        background: rgba(223,192,112,.5);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="faq-shell">
+
+            <header class="legal-hero">
+                <div class="section-kicker">Sorular</div>
+                <h1 class="hero-title">Sık Sorulan Sorular</h1>
+                <p class="section-text">
+                    Vedik astroloji hizmetlerimiz hakkında en çok sorulan soruları ve yanıtlarını burada bulabilirsiniz.
+                    Yanıtını bulamadığınız bir sorunuz varsa <a href="/contact" style="color:var(--gold-light);">iletişim sayfasından</a> bize ulaşabilirsiniz.
+                </p>
+            </header>
+
+            <div class="glass-card card-pad">
+                <div class="faq-category-title">Genel</div>
+                <div class="faq-list">
+
+                    <div class="faq-item">
+                        <button class="faq-trigger" aria-expanded="false" aria-controls="faq-1">
+                            <span class="faq-question">Vedik astroloji nedir, Batı astrolojisinden farkı ne?</span>
+                            <span class="faq-icon" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><line x1="5" y1="0" x2="5" y2="10" stroke="currentColor" stroke-width="1.5"/><line x1="0" y1="5" x2="10" y2="5" stroke="currentColor" stroke-width="1.5"/></svg></span>
+                        </button>
+                        <div class="faq-body" id="faq-1" role="region">
+                            <p>Vedik astroloji (Jyotisha), Hindistan'ın kadim Vedik geleneğinden gelen ve beş binden fazla yıllık birikimi olan bir sistemdir. Batı astrolojisinden en temel farkı hesaplama yöntemidir: Vedik sistem sabit yıldızları referans alır (sidereal zodiac), Batı sistemi ise Güneş'in ilkbahar noktasını (tropical zodiac). Bu fark nedeniyle gezegen konumları genellikle 23–24 derece kaymış görünür. Vedik sistemde Ay burcu ve yükselen burç (Lagna) merkeze alınır; Batı sisteminde Güneş burcu ön plandadır. Dasha sistemi (gezegen dönemleri) ve Navamsa gibi bölünmüş haritalar Vedik astrolojiye özgü güçlü araçlardır.</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <button class="faq-trigger" aria-expanded="false" aria-controls="faq-2">
+                            <span class="faq-question">Harita hesaplaması ücretsiz mi?</span>
+                            <span class="faq-icon" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><line x1="5" y1="0" x2="5" y2="10" stroke="currentColor" stroke-width="1.5"/><line x1="0" y1="5" x2="10" y2="5" stroke="currentColor" stroke-width="1.5"/></svg></span>
+                        </button>
+                        <div class="faq-body" id="faq-2" role="region">
+                            <p>Evet, doğum haritanızı hesaplamak tamamen ücretsizdir. Doğum tarihinizi, saatinizi ve yerinizi girerek haritanızı anında görebilirsiniz. Haritayı yorumlamak için ücretli raporlarımızdan veya birebir danışmanlık seansından yararlanabilirsiniz.</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <button class="faq-trigger" aria-expanded="false" aria-controls="faq-3">
+                            <span class="faq-question">Doğum saatimi bilmiyorum, yine de analiz yaptırabilir miyim?</span>
+                            <span class="faq-icon" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><line x1="5" y1="0" x2="5" y2="10" stroke="currentColor" stroke-width="1.5"/><line x1="0" y1="5" x2="10" y2="5" stroke="currentColor" stroke-width="1.5"/></svg></span>
+                        </button>
+                        <div class="faq-body" id="faq-3" role="region">
+                            <p>Doğum saati, doğru bir harita için en kritik bilgidir; yükselen burç (Lagna) ve ev sistemleri bu bilgi olmadan hesaplanamaz. Saatinizi kesin olarak bilmiyorsanız bize not ekleyebilirsiniz. Bazı durumlarda doğum saatini daraltan teknikler uygulanabilir. Saati tamamen bilmiyorsanız Güneş bazlı kısmi bir analiz mümkün olabilir; ancak rapor kapsamı daha sınırlı kalacaktır.</p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="glass-card card-pad">
+                <div class="faq-category-title">Raporlar</div>
+                <div class="faq-list">
+
+                    <div class="faq-item">
+                        <button class="faq-trigger" aria-expanded="false" aria-controls="faq-4">
+                            <span class="faq-question">Raporlar nasıl hazırlanıyor, ne zaman teslim ediliyor?</span>
+                            <span class="faq-icon" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><line x1="5" y1="0" x2="5" y2="10" stroke="currentColor" stroke-width="1.5"/><line x1="0" y1="5" x2="10" y2="5" stroke="currentColor" stroke-width="1.5"/></svg></span>
+                        </button>
+                        <div class="faq-body" id="faq-4" role="region">
+                            <p>Doğum bilgilerinizi aldıktan sonra yapay zeka destekli bir taslak oluşturulur ve uzman incelemesinden geçirilir. Raporlar taslak otomatik olarak size gönderilmez; insan değerlendirmesi tamamlandıktan sonra en geç 7 gün içinde e-posta ile teslim edilir.</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <button class="faq-trigger" aria-expanded="false" aria-controls="faq-5">
+                            <span class="faq-question">Hangi raporu seçmeliyim?</span>
+                            <span class="faq-icon" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><line x1="5" y1="0" x2="5" y2="10" stroke="currentColor" stroke-width="1.5"/><line x1="0" y1="5" x2="10" y2="5" stroke="currentColor" stroke-width="1.5"/></svg></span>
+                        </button>
+                        <div class="faq-body" id="faq-5" role="region">
+                            <p>Sorunuzu netleştirmek en iyi başlangıç noktasıdır. Genel yaşam temalarını, tekrar eden kalıpları veya uzun vadeli yönünüzü anlamak istiyorsanız Doğum Haritası Karma'sı raporuyla başlayabilirsiniz. Önümüzdeki dönem için zamanlama ve fırsat pencerelerine bakıyorsanız Yıllık Transit, kariyer kararında netlik arıyorsanız Kariyer raporu daha odaklı bir giriş sağlar. Birden fazla konu aynı anda etkili oluyorsa birebir danışmanlık daha kapsamlı bir çerçeve sunar.</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <button class="faq-trigger" aria-expanded="false" aria-controls="faq-6">
+                            <span class="faq-question">Rapor satın aldıktan sonra iade alabilir miyim?</span>
+                            <span class="faq-icon" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><line x1="5" y1="0" x2="5" y2="10" stroke="currentColor" stroke-width="1.5"/><line x1="0" y1="5" x2="10" y2="5" stroke="currentColor" stroke-width="1.5"/></svg></span>
+                        </button>
+                        <div class="faq-body" id="faq-6" role="region">
+                            <p>Dijital ürün niteliğindeki raporlarda, hazırlık süreci başladıktan sonra iade yapılamamaktadır. Detaylar için <a href="/sales-terms" style="color:var(--gold-light);">Satış Koşulları</a> sayfamızı inceleyebilirsiniz.</p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="glass-card card-pad">
+                <div class="faq-category-title">Danışmanlık</div>
+                <div class="faq-list">
+
+                    <div class="faq-item">
+                        <button class="faq-trigger" aria-expanded="false" aria-controls="faq-7">
+                            <span class="faq-question">Birebir danışmanlık seansı nasıl işliyor?</span>
+                            <span class="faq-icon" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><line x1="5" y1="0" x2="5" y2="10" stroke="currentColor" stroke-width="1.5"/><line x1="0" y1="5" x2="10" y2="5" stroke="currentColor" stroke-width="1.5"/></svg></span>
+                        </button>
+                        <div class="faq-body" id="faq-7" role="region">
+                            <p>Seans başvurusu yaptıktan sonra doğum bilgilerinizi paylaşırsınız. Görüşme öncesinde haritanız incelenir. 60 dakikalık seans boyunca haritanızı birlikte ele alır, sorularınızı yanıtlarız. Seans online olarak gerçekleştirilmektedir.</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <button class="faq-trigger" aria-expanded="false" aria-controls="faq-8">
+                            <span class="faq-question">Randevumu iptal etmek veya ertelemek istiyorum.</span>
+                            <span class="faq-icon" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><line x1="5" y1="0" x2="5" y2="10" stroke="currentColor" stroke-width="1.5"/><line x1="0" y1="5" x2="10" y2="5" stroke="currentColor" stroke-width="1.5"/></svg></span>
+                        </button>
+                        <div class="faq-body" id="faq-8" role="region">
+                            <p>Randevunuzu planlanan saatten en az 24 saat önce ücretsiz olarak iptal edebilir veya erteleyebilirsiniz. 24 saatten kısa süre kala yapılan iptallerde ücret iadesi yapılamamaktadır. Detaylar için <a href="/appointment-policy" style="color:var(--gold-light);">Randevu Politikası</a> sayfamızı inceleyebilirsiniz.</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <button class="faq-trigger" aria-expanded="false" aria-controls="faq-9">
+                            <span class="faq-question">Başkası adına seans veya rapor alabilir miyim?</span>
+                            <span class="faq-icon" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><line x1="5" y1="0" x2="5" y2="10" stroke="currentColor" stroke-width="1.5"/><line x1="0" y1="5" x2="10" y2="5" stroke="currentColor" stroke-width="1.5"/></svg></span>
+                        </button>
+                        <div class="faq-body" id="faq-9" role="region">
+                            <p>Evet, sevdiğiniz biri için rapor veya danışmanlık seansı satın alabilirsiniz. Sipariş formunda alıcının adını ve e-posta adresini belirtmeniz yeterlidir. Ebeveyn-Çocuk raporu da bu şekilde alınabilmektedir.</p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="glass-card card-pad" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:20px;">
+                <div style="display:grid; gap:8px;">
+                    <div class="section-kicker">Başka sorunuz mu var?</div>
+                    <p class="muted" style="margin:0; max-width:480px;">Yanıtını bulamadığınız bir sorunuz varsa bize ulaşın; en kısa sürede yanıtlayalım.</p>
+                </div>
+                <a class="btn btn-primary" href="/personal-consultation">Danışmanlık Hakkında</a>
+            </div>
+
+        </div>
+    </div>
+</section>
+
+<script>
+document.querySelectorAll('.faq-trigger').forEach(function(trigger) {
+    trigger.addEventListener('click', function() {
+        var expanded = this.getAttribute('aria-expanded') === 'true';
+        var bodyId = this.getAttribute('aria-controls');
+        var body = document.getElementById(bodyId);
+        this.setAttribute('aria-expanded', String(!expanded));
+        body.classList.toggle('is-open', !expanded);
+    });
+});
+</script>
+{% endblock %}

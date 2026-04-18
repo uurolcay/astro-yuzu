@@ -14,8 +14,14 @@ def _env(name, default=""):
     return str(os.getenv(name, default)).strip()
 
 
+def _env_flag(name, default=False):
+    raw = _env(name, "true" if default else "false").lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
 def _amount(value):
     raw = str(value or "").strip()
+    raw = raw.replace("₺", "")
     raw = raw.replace("₺", "").replace("TRY", "").replace("TL", "").replace(" ", "")
     if "," in raw:
         raw = raw.replace(".", "").replace(",", ".")
@@ -30,11 +36,115 @@ def _amount(value):
     return str(amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
+def _compact(value):
+    return str(value or "").strip()
+
+
+def _hmac_sha256_hex(secret_key, message):
+    return hmac.new(
+        str(secret_key or "").encode("utf-8"),
+        str(message or "").encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def build_iyzico_hpp_webhook_signature(payload, secret_key=None):
+    """Build iyzico X-IYZ-SIGNATURE-V3 for Checkout Form/HPP webhooks."""
+    secret = _compact(secret_key) or _env("IYZICO_WEBHOOK_SECRET") or _env("IYZICO_SECRET_KEY")
+    if not secret:
+        raise PaymentConfigurationError("Iyzico webhook signature secret is not configured.")
+    key = "".join(
+        [
+            secret,
+            _compact((payload or {}).get("iyziEventType")),
+            _compact((payload or {}).get("iyziPaymentId") or (payload or {}).get("paymentId")),
+            _compact((payload or {}).get("token")),
+            _compact((payload or {}).get("paymentConversationId")),
+            _compact((payload or {}).get("status")),
+        ]
+    )
+    return _hmac_sha256_hex(secret, key)
+
+
+def verify_iyzico_hpp_webhook_signature(payload, signature, secret_key=None):
+    signature = _compact(signature).lower()
+    if not signature:
+        return False
+    expected = build_iyzico_hpp_webhook_signature(payload or {}, secret_key=secret_key).lower()
+    return hmac.compare_digest(expected, signature)
+
+
 class IyzicoProvider(PaymentProvider):
     provider_name = "iyzico"
 
     def create_checkout_session(self, report, user, success_url, cancel_url):
         raise NotImplementedError("Iyzico checkout session initialization is not implemented yet.")
+
+    @staticmethod
+    def build_hpp_webhook_signature(payload, secret_key=None):
+        return build_iyzico_hpp_webhook_signature(payload, secret_key=secret_key)
+
+    @staticmethod
+    def verify_hpp_webhook_signature(payload, signature, secret_key=None):
+        return verify_iyzico_hpp_webhook_signature(payload, signature, secret_key=secret_key)
+
+    @staticmethod
+    def response_signature_payload(kind, payload):
+        """Isolated best-effort canonicalization for iyzico response signatures.
+
+        iyzico exposes a `signature` field on some responses, but endpoint-level
+        canonical fields can differ. Keeping this isolated makes sandbox-driven
+        adjustment safe without touching payment finalization logic.
+        """
+        data = payload or {}
+        normalized_kind = str(kind or "").strip().lower()
+        if normalized_kind == "checkout_initialize":
+            return "".join([
+                _compact(data.get("conversationId")),
+                _compact(data.get("token") or data.get("checkoutFormToken")),
+                _compact(data.get("status")),
+            ])
+        if normalized_kind == "checkout_retrieve":
+            return "".join([
+                _compact(data.get("conversationId")),
+                _compact(data.get("paymentId")),
+                _compact(data.get("paymentStatus")),
+                _compact(data.get("basketId")),
+                _compact(data.get("currency")),
+                _amount(data.get("paidPrice")),
+            ])
+        if normalized_kind == "refund":
+            return "".join([
+                _compact(data.get("conversationId")),
+                _compact(data.get("paymentTransactionId") or data.get("paymentId")),
+                _amount(data.get("price")),
+                _compact(data.get("currency")),
+                _compact(data.get("status")),
+            ])
+        return ""
+
+    @classmethod
+    def verify_response_signature_payload(cls, kind, payload, *, required=None):
+        signature = _compact((payload or {}).get("signature"))
+        require_signature = _env_flag("IYZICO_REQUIRE_RESPONSE_SIGNATURE", default=False) if required is None else bool(required)
+        if not signature:
+            if require_signature:
+                raise PaymentVerificationError("Iyzico response signature is missing.")
+            return True
+        secret = _env("IYZICO_SECRET_KEY")
+        if not secret:
+            if require_signature:
+                raise PaymentConfigurationError("IYZICO_SECRET_KEY is required for response signature validation.")
+            return True
+        message = cls.response_signature_payload(kind, payload)
+        if not message:
+            if require_signature:
+                raise PaymentVerificationError("Iyzico response signature canonical payload is unavailable.")
+            return True
+        expected = _hmac_sha256_hex(secret, message).lower()
+        if not hmac.compare_digest(expected, signature.lower()):
+            raise PaymentVerificationError("Iyzico response signature validation failed.")
+        return True
 
     def _base_url(self):
         return _env("IYZICO_BASE_URL", "https://api.iyzipay.com").rstrip("/")
@@ -72,8 +182,9 @@ class IyzicoProvider(PaymentProvider):
             headers=self._auth_headers(body),
             method="POST",
         )
+        timeout = int(_env("IYZICO_HTTP_TIMEOUT_SECONDS", "25") or "25")
         try:
-            with urlrequest.urlopen(req, timeout=25) as response:
+            with urlrequest.urlopen(req, timeout=timeout) as response:
                 raw = response.read().decode("utf-8")
         except Exception as exc:
             raise PaymentVerificationError("Iyzico request failed.") from exc
@@ -144,6 +255,7 @@ class IyzicoProvider(PaymentProvider):
     def initialize_payment_for_order(self, order, callback_url):
         payload = self._initialize_payload(order, callback_url)
         response = self._post_json("/payment/iyzipos/checkoutform/initialize/auth/ecom", payload)
+        self.verify_response_signature_payload("checkout_initialize", response)
         if str(response.get("status", "")).lower() != "success":
             raise PaymentVerificationError(response.get("errorMessage") or "Iyzico checkout form initialization failed.")
         token = response.get("token")
@@ -167,7 +279,9 @@ class IyzicoProvider(PaymentProvider):
             "conversationId": conversation_id,
             "token": token,
         }
-        return self._post_json("/payment/iyzipos/checkoutform/auth/ecom/detail", payload)
+        response = self._post_json("/payment/iyzipos/checkoutform/auth/ecom/detail", payload)
+        self.verify_response_signature_payload("checkout_retrieve", response)
+        return response
 
     def refund_order_payment(self, order, amount, reason=""):
         transaction_id = str(getattr(order, "provider_transaction_id", "") or "").strip()
@@ -184,15 +298,29 @@ class IyzicoProvider(PaymentProvider):
             "reason": str(reason or "")[:256],
         }
         response = self._post_json("/payment/refund", payload)
+        self.verify_response_signature_payload("refund", response)
         if str(response.get("status", "")).lower() != "success":
             raise PaymentVerificationError(response.get("errorMessage") or "Iyzico refund failed.")
         return {
             "provider": self.provider_name,
             "status": "refunded",
             "refund_amount": refund_amount,
-            "refund_reference": response.get("paymentId") or response.get("conversationId") or transaction_id,
+            "refund_reference": response.get("refundId") or response.get("paymentId") or response.get("conversationId") or transaction_id,
+            "provider_status": response.get("status"),
             "raw": response,
         }
+
+    def retrieve_payment_detail(self, payment_id, conversation_id=None):
+        if not payment_id:
+            raise PaymentVerificationError("Iyzico payment detail requires paymentId.")
+        payload = {
+            "locale": "tr",
+            "conversationId": conversation_id or str(uuid.uuid4()),
+            "paymentId": str(payment_id),
+        }
+        response = self._post_json(_env("IYZICO_PAYMENT_DETAIL_PATH", "/payment/detail"), payload)
+        self.verify_response_signature_payload("checkout_retrieve", response)
+        return response
 
     def _configured_payment_link(self, order):
         service_type = str(getattr(order, "service_type", "") or "").strip().lower()

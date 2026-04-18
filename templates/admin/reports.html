@@ -6,32 +6,77 @@
 <section class="page-section">
     <div class="container">
         <div class="glass-card card-pad">
-            <h1 class="hero-title" style="font-size:2.3rem;">Reports</h1>
+            <div class="row-between">
+                <div>
+                    <p class="eyebrow">Written Report Fulfillment</p>
+                    <h1 class="hero-title" style="font-size:2.3rem;">Report Queue</h1>
+                    <p class="muted">Manual-review queue for paid written report services. Consultation orders are excluded.</p>
+                </div>
+                <div class="chip-row">
+                    <a class="chip" href="/admin/dashboard">Dashboard</a>
+                    <a class="chip" href="/admin/orders">All Orders</a>
+                </div>
+            </div>
+
             <form method="get" style="display:grid; grid-template-columns:1fr 2fr auto; gap:12px; margin-top:20px;">
                 <input type="text" name="report_type" placeholder="Report type" value="{{ filters.report_type }}">
-                <input type="text" name="user_email" placeholder="User email" value="{{ filters.user_email }}">
+                <input type="text" name="user_email" placeholder="Customer email" value="{{ filters.user_email }}">
                 <button class="btn btn-secondary" type="submit">Filter</button>
             </form>
-            <div style="display:grid; gap:14px; margin-top:24px;">
-                {% for report in reports %}
+
+            <div style="overflow:auto; margin-top:24px;">
+                <table style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr class="muted" style="text-align:left;">
+                            <th style="padding:10px;">ID</th>
+                            <th style="padding:10px;">Customer Name</th>
+                            <th style="padding:10px;">Email</th>
+                            <th style="padding:10px;">Report Type</th>
+                            <th style="padding:10px;">Status</th>
+                            <th style="padding:10px;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for report in reports %}
+                        <tr style="border-top:1px solid rgba(223,192,112,.12);">
+                            <td style="padding:12px;">#{{ report.id }}</td>
+                            <td style="padding:12px;">{{ report.customer_name }}</td>
+                            <td style="padding:12px;">{{ report.customer_email }}</td>
+                            <td style="padding:12px;">{{ report.product_type }}</td>
+                            <td style="padding:12px;"><span class="chip">{{ report.status }}</span></td>
+                            <td style="padding:12px;"><a class="chip" href="/admin/reports/{{ report.id }}">View</a></td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="muted" style="padding:18px;">No written report orders match this filter.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="glass-card card-pad" style="margin-top:24px;">
+            <h2 class="section-title">Generated Report Access Archive</h2>
+            <p class="muted">Legacy calculator/report access records kept for account and PDF access visibility.</p>
+            <div style="display:grid; gap:14px; margin-top:18px;">
+                {% for report in legacy_reports %}
                 <div class="metric-card">
                     <div class="row-between">
                         <div>
-                            <div class="metric-value"><a href="/admin/reports/{{ report.id }}">#{{ report.id }} | {{ report.title or "Vedic Report" }}</a></div>
-                            <div class="muted">{{ report.user_email }} | {{ report.profile_name }} | {{ report.report_type|title }} | {{ report.full_name or "-" }}</div>
+                            <div class="metric-value">{{ report.title or "Vedic Report" }}</div>
+                            <div class="muted">{{ report.user_email }} | {{ report.profile_name }} | {{ report.report_type|title }}</div>
                             <div class="chip-row" style="margin-top:10px;">
                                 <span class="chip">{{ report.access_label }}</span>
-                                {% if report.can_view_full_report %}
-                                <span class="chip">Full Access</span>
-                                {% endif %}
-                                {% if report.can_download_pdf %}
-                                <span class="chip">PDF Enabled</span>
-                                {% endif %}
+                                {% if report.can_view_full_report %}<span class="chip">Full Access</span>{% endif %}
+                                {% if report.can_download_pdf %}<span class="chip">PDF Enabled</span>{% endif %}
                             </div>
                         </div>
                         <div class="muted">{{ report.created_at }}</div>
                     </div>
                 </div>
+                {% else %}
+                <p class="muted">No generated report records.</p>
                 {% endfor %}
             </div>
         </div>

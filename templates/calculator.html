@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}{{ t("index.calculator_title") }} | Focus Astrology{% endblock %}
+{% block meta_description %}Ücretsiz vedik doğum haritası hesaplama ile lagna, yükselen burç, gezegen konumları ve temel harita göstergelerinizi keşfedin.{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -51,6 +52,26 @@
         border-bottom: 1px solid var(--border);
     }
     .calculator-side .section-header { margin:0; padding:0; border-bottom:0; }
+    .calculator-outcome-card {
+        display:grid;
+        gap:14px;
+        margin-top:22px;
+        padding:18px;
+        border:1px solid rgba(223,192,112,.14);
+        border-radius:18px;
+        background:rgba(223,192,112,.045);
+    }
+    .calculator-outcome-grid {
+        display:grid;
+        grid-template-columns:repeat(2, minmax(0, 1fr));
+        gap:12px;
+    }
+    .calculator-outcome-grid span {
+        color:var(--text-soft);
+        line-height:1.6;
+        padding-left:14px;
+        border-left:1px solid rgba(223,192,112,.18);
+    }
     .form-fields {
         display:grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -145,7 +166,8 @@
     }
     @media (max-width: 960px) {
         .calculator-grid,
-        .form-fields {
+        .form-fields,
+        .calculator-outcome-grid {
             grid-template-columns:1fr;
         }
         .field-full { grid-column:auto; }
@@ -158,17 +180,6 @@
 <section class="page-section">
     <div class="container">
         <div class="calculator-page-shell">
-            <section class="calculator-hero">
-                <div class="eyebrow">{{ t("index.calculator_eyebrow") }}</div>
-                <h1 class="hero-title">{{ t("index.calculator_title") }}</h1>
-                <p class="hero-text">{{ t("index.calculator_text") }}</p>
-                <div class="signal-row">
-                    <span class="signal-chip">{{ t("index.hero_signal_1") }}</span>
-                    <span class="signal-chip">{{ t("index.hero_signal_2") }}</span>
-                    <span class="signal-chip">{{ t("index.hero_signal_3") }}</span>
-                </div>
-            </section>
-
             <section class="calculator-shell" id="calculator-entry">
                 <div class="calculator-grid">
                     <div>
@@ -177,7 +188,17 @@
                             <h2 class="section-title">{{ t("index.calculator_title") }}</h2>
                             <p class="section-text">{{ t("index.calculator_text") }}</p>
                         </div>
+                        <div class="calculator-outcome-card">
+                            <div class="section-kicker">Hesaplama sonrası</div>
+                            <div class="calculator-outcome-grid">
+                                <span>Lagna, yükselen ve temel yerleşimlerinizi görürsünüz.</span>
+                                <span>Haritanızdaki baskın yaşam temaları öne çıkarılır.</span>
+                                <span>Size uygun rapor veya danışmanlık yönlendirmesi sunulur.</span>
+                                <span>Sonuç ücretsiz bir önizleme olarak karar vermenizi kolaylaştırır.</span>
+                            </div>
+                        </div>
                         <form action="/calculate" method="post">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token or csrf_token_for(request) }}">
                             <input type="hidden" name="report_type" value="premium">
                             <div class="form-fields">
                                 <div class="field-full">
@@ -226,7 +247,7 @@
                     <div class="calculator-side">
                         <div class="section-header">
                             <div class="eyebrow">{{ t("index.about_eyebrow") }}</div>
-                            <h3 class="card-title">{{ t("index.about_title") }}</h3>
+                            <h3 class="section-title" style="font-size:clamp(1.5rem,2.4vw,2rem);">{{ t("index.about_title") }}</h3>
                             <p class="muted">{{ t("index.about_text") }}</p>
                         </div>
                     </div>

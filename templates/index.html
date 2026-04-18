@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}{{ t("index.page_title") }}{% endblock %}
+{% block meta_description %}Vedik doğum haritası hesaplama, kişisel astroloji raporu ve 60 dk birebir danışmanlıkla yaşam yönünüzü daha net okuyun.{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -35,7 +36,7 @@
         gap: 22px;
     }
 
-    .hero-layout { grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr); align-items: end; }
+    .hero-layout { grid-template-columns: minmax(0, 1.15fr) minmax(280px, 390px); align-items: center; }
     .concept-grid,
     .credibility-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .report-preview-grid { grid-template-columns: 1.05fr 0.95fr; }
@@ -81,19 +82,141 @@
     }
 
     .hero-side {
-        align-self: stretch;
-        justify-content: end;
+        align-self: center;
+        justify-content: center;
+        min-height: clamp(360px, 44vw, 500px);
+        justify-self: end;
         background: linear-gradient(180deg, rgba(38,61,98,.26), rgba(20,34,58,.22));
+    }
+
+    .founder-hero-card {
+        display: grid;
+        grid-template-columns: 78px 1fr;
+        gap: 16px;
+        align-items: center;
+        padding: 14px;
+        border-radius: 22px;
+        border: 1px solid rgba(223,192,112,.16);
+        background: rgba(255,255,255,.035);
+        color: inherit;
+        text-decoration: none;
+        transition: border-color .22s ease, background .22s ease, transform .22s ease;
+    }
+
+    .founder-hero-card:hover {
+        border-color: rgba(223,192,112,.34);
+        background: rgba(255,255,255,.055);
+        transform: translateY(-2px);
+    }
+
+    .founder-hero-photo {
+        width: 78px;
+        height: 78px;
+        border-radius: 50%;
+        object-fit: cover;
+        object-position: center 34%;
+        border: 1px solid rgba(223,192,112,.26);
+        box-shadow: 0 12px 24px rgba(0,0,0,.18);
+    }
+
+    .founder-hero-copy {
+        display: grid;
+        gap: 6px;
+    }
+
+    .founder-hero-copy .section-kicker {
+        margin: 0;
+        letter-spacing: .24em;
+    }
+
+    .founder-hero-copy h3 {
+        margin: 0;
+        font-family: "Cormorant Garamond", serif;
+        font-size: clamp(1.45rem, 2vw, 1.8rem);
+        line-height: 1.08;
+        font-weight: 300;
+        color: var(--text);
+    }
+
+    .founder-hero-copy p {
+        margin: 0;
+        color: var(--text-soft);
+        line-height: 1.55;
+        font-size: .94rem;
     }
 
     .concept-card,
     .credibility-card {
         padding: 0 0 0 18px;
         border: 0;
-        border-left: 1px solid rgba(223,192,112,.13);
+        border-left: 1px solid rgba(223,192,112,.18);
         border-radius: 0;
         background: transparent;
         box-shadow: none;
+        min-height: 168px;
+        align-content: center;
+        gap: 12px;
+    }
+
+    .reports-editorial-shell { display: grid; gap: 28px; }
+
+    .reports-editorial-lead {
+        display: grid;
+        gap: 18px;
+        max-width: 720px;
+        margin: 0 auto;
+        text-align: center;
+    }
+
+    .reports-editorial-lead .section-kicker { justify-content: center; }
+
+    .reports-editorial-actions {
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 14px;
+        margin-top: 4px;
+    }
+
+    .reports-curated-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 1px;
+        background: rgba(223,192,112,.08);
+        border: 1px solid rgba(223,192,112,.10);
+    }
+
+    .reports-curated-card {
+        display: grid;
+        gap: 14px;
+        min-height: 250px;
+        padding: clamp(28px, 3vw, 36px);
+        background: rgba(16, 30, 54, .82);
+        color: inherit;
+        text-decoration: none;
+        transition: background .22s ease, border-color .22s ease;
+    }
+
+    .reports-curated-card:hover { background: rgba(27, 45, 74, .76); }
+
+    .reports-curated-card h3 {
+        margin: 0;
+        font-family: "Cormorant Garamond", serif;
+        font-size: clamp(1.9rem, 2.8vw, 2.55rem);
+        line-height: 1.06;
+        font-weight: 300;
+        color: var(--text);
+    }
+
+    .reports-curated-meta {
+        margin-top: auto;
+        padding-top: 16px;
+        border-top: 1px solid rgba(223,192,112,.10);
+        color: var(--gold-light);
+        font-family: "Cinzel", serif;
+        font-size: .68rem;
+        letter-spacing: .18em;
+        text-transform: uppercase;
     }
 
     .signal-pill {
@@ -144,6 +267,12 @@
         font-weight: 300;
     }
 
+    .report-preview-card h3 {
+        font-size: clamp(1.75rem, 2.4vw, 2.2rem);
+        line-height: 1.05;
+        text-wrap: balance;
+    }
+
     .report-preview-list,
     .credibility-points {
         margin: 0;
@@ -164,12 +293,6 @@
     @keyframes heroFadeUp {
         from { opacity: 0; transform: translate3d(0, 28px, 0); }
         to { opacity: 1; transform: translate3d(0, 0, 0); }
-    }
-
-    .report-preview-grid--cards {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 18px;
     }
 
     .report-preview-card ul { margin: 0; }
@@ -301,8 +424,9 @@
         .articles-preview-grid,
         .final-cta-grid,
         .concept-grid,
-        .report-preview-grid--cards,
+        .reports-curated-grid,
         .consultation-meta-grid { grid-template-columns: 1fr; }
+        .hero-side { justify-self: stretch; min-height: auto; }
     }
 
     @media (max-width: 760px) {
@@ -380,22 +504,22 @@
                                     <circle cx="92" cy="27" r="2.5" fill="#F0DC95" opacity="0.86"/>
                                 </svg>
                             </div>
-                            <div class="section-kicker" style="margin:0;">{{ t("index.hero_eyebrow") }}</div>
+                            <div class="section-kicker" style="margin:0;">Vedik Astroloji ile Stratejik Netlik</div>
                         </div>
 
                         <h1 class="hero-title hero-animate hero-animate--2">
-                            {{ t("index.hero_decision_title_1") }}<br>
-                            {{ t("index.hero_decision_title_2") }}
+                            Haritanızı okuyun.<br>
+                            Kararınızı daha net verin.
                         </h1>
 
                         <p class="hero-text hero-animate hero-animate--3">
-                            {{ t("index.hero_decision_text") }}
+                            Focus Astrology, Vedik doğum haritanızı kariyer, ilişki ve zamanlama soruları için net bir karar rehberine dönüştürür. Ücretsiz hesaplama ile başlayın; yazılı rapor veya birebir danışmanlıkla derinleşin.
                         </p>
 
                         <div class="hero-signals hero-animate hero-animate--4">
-                            <span class="signal-pill">{{ t("index.hero_signal_1") }}</span>
-                            <span class="signal-pill">{{ t("index.hero_signal_2") }}</span>
-                            <span class="signal-pill">{{ t("index.hero_signal_3") }}</span>
+                            <span class="signal-pill">Kişisel doğum verisiyle analiz</span>
+                            <span class="signal-pill">Odaklı yazılı raporlar</span>
+                            <span class="signal-pill">Karar odaklı birebir seans</span>
                         </div>
                         <div class="hero-actions hero-animate hero-animate--5">
                             <a class="btn btn-primary" href="/calculator">{{ t("index.cta_start") }}</a>
@@ -403,15 +527,22 @@
                         </div>
                     </div>
                     <aside class="hero-side hero-animate hero-animate--5">
-                        <div class="card-eyebrow">{{ t("index.hero_side_eyebrow") }}</div>
-                        <h2>{{ t("index.hero_side_title") }}</h2>
+                        <a class="founder-hero-card" href="/about#founder" aria-label="{{ 'Learn more about Feruze Olcay' if (language is defined and language == 'en') or (lang is defined and lang == 'en') else 'Feruze Olcay hakkında daha fazla bilgi' }}">
+                            <img class="founder-hero-photo" src="/static/astrologer.jpg" alt="Feruze Olcay">
+                            <div class="founder-hero-copy">
+                                <span class="section-kicker">{{ 'Founder Astrolog' if (language is defined and language == 'en') or (lang is defined and lang == 'en') else 'Kurucu Astrolog' }}</span>
+                                <h3>Feruze Olcay</h3>
+                                <p>{{ 'Feruze is the creator and host of Focus Astrology, yoga teacher and forever a student of the vast study of Vedic Astrology. Click here to learn more about Feruze.' if (language is defined and language == 'en') or (lang is defined and lang == 'en') else 'Feruze, Focus Astrology’nin yaratıcısı ve sunucusu, yoga öğretmeni ve Vedik Astroloji’nin engin bilgisinin daimi öğrencisidir. Feruze hakkında daha fazlasını öğrenmek için buraya tıklayın.' }}</p>
+                            </div>
+                        </a>
+                        <div class="card-eyebrow">Neden farklı?</div>
+                        <h2>Astrolojiyi soyut yorumdan çıkarır. Karar desteğine dönüştürür.</h2>
                         <p class="muted">
-                            {{ t("index.hero_side_text") }}
+                            Amaç genel cümleler vermek değildir. Haritanızdaki ana dinamikleri, aktif dönemleri ve öncelikli alanları sade bir karar diliyle göstermektir.
                         </p>
                         <ul class="credibility-points">
-                            <li>{{ t("index.hero_side_point_1") }}</li>
-                            <li>{{ t("index.hero_side_point_2") }}</li>
-                            <li>{{ t("index.hero_side_point_3") }}</li>
+                            <li>Doğum haritası, dasha ve transitler birlikte okunur.</li>
+                            <li>Danışmanlık, kararın arkasındaki bütün bağlama bakar.</li>
                         </ul>
                     </aside>
                 </div>
@@ -419,72 +550,65 @@
 
             <section class="section-shell card-pad">
                 <div class="section-header">
-                    <div class="section-kicker">{{ t("index.preview_eyebrow") }}</div>
-                    <h2 class="section-title">{{ t("index.preview_title") }}</h2>
-                    <p class="section-text">{{ t("index.faq_text") }}</p>
+                    <div class="section-kicker">Temel Kavramlar</div>
+                    <h2 class="section-title">Vedik astrolojiyi daha sade okuyun.</h2>
+                    <p class="section-text">Harita yalnızca burçlardan oluşmaz. Lagna, Nakshatra ve dönemsel göstergeler birlikte okunduğunda zamanlama ve yön daha anlaşılır hale gelir.</p>
                 </div>
                 <div class="concept-grid">
                     <article class="concept-card">
-                        <div class="card-eyebrow">{{ t("index.theme_1_label") }}</div>
-                        <h3>{{ t("index.theme_1_title") }}</h3>
-                        <p class="muted">{{ t("index.theme_1_text") }}</p>
+                        <div class="card-eyebrow">Lagna</div>
+                        <h3>Haritanın başlangıç noktası.</h3>
+                        <p class="muted">Yükselen burç, haritanın yaşam alanlarını ve kişisel yönelimini okumak için temel eksendir.</p>
                     </article>
                     <article class="concept-card">
-                        <div class="card-eyebrow">{{ t("index.theme_2_label") }}</div>
-                        <h3>{{ t("index.theme_2_title") }}</h3>
-                        <p class="muted">{{ t("index.theme_2_text") }}</p>
+                        <div class="card-eyebrow">Nakshatra</div>
+                        <h3>Daha kişisel bir okuma katmanı.</h3>
+                        <p class="muted">Ay’ın bulunduğu yıldız alanı; mizacı, iç motivasyonu ve tekrar eden hassasiyetleri daha ince gösterir.</p>
                     </article>
                     <article class="concept-card">
-                        <div class="card-eyebrow">{{ t("index.theme_3_label") }}</div>
-                        <h3>{{ t("index.theme_3_title") }}</h3>
-                        <p class="muted">{{ t("index.theme_3_text") }}</p>
+                        <div class="card-eyebrow">Dasha</div>
+                        <h3>Zamanlamanın ana ritmi.</h3>
+                        <p class="muted">Gezegen dönemleri, hangi temanın ne zaman güçlendiğini ve hangi kararların daha dikkat istediğini anlamaya yardım eder.</p>
                     </article>
                 </div>
             </section>
 
             <section class="section-shell card-pad home-anchor" id="reports-preview">
-                <div class="section-header">
-                    <div class="section-kicker">{{ t("common.nav_reports") }}</div>
-                    <h2 class="section-title">{{ t("reports.catalog_title") }}</h2>
-                    <p class="section-text">{{ t("reports.intro") }}</p>
-                </div>
-                <div class="report-preview-grid">
-                    <article class="report-preview-card">
-                        <div class="card-eyebrow">{{ t("reports.decision_title") }}</div>
-                        <h3>{{ t("reports.bundle_title") }}</h3>
-                        <p class="muted">{{ t("reports.bundle_copy_1") }}</p>
-                        <ul class="report-preview-list">
-                            <li>{{ t("reports.bundle_copy_2") }}</li>
-                            <li>{{ t("reports.decision_personal") }}</li>
-                            <li>{{ t("reports.decision_child") }}</li>
-                        </ul>
-                        <div class="report-preview-actions">
-                            <a class="btn btn-secondary" href="/reports">{{ t("index.mid_cta_primary") }}</a>
+                <div class="reports-editorial-shell">
+                    <div class="reports-editorial-lead">
+                        <div class="section-kicker">Kişisel Analiz</div>
+                        <h2 class="section-title">Haritanızı yazılı bir rehbere dönüştürün.</h2>
+                        <p class="section-text">Doğum haritası raporları; Lagna, Nakshatra, gezegen dönemleri ve seçtiğiniz yaşam alanını sade bir okuma içinde birleştirir.</p>
+                        <div class="reports-editorial-actions">
+                            <a class="btn btn-primary" href="/reports">Rapor Talep Et</a>
+                            <a class="btn btn-secondary" href="/calculator">Önce Haritamı Hesapla</a>
                         </div>
-                    </article>
-                    <div class="report-preview-grid--cards">
-                        <article class="report-preview-card">
-                            <div class="card-eyebrow">{{ t("reports.home_foundation_label") }}</div>
-                            <h3>{{ t("reports.home_birth_title") }}</h3>
-                            <p class="muted">{{ t("reports.home_birth_summary") }}</p>
-                            <p class="muted">{{ t("reports.home_birth_detail") }}</p>
-                        </article>
-                        <article class="report-preview-card">
-                            <div class="card-eyebrow">{{ t("reports.home_timing_label") }}</div>
-                            <h3>{{ t("reports.home_transit_title") }}</h3>
-                            <p class="muted">{{ t("reports.home_transit_summary") }}</p>
-                        </article>
-                        <article class="report-preview-card">
-                            <div class="card-eyebrow">{{ t("reports.home_career_label") }}</div>
-                            <h3>{{ t("reports.home_career_title") }}</h3>
-                            <p class="muted">{{ t("reports.home_career_summary") }}</p>
-                            <p class="muted">{{ t("reports.home_career_detail") }}</p>
-                        </article>
-                        <article class="report-preview-card">
-                            <div class="card-eyebrow">{{ t("reports.home_family_label") }}</div>
-                            <h3>{{ t("reports.home_child_title") }}</h3>
-                            <p class="muted">{{ t("reports.home_child_summary") }}</p>
-                        </article>
+                    </div>
+                    <div class="reports-curated-grid">
+                        <a class="reports-curated-card" href="/reports#birth-chart-karma">
+                            <div class="card-eyebrow">01 · Rapor</div>
+                            <h3>Karma Haritası</h3>
+                            <p class="muted">Temel harita yapınızı, yaşam yönünüzü ve tekrar eden kişisel örüntüleri anlamak için.</p>
+                            <div class="reports-curated-meta">₺1.900 · PDF · 7 gün</div>
+                        </a>
+                        <a class="reports-curated-card" href="/reports#annual-transit">
+                            <div class="card-eyebrow">02 · Rapor</div>
+                            <h3>Yıllık Transit</h3>
+                            <p class="muted">Önünüzdeki dönemin fırsat, baskı ve hazırlık alanlarını daha net okumak için.</p>
+                            <div class="reports-curated-meta">₺1.490 · PDF · 7 gün</div>
+                        </a>
+                        <a class="reports-curated-card" href="/reports#career-report">
+                            <div class="card-eyebrow">03 · Rapor</div>
+                            <h3>Kariyer</h3>
+                            <p class="muted">Mesleki yön, görünürlük ve karar kalitesini daha sade bir çerçevede değerlendirmek için.</p>
+                            <div class="reports-curated-meta">₺1.690 · PDF · 7 gün</div>
+                        </a>
+                        <a class="reports-curated-card" href="/reports#parent-child-report">
+                            <div class="card-eyebrow">04 · Rapor</div>
+                            <h3>Ebeveyn-Çocuk</h3>
+                            <p class="muted">Çocuğun mizacını, ihtiyaçlarını ve iletişim dinamiğini daha sakin anlamak için.</p>
+                            <div class="reports-curated-meta">₺1.790 · PDF · 7 gün</div>
+                        </a>
                     </div>
                 </div>
             </section>
@@ -492,38 +616,38 @@
             <section class="section-shell">
                 <div class="consultation-highlight consultation-highlight--flagship">
                     <div class="section-header" style="margin-bottom:0; padding-bottom:0; border-bottom:none;">
-                        <div class="section-kicker">{{ t("consultation.eyebrow") }}</div>
-                        <h2 class="section-title">{{ t("common.consultation_full_name") }}</h2>
+                        <div class="section-kicker">Birebir Danışmanlık</div>
+                        <h2 class="section-title">60 Dakikalık Birebir Vedik Astroloji Danışmanlığı</h2>
                         <p class="section-text">
-                            {{ t("index.consultation_flagship_text") }}
+                            Canlı seansta haritanız, aktif dönemleriniz ve kişisel sorunuz birlikte ele alınır. Amaç daha net öncelik, daha doğru tempo ve uygulanabilir bir karar çerçevesidir.
                         </p>
                     </div>
 
                     <div class="consultation-meta-grid">
                         <div class="consultation-meta-item">
-                            <strong>{{ t("index.consultation_meta_1_title") }}</strong>
+                            <strong>Odaklı hazırlık</strong>
                             <p class="muted" style="margin:0;">
-                                {{ t("index.consultation_meta_1_text") }}
+                                Seans öncesinde doğum bilgileriniz ve ana sorunuz incelenir.
                             </p>
                         </div>
                         <div class="consultation-meta-item">
-                            <strong>{{ t("index.consultation_meta_2_title") }}</strong>
+                            <strong>Canlı sentez</strong>
                             <p class="muted" style="margin:0;">
-                                {{ t("index.consultation_meta_2_text") }}
+                                Kariyer, ilişki, yön veya zamanlama sorunuz bütün bağlamıyla ele alınır.
                             </p>
                         </div>
                         <div class="consultation-meta-item">
-                            <strong>{{ t("index.consultation_meta_3_title") }}</strong>
+                            <strong>Uygulanabilir netlik</strong>
                             <p class="muted" style="margin:0;">
-                                {{ t("index.consultation_meta_3_text") }}
+                                Seans sonunda öncelik, tempo ve sonraki adım daha netleşir.
                             </p>
                         </div>
                     </div>
 
                     <ul class="credibility-points" style="margin-top: 6px;">
-                        <li>{{ t("index.consultation_point_1") }}</li>
-                        <li>{{ t("index.consultation_point_2") }}</li>
-                        <li>{{ t("index.consultation_point_3") }}</li>
+                        <li>60 dakika birebir ve online görüşme.</li>
+                        <li>Randevular planlanan saatten 24 saat önce ücretsiz değiştirilebilir.</li>
+                        <li>Harita verisi somut karar bağlamıyla yorumlanır.</li>
                     </ul>
 
                     <div class="consultation-actions">
@@ -535,25 +659,25 @@
 
             <section class="section-shell card-pad home-anchor" id="how-it-works">
                 <div class="section-header">
-                    <div class="section-kicker">{{ t("about.eyebrow") }}</div>
-                    <h2 class="section-title">{{ t("about.title") }}</h2>
-                    <p class="section-text">{{ t("about.text") }}</p>
+                    <div class="section-kicker">Yaklaşım</div>
+                    <h2 class="section-title">Sakin çerçeve. Net yorum. Kişisel yön.</h2>
+                    <p class="section-text">Focus Astrology, Vedik astrolojiyi yoğun sembol dilinden çıkarıp okunabilir, ölçülü ve karar destekli bir deneyime dönüştürür.</p>
                 </div>
                 <div class="credibility-grid">
                     <article class="credibility-card">
-                        <div class="card-eyebrow">{{ t("about.what_label") }}</div>
-                        <h3>{{ t("about.what_title") }}</h3>
-                        <p class="muted">{{ t("about.what_text") }}</p>
+                        <div class="card-eyebrow">Kişiselleştirme</div>
+                        <h3>Okuma doğum verinizden başlar.</h3>
+                        <p class="muted">Lagna, gezegen yerleşimleri, dönemler ve yaşam alanı vurguları birlikte değerlendirilir.</p>
                     </article>
                     <article class="credibility-card">
-                        <div class="card-eyebrow">{{ t("about.philosophy_label") }}</div>
-                        <h3>{{ t("about.philosophy_title") }}</h3>
-                        <p class="muted">{{ t("about.philosophy_text") }}</p>
+                        <div class="card-eyebrow">Zamanlama</div>
+                        <h3>Dönemler bağlam içinde okunur.</h3>
+                        <p class="muted">Dasha ve transit göstergeleri, acele etmek ile beklemek arasındaki farkı daha görünür kılar.</p>
                     </article>
                     <article class="credibility-card">
-                        <div class="card-eyebrow">{{ t("about.method_label") }}</div>
-                        <h3>{{ t("about.method_title") }}</h3>
-                        <p class="muted">{{ t("about.method_text_1") }}</p>
+                        <div class="card-eyebrow">Netlik</div>
+                        <h3>Yorum karar diline çevrilir.</h3>
+                        <p class="muted">Amaç daha fazla bilgi vermek değil; hangi konunun şimdi önem taşıdığını daha sade göstermektir.</p>
                     </article>
                     <article class="credibility-card credibility-card--visual" aria-hidden="true">
                         <svg viewBox="0 0 600 430" fill="none">
@@ -614,27 +738,6 @@
             </section>
             {% endif %}
 
-            <section class="section-shell card-pad">
-                <div class="final-cta-grid">
-                    <article class="final-cta-card">
-                        <div class="card-eyebrow">{{ t("index.value_pill") }}</div>
-                        <h2>{{ t("index.value_title") }}</h2>
-                        <p class="muted">{{ t("index.value_text") }}</p>
-                        <div class="final-cta-actions">
-                            <a class="btn btn-primary" href="/calculator">{{ t("index.cta_start") }}</a>
-                            <a class="btn btn-secondary" href="/reports">{{ t("common.nav_reports") }}</a>
-                        </div>
-                    </article>
-                    <article class="final-cta-card">
-                        <div class="card-eyebrow">{{ t("consultation.eyebrow") }}</div>
-                        <h2>{{ t("consultation.closing_title") }}</h2>
-                        <p class="muted">{{ t("consultation.closing_text") }}</p>
-                        <div class="final-cta-actions">
-                            <a class="btn btn-secondary" href="/personal-consultation">{{ t("consultation.closing_primary") }}</a>
-                        </div>
-                    </article>
-                </div>
-            </section>
         </div>
     </div>
 </section>

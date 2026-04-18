@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}{{ t("about.page_title") }}{% endblock %}
+{% block meta_description %}Focus Astrology hakkında bilgi alın; vedik astroloji uzmanı yaklaşımıyla profesyonel astroloji danışmanlık ve kişisel raporlar.{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -19,9 +20,18 @@
         position:relative;
         overflow:hidden;
     }
-    .about-visual svg {
+    .about-visual > svg {
         width:min(520px, 72%);
         opacity:.2;
+    }
+    .about-founder-photo {
+        width: 132px;
+        height: 132px;
+        border-radius: 50%;
+        object-fit: cover;
+        object-position: center 34%;
+        border: 1px solid rgba(223,192,112,.28);
+        box-shadow: 0 18px 36px rgba(0,0,0,.22);
     }
     .about-copy { display:grid; gap:18px; }
     .about-panel {
@@ -116,26 +126,13 @@
                         </div>
                     </div>
                 </div>
-                <div class="about-visual" aria-hidden="true">
-                    <svg viewBox="0 0 600 430" fill="none">
-                        <line x1="80" y1="30" x2="80" y2="400" stroke="#DFC070" stroke-width="8" stroke-linecap="round"/>
-                        <line x1="52" y1="30" x2="108" y2="30" stroke="#DFC070" stroke-width="5.5" stroke-linecap="round"/>
-                        <line x1="52" y1="400" x2="108" y2="400" stroke="#DFC070" stroke-width="5.5" stroke-linecap="round"/>
-                        <line x1="80" y1="82" x2="196" y2="82" stroke="#DFC070" stroke-width="7" stroke-linecap="round"/>
-                        <line x1="80" y1="215" x2="146" y2="215" stroke="#DFC070" stroke-width="6.5" stroke-linecap="round"/>
-                        <circle cx="146" cy="215" r="9" fill="#F0DC95" opacity="0.9"/>
-                        <circle cx="342" cy="215" r="196" stroke="#DFC070" stroke-width="8" fill="none"/>
-                        <ellipse cx="342" cy="215" rx="196" ry="52" stroke="#DFC070" stroke-width="2.5" opacity="0.52" fill="none" transform="rotate(-10 342 215)"/>
-                        <ellipse cx="342" cy="215" rx="83" ry="196" stroke="#DFC070" stroke-width="2.2" opacity="0.38" fill="none" transform="rotate(-10 342 215)"/>
-                        <line x1="370" y1="25" x2="314" y2="405" stroke="#DFC070" stroke-width="2" opacity="0.36" stroke-linecap="round"/>
-                        <g transform="rotate(-10 370 20)">
-                            <line x1="370" y1="4" x2="370" y2="36" stroke="#DFC070" stroke-width="2.5" opacity="0.65" stroke-linecap="round"/>
-                            <line x1="354" y1="20" x2="386" y2="20" stroke="#DFC070" stroke-width="2.5" opacity="0.65" stroke-linecap="round"/>
-                            <line x1="357" y1="7" x2="383" y2="33" stroke="#DFC070" stroke-width="1.4" opacity="0.38" stroke-linecap="round"/>
-                            <line x1="383" y1="7" x2="357" y2="33" stroke="#DFC070" stroke-width="1.4" opacity="0.38" stroke-linecap="round"/>
-                        </g>
-                        <circle cx="370" cy="20" r="7" fill="#F0DC95" opacity="0.9"/>
-                    </svg>
+                <div class="about-visual" id="founder" style="flex-direction:column; gap:24px; padding: clamp(28px, 4vw, 36px); text-align:center;">
+                    <img class="about-founder-photo" src="/static/astrologer.jpg" alt="Feruze Olcay">
+                    <div style="display:grid; gap:10px;">
+                        <div class="section-kicker" style="justify-content:center;">Kurucu Astrolog</div>
+                        <h3 class="section-title" style="font-size:clamp(1.7rem,2.8vw,2.2rem);">Feruze Olcay</h3>
+                        <p class="muted" style="margin:0; max-width:320px; margin-inline:auto;">Vedik astrolojiyi kariyer, ilişki, yaşam yönü ve zamanlama soruları için sakin, net ve karar odaklı bir dille yorumlar.</p>
+                    </div>
                 </div>
             </div>
             <div class="about-story-grid">

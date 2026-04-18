@@ -16,3 +16,5 @@ openai
 google-genai
 google-api-python-client
 weasyprint
+celery
+redis

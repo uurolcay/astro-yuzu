@@ -43,6 +43,9 @@
                     {% if order.service_type == "consultation" %}
                     <p class="muted">Scheduled: {{ order.scheduled_start or "-" }} → {{ order.scheduled_end or "-" }}</p>
                     <p class="muted">Calendly: {% if order.calendly_event_uri %}<a href="{{ order.calendly_event_uri }}">{{ order.calendly_event_uri }}</a>{% else %}-{% endif %}</p>
+                    <p class="muted">Calendly invitee: {{ order.calendly_invitee_uri or "-" }}</p>
+                    <p class="muted">Calendly status: {{ order.calendly_status or "-" }} · {{ order.calendly_canceled_at or "-" }}</p>
+                    <p class="muted">Booking source: {{ order.booking_source or "-" }}</p>
                     {% endif %}
                 </div>
             </div>
@@ -110,6 +113,7 @@
                     <p class="muted">Use when callback/webhook delivery failed but iyzico can still be retrieved server-side.</p>
                     <form method="post" action="/admin/orders/{{ order.id }}/reconcile-payment" style="display:grid; gap:10px;">
                         <input type="text" name="payment_token" placeholder="Iyzico token, blank uses stored token">
+                        <input type="text" name="payment_id" placeholder="Payment ID for payment-detail reconciliation">
                         <input type="text" name="conversation_id" placeholder="Conversation ID, blank uses stored conversation">
                         <button class="btn btn-secondary" type="submit">Reconcile Payment</button>
                     </form>

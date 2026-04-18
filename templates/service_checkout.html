@@ -146,7 +146,8 @@
                     </div>
                     {% endif %}
 
-                    <form class="checkout-actions" method="post" action="{% if service_kind == 'consultation' %}/checkout/consultation{% else %}/checkout/report/{{ order.order_token }}{% endif %}">
+                    <form class="checkout-actions" method="post" action="{% if service_kind == 'consultation' and order %}/checkout/consultation/{{ order.order_token }}{% elif service_kind == 'consultation' %}/checkout/consultation{% else %}/checkout/report/{{ order.order_token }}{% endif %}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token or csrf_token_for(request) }}">
                         <button class="btn btn-primary" type="submit" {% if not payments_enabled %}disabled aria-disabled="true"{% endif %}>
                             {% if service_kind == "consultation" %}Ödemeyi Başlat{% else %}Rapor Ödemesini Başlat{% endif %}
                         </button>
@@ -161,6 +162,16 @@
                         <span>Durum</span>
                         <strong>{% if order %}{{ order.status }}{% elif service_kind == "consultation" %}booking_pending_payment{% else %}awaiting_payment{% endif %}</strong>
                     </div>
+                    {% if service_kind == "consultation" and order %}
+                    <div class="checkout-line">
+                        <span>Randevu</span>
+                        <strong>{{ order.scheduled_start or "-" }}{% if order.scheduled_end %} → {{ order.scheduled_end }}{% endif %}</strong>
+                    </div>
+                    <div class="checkout-line">
+                        <span>Kaynak</span>
+                        <strong>{{ order.booking_source or "calendly" }}</strong>
+                    </div>
+                    {% endif %}
                     <div class="checkout-line">
                         <span>Tutar</span>
                         <strong class="checkout-price">{{ product.price }}</strong>

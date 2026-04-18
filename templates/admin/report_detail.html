@@ -1,12 +1,88 @@
 {% extends "base.html" %}
 
-{% block title %}Jyotish | Admin Report Detail{% endblock %}
+{% block title %}Focus Astrology | Admin Report Detail{% endblock %}
 
 {% block content %}
 <section class="page-section">
     <div class="container">
         <div class="glass-card card-pad">
-            <h1 class="hero-title" style="font-size:2.2rem;">{{ report.title or "Vedic Report" }}</h1>
+            <div class="row-between">
+                <div>
+                    <p class="eyebrow">{% if is_service_order %}Written Report Service{% else %}Generated Report Archive{% endif %}</p>
+                    <h1 class="hero-title" style="font-size:2.2rem;">{% if is_service_order %}Report Order #{{ order.id }}{% else %}{{ report.title or "Vedic Report" }}{% endif %}</h1>
+                    <p class="muted">{% if is_service_order %}{{ report.product_type }} | {{ report.status }}{% else %}{{ report.report_type|title }} | {{ report.created_at }}{% endif %}</p>
+                </div>
+                <a class="chip" href="/admin/reports">Back to Reports</a>
+            </div>
+
+            {% if notice %}<div class="metric-card" style="margin-top:18px; border-color:rgba(223,192,112,.32);">Updated: {{ notice }}</div>{% endif %}
+            {% if error %}<div class="metric-card" style="margin-top:18px; border-color:rgba(224,108,117,.45); color:#f1b5b5;">{{ error }}</div>{% endif %}
+
+            {% if is_service_order %}
+            <div class="grid-2" style="margin-top:24px;">
+                <div class="metric-card">
+                    <h2 class="section-title" style="font-size:1.45rem;">Customer Info</h2>
+                    <p><strong>{{ report.customer_name }}</strong></p>
+                    <p class="muted">{{ report.customer_email }}</p>
+                    <p class="muted">Birth: {{ report.birth_date }} | {{ report.birth_time }}</p>
+                    <p class="muted">Place: {{ report.birth_place }}</p>
+                    <p class="muted">District: {{ payload.birth_district or payload.district or "-" }}</p>
+                </div>
+                <div class="metric-card">
+                    <h2 class="section-title" style="font-size:1.45rem;">Report Info</h2>
+                    <p class="muted">Report Type: <strong>{{ report.product_type }}</strong></p>
+                    <p class="muted">Current Status: <span class="chip">{{ report.status }}</span></p>
+                    <p class="muted">Created At: {{ report.created_at }}</p>
+                    <p class="muted">Delivered At: {{ report.delivered_at or "-" }}</p>
+                    <p class="muted">Amount: {{ report.amount }}</p>
+                </div>
+            </div>
+
+            <div class="grid-2" style="margin-top:24px;">
+                <div class="metric-card">
+                    <h2 class="section-title" style="font-size:1.45rem;">Actions</h2>
+                    <form method="post" action="/admin/reports/{{ order.id }}/approve" class="chip-row" style="margin-top:12px;">
+                        <button class="btn btn-secondary" type="submit">Approve</button>
+                    </form>
+                    <form method="post" action="/admin/reports/{{ order.id }}/send" style="margin-top:14px;">
+                        <button class="btn btn-primary" type="submit">Send to Customer</button>
+                        <p class="muted" style="margin-top:8px;">Requires ready_to_send and a completed PDF. Delivery is marked only after the customer email is accepted.</p>
+                    </form>
+                    <form method="post" action="/admin/reports/{{ order.id }}/regenerate" style="margin-top:14px;">
+                        <button class="btn btn-secondary" type="submit">Regenerate</button>
+                        <p class="muted" style="margin-top:8px;">Queues the existing AI draft generation task; it does not send anything to the customer.</p>
+                    </form>
+                </div>
+                <div class="metric-card">
+                    <h2 class="section-title" style="font-size:1.45rem;">PDF</h2>
+                    <p class="muted">Status: {{ order.pdf_status or "-" }}</p>
+                    <p class="muted">Path: {{ order.final_pdf_path or "-" }}</p>
+                    {% if report.pdf_ready %}
+                    <span class="chip">PDF Ready</span>
+                    {% else %}
+                    <p class="muted">No final PDF is ready yet. Sending will queue PDF generation first.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="glass-card card-pad" style="margin-top:24px;">
+                <h2 class="section-title" style="font-size:1.45rem;">Report Preview</h2>
+                <pre style="white-space:pre-wrap; line-height:1.6; background:rgba(255,255,255,.025); padding:18px; border-radius:16px; max-height:520px; overflow:auto;">{{ order.ai_draft_text or "No AI-assisted draft stored yet." }}</pre>
+            </div>
+
+            <div class="glass-card card-pad" style="margin-top:24px;">
+                <h2 class="section-title" style="font-size:1.45rem;">Action History</h2>
+                {% for log in logs %}
+                <div class="metric-card" style="margin-top:12px;">
+                    <strong>{{ log.action }}</strong>
+                    <div class="muted">{{ log.actor or "admin" }} | {{ log.created_at }}</div>
+                    {% if log.metadata_json %}<div class="muted">{{ log.metadata_json }}</div>{% endif %}
+                </div>
+                {% else %}
+                <p class="muted">No admin actions recorded yet.</p>
+                {% endfor %}
+            </div>
+            {% else %}
             <div class="grid-3" style="margin-top:20px;">
                 <div class="metric-card"><div class="metric-label">User</div><div class="metric-value">{{ report.user_email }}</div></div>
                 <div class="metric-card"><div class="metric-label">Type</div><div class="metric-value">{{ report.report_type|title }}</div></div>
@@ -26,6 +102,7 @@
                 <div class="metric-label">Raw Payload</div>
                 <pre style="white-space:pre-wrap; max-height:420px; overflow:auto;">{{ payload_summary.raw }}</pre>
             </div>
+            {% endif %}
         </div>
     </div>
 </section>

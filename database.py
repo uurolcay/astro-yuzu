@@ -141,14 +141,24 @@ class ServiceOrder(Base):
     paid_at = Column(DateTime, nullable=True)
     fraud_status = Column(String, nullable=True)
     calendly_event_uri = Column(String, nullable=True)
+    calendly_invitee_uri = Column(String, nullable=True, index=True)
+    calendly_event_type_uri = Column(String, nullable=True)
+    calendly_status = Column(String, nullable=True, index=True)
+    calendly_canceled_at = Column(DateTime, nullable=True)
+    booking_source = Column(String, nullable=True)
     scheduled_start = Column(DateTime, nullable=True)
     scheduled_end = Column(DateTime, nullable=True)
     payload_json = Column(Text, nullable=True)
     draft_status = Column(String, nullable=True)
+    ai_draft_status = Column(String, nullable=True, index=True)
     draft_sent_at = Column(DateTime, nullable=True)
     ai_draft_text = Column(Text, nullable=True)
     ai_draft_created_at = Column(DateTime, nullable=True)
     ai_draft_version = Column(Integer, nullable=True, default=1)
+    pdf_status = Column(String, nullable=True, index=True)
+    final_pdf_path = Column(String, nullable=True)
+    customer_confirmation_sent_at = Column(DateTime, nullable=True)
+    last_task_error = Column(Text, nullable=True)
     internal_notes = Column(Text, nullable=True)
     review_started_at = Column(DateTime, nullable=True)
     ready_to_send_at = Column(DateTime, nullable=True)
@@ -160,6 +170,8 @@ class ServiceOrder(Base):
     refund_amount = Column(Numeric(10, 2), nullable=True)
     refunded_at = Column(DateTime, nullable=True)
     refund_reason = Column(Text, nullable=True)
+    provider_refund_id = Column(String, nullable=True, index=True)
+    refund_provider_status = Column(String, nullable=True)
     cancellation_reason = Column(Text, nullable=True)
     cancelled_at = Column(DateTime, nullable=True)
     no_show_at = Column(DateTime, nullable=True)
@@ -383,11 +395,21 @@ def _add_missing_columns():
                 "paid_at": "DATETIME",
                 "fraud_status": "VARCHAR",
                 "calendly_event_uri": "VARCHAR",
+                "calendly_invitee_uri": "VARCHAR",
+                "calendly_event_type_uri": "VARCHAR",
+                "calendly_status": "VARCHAR",
+                "calendly_canceled_at": "DATETIME",
+                "booking_source": "VARCHAR",
                 "scheduled_start": "DATETIME",
                 "scheduled_end": "DATETIME",
                 "ai_draft_text": "TEXT",
+                "ai_draft_status": "VARCHAR",
                 "ai_draft_created_at": "DATETIME",
                 "ai_draft_version": "INTEGER",
+                "pdf_status": "VARCHAR",
+                "final_pdf_path": "VARCHAR",
+                "customer_confirmation_sent_at": "DATETIME",
+                "last_task_error": "TEXT",
                 "internal_notes": "TEXT",
                 "review_started_at": "DATETIME",
                 "ready_to_send_at": "DATETIME",
@@ -399,6 +421,8 @@ def _add_missing_columns():
                 "refund_amount": "NUMERIC(10, 2)",
                 "refunded_at": "DATETIME",
                 "refund_reason": "TEXT",
+                "provider_refund_id": "VARCHAR",
+                "refund_provider_status": "VARCHAR",
                 "cancellation_reason": "TEXT",
                 "cancelled_at": "DATETIME",
                 "no_show_at": "DATETIME",

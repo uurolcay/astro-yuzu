@@ -89,10 +89,67 @@ class AgentPipelineTests(unittest.TestCase):
             "Timing: build-up then peak",
             "Guidance: structure carefully",
         )
-        self.assertIn("You are a synthesizer, not a new analyst", prompt)
+        self.assertIn("You are NOT a re-analyst", prompt)
+        self.assertIn("structured deterministic payload as source truth", prompt)
         self.assertIn("Preserve the core priorities from Insight, Timing, and Guidance", prompt)
         self.assertIn("Do not invent a new narrative", prompt)
         self.assertIn("Do not overwrite or dilute the timing emphasis", prompt)
+
+    def test_composer_prompt_avoids_repeated_section_logic(self):
+        structured = agent_pipeline.build_structured_payload({"language": "en"})
+        prompt = agent_pipeline.build_composer_prompt(
+            structured,
+            "Primary theme: career direction",
+            "Timing: build-up then peak",
+            "Guidance: structure carefully",
+        )
+        self.assertIn("Do not restate the same idea across sections", prompt)
+        self.assertIn("Avoid repeating the same causal sentence pattern", prompt)
+        self.assertIn("If a point already appeared in Insight, do not restate it verbatim", prompt)
+        self.assertIn("If a timing point already appeared in Timing, compress it", prompt)
+        self.assertIn('Avoid overusing "this period" / "bu dönem"', prompt)
+
+    def test_composer_prompt_preserves_section_differentiation(self):
+        structured = agent_pipeline.build_structured_payload({"language": "en"})
+        prompt = agent_pipeline.build_composer_prompt(
+            structured,
+            "Primary theme: career direction",
+            "Timing: build-up then peak",
+            "Guidance: structure carefully",
+        )
+        self.assertIn("Section function differentiation", prompt)
+        self.assertIn("MAIN THEME / ANA TEMA: define the dominant dynamic", prompt)
+        self.assertIn("WHY IT MATTERS / NEDEN ONEMLI", prompt)
+        self.assertIn("No two sections should sound interchangeable", prompt)
+        self.assertIn("Each theme must feel distinct in life area, behavioral implication, and risk pattern", prompt)
+
+    def test_composer_prompt_turkish_output_rules_remain_intact(self):
+        structured = agent_pipeline.build_structured_payload({"language": "tr"})
+        prompt = agent_pipeline.build_composer_prompt(
+            structured,
+            "Birincil tema: kariyer yönü",
+            "Zamanlama: birikim ve zirve",
+            "Yönlendirme: dikkatli yapılandır",
+        )
+        self.assertIn("Dogal, rafine ve akici Turkce yaz", prompt)
+        self.assertIn("If language == tr, write fully natural Turkish", prompt)
+        self.assertIn("dinamik, yön, zamanlama, baskı, fırsat", prompt)
+        self.assertIn("enerji, dönüşüm, yolculuk", prompt)
+        self.assertIn("### RUHSAL YON ve HAYATIN ANA TEMASI", prompt)
+
+    def test_composer_prompt_english_output_rules_remain_intact(self):
+        structured = agent_pipeline.build_structured_payload({"language": "en"})
+        prompt = agent_pipeline.build_composer_prompt(
+            structured,
+            "Primary theme: career direction",
+            "Timing: build-up then peak",
+            "Guidance: structure carefully",
+        )
+        self.assertIn("Write in polished premium English", prompt)
+        self.assertIn("If language == en, write polished premium English", prompt)
+        self.assertIn("dynamic, direction, timing, pressure, opportunity", prompt)
+        self.assertIn("growth, transformation, journey", prompt)
+        self.assertIn("### MAIN DIRECTION AND LIFE THEME", prompt)
 
     def test_safety_prompt_is_minimal_edit_oriented(self):
         structured = agent_pipeline.build_structured_payload({"language": "tr"})
@@ -101,6 +158,13 @@ class AgentPipelineTests(unittest.TestCase):
         self.assertIn("Do NOT:", prompt)
         self.assertIn("rewrite the report from scratch", prompt)
         self.assertIn("change headings", prompt)
+
+    def test_safety_prompt_does_not_over_flatten_advisory_tone(self):
+        structured = agent_pipeline.build_structured_payload({"language": "en"})
+        prompt = agent_pipeline.build_safety_prompt(structured, "### MAIN DIRECTION\nPrioritize timing discipline.")
+        self.assertIn("Preserve strong advisory tone while softening only unsafe certainty", prompt)
+        self.assertIn("clear strategic advice and decision-oriented language", prompt)
+        self.assertIn("flatten strong advisory language into weak generic wording", prompt)
 
 
 if __name__ == "__main__":

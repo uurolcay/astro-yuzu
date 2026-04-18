@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}{{ t("consultation.page_title") }}{% endblock %}
+{% block meta_description %}Vedik astroloji danışmanlığı ile 60 dakika birebir seansta kariyer, ilişki, kader ve yaşam yönünüzü profesyonelce değerlendirin.{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -257,15 +258,6 @@
                         <h3>{{ t("consultation.explore_item_4_title") }}</h3>
                         <p class="muted">{{ t("consultation.explore_item_4_text") }}</p>
                     </article>
-                </div>
-            </section>
-
-            <section class="consultation-section">
-                <div class="consultation-section-header">
-                    <div class="section-kicker">{{ t("consultation.outcomes_label") }}</div>
-                    <h2 class="section-title">{{ t("consultation.outcomes_title") }}</h2>
-                </div>
-                <div class="consultation-grid-four consultation-grid-two">
                     <article class="consultation-card">
                         <h3>{{ t("consultation.outcomes_point_1") }}</h3>
                         <p class="muted">{{ t("consultation.outcomes_point_5") }}</p>
@@ -273,14 +265,6 @@
                     <article class="consultation-card">
                         <h3>{{ t("consultation.outcomes_point_2") }}</h3>
                         <p class="muted">{{ t("consultation.outcomes_point_6") }}</p>
-                    </article>
-                    <article class="consultation-card">
-                        <h3>{{ t("consultation.outcomes_point_3") }}</h3>
-                        <p class="muted">{{ t("consultation.different_text_2") }}</p>
-                    </article>
-                    <article class="consultation-card">
-                        <h3>{{ t("consultation.outcomes_point_4") }}</h3>
-                        <p class="muted">{{ t("consultation.trust_text") }}</p>
                     </article>
                 </div>
             </section>
@@ -314,55 +298,6 @@
                 </div>
             </section>
 
-            <section class="consultation-section" id="consultation-pricing">
-                <div class="consultation-section-header">
-                    <div class="section-kicker">{{ t("consultation.pricing_label") }}</div>
-                    <h2 class="section-title">{{ t("consultation.pricing_title") }}</h2>
-                    <p class="section-text">{{ t("consultation.pricing_text") }}</p>
-                </div>
-                <article class="consultation-package consultation-package--featured">
-                    <span class="consultation-meta">{{ t("common.consultation_full_name") }}</span>
-                    <h3>{{ t("consultation.booking_title") }}</h3>
-                    <p class="muted">{{ t("consultation.booking_text") }}</p>
-                    <div class="consultation-price">
-                        <span class="muted">{{ t("consultation.booking_duration") }}</span>
-                        <strong>₺4.900</strong>
-                    </div>
-                    <ul class="consultation-list">
-                        <li>{{ t("consultation.booking_point_1") }}</li>
-                        <li>{{ t("consultation.booking_point_2") }}</li>
-                        <li>{{ t("consultation.booking_point_3") }}</li>
-                        <li>{{ t("consultation.booking_point_4") }}</li>
-                        <li>{{ t("consultation.booking_point_5") }}</li>
-                    </ul>
-                    <div class="consultation-card-actions">
-                        <a class="btn btn-primary" href="/personal-consultation/book">{{ t("common.cta_personal_consultation") }}</a>
-                        <a class="btn btn-secondary" href="/calculator">{{ t("common.cta_chart_first") }}</a>
-                    </div>
-                </article>
-            </section>
-
-            <section class="consultation-section">
-                <div class="consultation-section-header">
-                    <div class="section-kicker">{{ t("consultation.trust_label") }}</div>
-                    <h2 class="section-title">{{ t("consultation.trust_title") }}</h2>
-                </div>
-                <div class="consultation-grid-three">
-                    <article class="consultation-proof">
-                        <blockquote>{{ t("consultation.trust_point_1") }}</blockquote>
-                        <p>{{ t("consultation.trust_text") }}</p>
-                    </article>
-                    <article class="consultation-proof">
-                        <blockquote>{{ t("consultation.trust_point_2") }}</blockquote>
-                        <p>{{ t("consultation.different_text_1") }}</p>
-                    </article>
-                    <article class="consultation-proof">
-                        <blockquote>{{ t("consultation.trust_point_3") }}</blockquote>
-                        <p>{{ t("consultation.different_text_2") }}</p>
-                    </article>
-                </div>
-            </section>
-
             <section class="consultation-section">
                 <div class="consultation-section-header">
                     <div class="section-kicker">{{ t("consultation.faq_label") }}</div>
@@ -388,16 +323,6 @@
                 </div>
             </section>
 
-            <section class="consultation-final">
-                <div>
-                    <div class="consultation-meta">{{ t("index.mid_cta_eyebrow") }}</div>
-                    <h2>{{ t("consultation.final_cta_title") }}</h2>
-                    <p class="muted">{{ t("consultation.final_cta_text") }}</p>
-                </div>
-                <div class="consultation-final-actions">
-                    <a class="btn btn-primary" href="/personal-consultation/book">{{ t("common.cta_personal_consultation") }}</a>
-                </div>
-            </section>
         </div>
     </div>
 </section>

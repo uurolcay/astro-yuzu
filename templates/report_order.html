@@ -139,6 +139,7 @@
                 <div class="order-error" role="alert">{{ error_message }}</div>
                 {% endif %}
                 <form class="order-form" action="{{ order_action or ('/reports/order/' ~ report_type) }}" method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token or csrf_token_for(request) }}">
                     <input type="hidden" name="selected_report_type" value="{{ report_type }}">
                     {% if bundle_type %}
                     <input type="hidden" name="selected_bundle_type" value="{{ bundle_type }}">
@@ -167,6 +168,20 @@
                         <label for="optional_note">Opsiyonel soru veya not</label>
                         <textarea id="optional_note" name="optional_note" placeholder="Bu raporda özellikle odaklanmamızı istediğiniz konu varsa paylaşabilirsiniz.">{{ form_data.optional_note or '' }}</textarea>
                     </div>
+                    <div class="order-field order-field-full" style="display:flex; align-items:center; gap:12px; padding-top:4px;">
+                        <input type="checkbox" id="is_gift" name="is_gift" value="1" style="width:18px; height:18px; flex-shrink:0; accent-color:var(--gold);">
+                        <label for="is_gift" style="margin:0; font-weight:400; color:var(--text-soft); cursor:pointer;">Bu raporu bir başkası adına hediye olarak alıyorum</label>
+                    </div>
+                    <div id="gift-recipient-fields" style="display:none; grid-column:1/-1;">
+                        <div class="order-field order-field-full">
+                            <label for="gift_recipient_name">Hediye edilecek kişinin adı soyadı</label>
+                            <input id="gift_recipient_name" name="gift_recipient_name" type="text">
+                        </div>
+                        <div class="order-field order-field-full">
+                            <label for="gift_recipient_email">Hediye edilecek kişinin e-posta adresi</label>
+                            <input id="gift_recipient_email" name="gift_recipient_email" type="email">
+                        </div>
+                    </div>
                     <div class="order-field-full order-actions">
                         <button class="btn btn-primary" type="submit">Rapor Talebini Gönder</button>
                         <a class="btn btn-secondary" href="/reports">Raporlara Dön</a>
@@ -191,4 +206,9 @@
         </div>
     </div>
 </section>
+<script>
+document.getElementById('is_gift').addEventListener('change', function() {
+    document.getElementById('gift-recipient-fields').style.display = this.checked ? 'contents' : 'none';
+});
+</script>
 {% endblock %}

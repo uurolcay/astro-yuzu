@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}{% if active_category %}{{ t("articles.page_title_category", category=t("article_categories." ~ active_category.slug)) }}{% else %}{{ t("articles.page_title") }}{% endif %}{% endblock %}
+{% block meta_description %}Vedik astroloji makaleleriyle gezegen transitleri, doğum haritası rehberi, mahadasha dönemleri ve yaşam temalarını keşfedin.{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -188,7 +189,6 @@
                     </div>
                 </div>
                 <div class="article-card-body">
-                    <p class="muted">{{ article.excerpt }}</p>
                     <div class="article-card-cta">
                         <a class="btn btn-secondary" href="/articles/{{ article.slug }}">{{ t("articles.read_article") }}</a>
                     </div>

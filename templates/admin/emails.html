@@ -1,31 +1,58 @@
 {% extends "base.html" %}
 
-{% block title %}Jyotish | Admin Emails{% endblock %}
+{% block title %}Focus Astrology | Admin Emails{% endblock %}
 
 {% block content %}
 <section class="page-section">
     <div class="container">
         <div class="glass-card card-pad">
-            <h1 class="hero-title" style="font-size:2.3rem;">Email Logs</h1>
+            <div class="row-between">
+                <div>
+                    <p class="eyebrow">Email Operations</p>
+                    <h1 class="hero-title" style="font-size:2.3rem;">Email Logs</h1>
+                    <p class="muted">Transactional email visibility for report delivery, booking, payment, and lifecycle messages.</p>
+                </div>
+                <a class="chip" href="/admin/dashboard">Dashboard</a>
+            </div>
+
             <form method="get" style="display:grid; grid-template-columns:1fr 1fr 2fr auto; gap:12px; margin-top:20px;">
                 <input type="text" name="status" placeholder="Status" value="{{ filters.status }}">
                 <input type="text" name="email_type" placeholder="Email type" value="{{ filters.email_type }}">
                 <input type="text" name="recipient" placeholder="Recipient" value="{{ filters.recipient }}">
                 <button class="btn btn-secondary" type="submit">Filter</button>
             </form>
-            <div style="display:grid; gap:14px; margin-top:24px;">
-                {% for log in email_logs %}
-                <div class="metric-card">
-                    <div class="row-between">
-                        <div>
-                            <div class="metric-value">{{ log.email_type }} • {{ log.status }}</div>
-                            <div class="muted">{{ log.recipient_email }} • {{ log.related_event_type or "-" }} • {{ log.related_event_key or "-" }}</div>
-                            {% if log.error_message %}<div class="muted">{{ log.error_message }}</div>{% endif %}
-                        </div>
-                        <div class="muted">{{ log.created_at }}</div>
-                    </div>
-                </div>
-                {% endfor %}
+
+            <div style="overflow:auto; margin-top:24px;">
+                <table style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr class="muted" style="text-align:left;">
+                            <th style="padding:10px;">To</th>
+                            <th style="padding:10px;">Subject</th>
+                            <th style="padding:10px;">Status</th>
+                            <th style="padding:10px;">Time</th>
+                            <th style="padding:10px;">Related Order ID</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in email_logs %}
+                        <tr style="border-top:1px solid rgba(223,192,112,.12);">
+                            <td style="padding:12px;">{{ log.recipient_email }}</td>
+                            <td style="padding:12px;">
+                                <strong>{{ log.subject }}</strong><br>
+                                <span class="muted">{{ log.email_type }}</span>
+                                {% if log.error_message %}<br><span class="muted">{{ log.error_message }}</span>{% endif %}
+                            </td>
+                            <td style="padding:12px;"><span class="chip">{{ log.status }}</span></td>
+                            <td style="padding:12px;">{{ log.created_at }}</td>
+                            <td style="padding:12px;">{% if log.related_order_id %}<a href="/admin/orders/{{ log.related_order_id }}">#{{ log.related_order_id }}</a>{% else %}-{% endif %}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="muted" style="padding:18px;">No email logs match this filter.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>

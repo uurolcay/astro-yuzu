@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Focus Astrology | Admin Content{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <div class="row-between">
+                <div>
+                    <p class="eyebrow">Content Management</p>
+                    <h1 class="hero-title" style="font-size:2.3rem;">Articles & Content</h1>
+                    <p class="muted">Minimal editorial management for site articles.</p>
+                </div>
+                <div class="chip-row">
+                    <a class="chip" href="/admin/dashboard">Dashboard</a>
+                    <a class="btn btn-secondary" href="/admin/content/new">New Content</a>
+                </div>
+            </div>
+
+            <div style="overflow:auto; margin-top:24px;">
+                <table style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr class="muted" style="text-align:left;">
+                            <th style="padding:10px;">Title</th>
+                            <th style="padding:10px;">Slug</th>
+                            <th style="padding:10px;">Status</th>
+                            <th style="padding:10px;">Updated At</th>
+                            <th style="padding:10px;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for article in articles %}
+                        <tr style="border-top:1px solid rgba(223,192,112,.12);">
+                            <td style="padding:12px;">{{ article.title }}</td>
+                            <td style="padding:12px;">{{ article.slug }}</td>
+                            <td style="padding:12px;"><span class="chip">{{ article.status }}</span></td>
+                            <td style="padding:12px;">{{ article.updated_at }}</td>
+                            <td style="padding:12px;"><a class="chip" href="/admin/content/{{ article.id }}/edit">Edit</a></td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="muted" style="padding:18px;">No content yet.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

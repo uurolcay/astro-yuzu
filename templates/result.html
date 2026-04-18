@@ -652,50 +652,50 @@
 {% set next_product_probe = (report_type_value ~ " " ~ primary_focus ~ " " ~ secondary_focus ~ " " ~ dominant_life_area ~ " " ~ dominant_narrative ~ " " ~ primary_recommendation_title ~ " " ~ primary_recommendation_reasoning)|lower %}
 {% set next_product_key = "consultation" %}
 {% set next_product_title = t("common.consultation_full_name") %}
-{% set next_product_label = "Premium sentez" %}
-{% set next_product_text = "Bu sonuç birden fazla yaşam alanına dokunuyor. Tek bir rapor yerine, sorularınızı birlikte ele alan birebir danışmanlık daha doğru bir sonraki adım olabilir." %}
+{% set next_product_label = "Canlı sentez" %}
+{% set next_product_text = "Bu sonuç birden fazla yaşam alanına temas ediyor. Kişisel bağlamınız ve sorularınız birlikte ele alındığında, danışmanlık daha net bir devam zemini sunar." %}
 {% set next_product_route = "/personal-consultation" %}
 {% set next_product_cta = t("common.cta_personal_consultation") %}
-{% set next_product_reason = "Öneri, haritadaki temaların genişliği ve kişisel bağlam ihtiyacı dikkate alınarak temkinli biçimde oluşturuldu." %}
+{% set next_product_reason = "Haritadaki vurgu tek bir başlıktan çok bağlam ve öncelik gerektirdiği için canlı yorum daha uygun görünüyor." %}
 {# Legacy test anchors: 60 dk birebir vedik astroloji danışmanlığı | Kişisel Danışmanlık Al #}
 {% if is_parent_child_report %}
     {% set next_product_key = "parent_child" %}
     {% set next_product_title = "Ebeveyn-Çocuk" %}
     {% set next_product_label = "İlişki ve destek dinamiği" %}
-    {% set next_product_text = "Bu okuma açıkça ebeveyn-çocuk bağlamında ilerliyor. Çocuğun mizacı, duygusal ihtiyaçları ve iletişim dinamiğini daha bilinçli okumak için en uygun rapor budur." %}
+    {% set next_product_text = "Bu okuma ebeveyn-çocuk dinamiğine odaklanıyor. Çocuğun mizacı, ihtiyaçları ve iletişim biçimi ayrı bir raporda daha net izlenebilir." %}
     {% set next_product_route = "/reports/parent-child" %}
     {% set next_product_cta = t("common.cta_analysis_continue") %}
-    {% set next_product_reason = "Parent-child sonucu olduğu için genel önerilerin önüne Ebeveyn-Çocuk raporu alındı." %}
+    {% set next_product_reason = "Aile dinamiğinde genelleme yerine çocuğa özel okuma daha sağlıklı bir çerçeve sunar." %}
 {% elif "kariyer" in next_product_probe or "career" in next_product_probe or "meslek" in next_product_probe or "profession" in next_product_probe or "professional" in next_product_probe or "work" in next_product_probe or "iş" in next_product_probe %}
     {% set next_product_key = "career" %}
     {% set next_product_title = "Kariyer" %}
     {% set next_product_label = "İş, yön ve karar desteği" %}
-    {% set next_product_text = "Bu sonuç iş, yön, potansiyel veya profesyonel karar temasına yaklaşıyor. Kariyer raporu bu alanı daha pratik ve odaklı bir çerçevede derinleştirir." %}
+    {% set next_product_text = "Kariyer vurgusu güçlü. Bu rapor mesleki yön, görünürlük ve karar kalitesi için daha net bir çerçeve sunar." %}
     {% set next_product_route = "/reports" %}
     {% set next_product_cta = t("common.cta_analysis_continue") %}
-    {% set next_product_reason = "Kariyer ve mesleki yön sinyalleri belirgin olduğu için odaklı rapor önerisi kariyer tarafına çekildi." %}
+    {% set next_product_reason = "Profesyonel yön ve karar sinyalleri öne çıktığı için kariyer odaklı okuma daha doğrudan değer üretir." %}
 {% elif "zaman" in next_product_probe or "dönem" in next_product_probe or "donem" in next_product_probe or "transit" in next_product_probe or "timing" in next_product_probe or "window" in next_product_probe or "phase" in next_product_probe or "transition" in next_product_probe or "upcoming" in next_product_probe %}
     {% set next_product_key = "transit" %}
     {% set next_product_title = "Yıllık Transit" %}
     {% set next_product_label = "Zamanlama ve dönemsel netlik" %}
-    {% set next_product_text = "Bu sonuçta dönem, geçiş veya zamanlama vurgusu öne çıkıyor. Yıllık Transit raporu önünüzdeki süreci, fırsat ve dikkat pencerelerini daha net görmenize yardım eder." %}
+    {% set next_product_text = "Zamanlama vurgusu belirgin. Yıllık Transit raporu önünüzdeki sürecin fırsat, baskı ve hazırlık alanlarını daha net gösterir." %}
     {% set next_product_route = "/reports" %}
     {% set next_product_cta = t("common.cta_analysis_continue") %}
-    {% set next_product_reason = "Zamanlama ve geçiş sinyalleri baskın göründüğü için yıllık transit katmanı daha anlamlı bir devam yolu sunar." %}
+    {% set next_product_reason = "Geçiş ve dönem sinyalleri öne çıktığı için sonraki katmanda zamanlama analizi daha anlamlıdır." %}
 {% elif "karma" in next_product_probe or "karmik" in next_product_probe or "life theme" in next_product_probe or "yaşam" in next_product_probe or "yasam" in next_product_probe or "self" in next_product_probe or "identity" in next_product_probe or "direction" in next_product_probe or "foundation" in next_product_probe %}
     {% set next_product_key = "birth_chart" %}
     {% set next_product_title = "Doğum Haritası Karma’sı" %}
     {% set next_product_label = "Temel harita ve kişisel yapı" %}
-    {% set next_product_text = "Bu sonuç daha çok genel yaşam temaları, kişisel yön ve içsel yapı etrafında toplanıyor. Doğum Haritası Karma’sı raporu bu zemini daha geniş ve sistemli biçimde açar." %}
+    {% set next_product_text = "Bu sonuç kişisel yapı, yön ve ana yaşam temaları etrafında toplanıyor. Doğum Haritası Karma’sı bu zemini daha derin ve düzenli açar." %}
     {% set next_product_route = "/reports" %}
     {% set next_product_cta = t("common.cta_analysis_continue") %}
-    {% set next_product_reason = "Genel yön, yaşam teması ve kişisel yapı sinyalleri tek bir temel raporla daha iyi derinleşebilir." %}
+    {% set next_product_reason = "Temel yapı ve yön sinyalleri güçlü olduğu için en iyi devam yolu kapsamlı harita okumasıdır." %}
 {% endif %}
 {% if access.can_view_full_report and report_type_value == "birth_chart_karma" %}
     {% set next_product_key = "annual_transit_after_karma" %}
     {% set next_product_title = "Yıllık Transit" %}
     {% set next_product_label = "Zamanlama katmanı" %}
-    {% set next_product_text = "Doğum Haritası Karma’sı kişisel yapıyı netleştirir. Yıllık Transit bu yapının önümüzdeki dönemde hangi fırsat ve baskı alanlarıyla çalışacağını daha görünür kılar." %}
+    {% set next_product_text = "Temel harita kişisel yapıyı netleştirir. Yıllık Transit aynı yapının önümüzdeki dönemde nasıl çalışacağını gösterir." %}
     {% set next_product_route = "/reports/order/annual_transit" %}
     {% set next_product_cta = t("common.cta_analysis_continue") %}
     {% set next_product_reason = "Temel harita okumasından sonra en doğal genişleme, aynı yapıyı zamanlama bağlamında değerlendirmektir." %}
@@ -703,10 +703,10 @@
     {% set next_product_key = "consultation_after_career" %}
     {% set next_product_title = t("common.consultation_full_name") %}
     {% set next_product_label = "Karar ve yön sentezi" %}
-    {% set next_product_text = "Kariyer raporu profesyonel potansiyeli gösterir. Eğer bu okuma somut bir karar, geçiş ya da zamanlama sorusu doğurduysa, birebir danışmanlık en güçlü devam yoludur." %}
+    {% set next_product_text = "Kariyer raporu profesyonel potansiyeli gösterir. Eğer bu okuma somut bir karar veya geçiş sorusu doğurduysa, danışmanlık daha kişisel bir sentez sunar." %}
     {% set next_product_route = "/personal-consultation" %}
     {% set next_product_cta = t("common.cta_personal_consultation") %}
-    {% set next_product_reason = "Kariyer temaları çoğu zaman kişisel bağlam ve soru-cevap gerektirdiği için danışmanlık bu noktada daha yüksek değer üretir." %}
+    {% set next_product_reason = "Kariyer kararları çoğu zaman bağlam, öncelik ve canlı netleştirme gerektirir." %}
 {% elif access.can_view_full_report and report_type_value == "parent_child" %}
     {% set next_product_key = "second_child_report" %}
     {% set next_product_title = "Ebeveyn-Çocuk" %}
@@ -768,21 +768,21 @@
                             {% if is_parent_child_report %}
                                 {{ t("result.hero_parent_child_title", ui_lang) }}
                             {% else %}
-                                Haritanız bu dönemde önemli bir yön gösteriyor
+                                Haritanız karar için net bir çerçeve açıyor
                             {% endif %}
                         </h1>
                         {% if not is_parent_child_report %}
                         <p class="hero-summary">
-                            Bu ekran haritanızdaki ilk katmanı görünür kılar. Daha derin analizde zamanlama, bağlam ve karar stratejisi kişisel sorularınızla birlikte ele alınır.
+                            Bu ekran, genel burç yorumu değil; doğum verinizden çıkan ana vurgu, zamanlama ve karar alanlarını özetleyen ilk okuma katmanıdır.
                         </p>
                         <div class="result-current-signal">
-                            <strong>Bu okumada öne çıkan sinyal</strong>
+                            <strong>Bu sonucun karar değeri</strong>
                             {% if primary_recommendation %}
                                 {{ primary_recommendation.title }}. {{ primary_recommendation.reasoning }}
                             {% elif primary_anchor %}
                                 {{ primary_anchor.title }}. {{ primary_anchor.summary }}
                             {% else %}
-                                <span data-dynamic="hero_area">{{ dominant_life_area }}</span> alanındaki vurgu, bu dönemin kararlarını daha bilinçli ele almanız için güçlü bir başlangıç noktası sunar.
+                                <span data-dynamic="hero_area">{{ dominant_life_area }}</span> alanındaki vurgu, şu an hangi konuyu daha dikkatli ele almanız gerektiğine dair net bir başlangıç noktası sunar.
                             {% endif %}
                         </div>
                         {% endif %}
@@ -792,7 +792,7 @@
                                 {% if child_profile_report.temperament %} {{ child_profile_report.temperament }}{% endif %}
                                 {% if relationship_dynamics_report.emotional_compatibility %} {{ relationship_dynamics_report.emotional_compatibility }}{% endif %}
                             {% elif primary_recommendation %}
-                                Bu dönem daha bilinçli ve planlı bir yaklaşım ister. {{ primary_recommendation.reasoning }}
+                                Bu dönemde önemli olan, hızlı sonuçtan çok doğru önceliği görmektir. {{ primary_recommendation.reasoning }}
                             {% elif primary_anchor %}
                                 {{ primary_anchor.summary }} {% if primary_anchor.why_it_matters %}{{ primary_anchor.why_it_matters }}{% endif %}
                             {% else %}
@@ -808,9 +808,9 @@
                             {% if is_parent_child_report %}
                                 {{ t("result.hero_parent_child_microcopy", ui_lang) }}
                             {% elif primary_anchor %}
-                                {{ primary_anchor.title }} şu anda kararlarınızın, enerjinizin ve zamanlama duygunuzun ana tonunu belirliyor.
+                                {{ primary_anchor.title }} şu anda karar alanınızı ve zamanlama hissinizi şekillendiren ana göstergelerden biri.
                             {% else %}
-                                Haritanızdaki zamanlama vurgusuna göre en güçlü odak şu anda <span data-dynamic="hero_area">{{ dominant_life_area }}</span> alanında yoğunlaşıyor.
+                                Haritadaki vurgu şu anda <span data-dynamic="hero_area">{{ dominant_life_area }}</span> alanında daha dikkatli öncelik belirlemenizi öneriyor.
                             {% endif %}
                         </p>
                         <div class="hero-value-signal">
@@ -896,15 +896,15 @@
 <section class="page-section" style="padding-top:0;">
     <div class="container">
         <div class="consultation-bridge">
-            <div class="section-kicker">İlk katman tamamlandı</div>
-            <h2>Bu sonuç güçlü bir başlangıçtır.</h2>
+            <div class="section-kicker">İlk okuma tamamlandı</div>
+            <h2>Bu sonuç yönü gösterir; kişisel bağlam derinliği belirler.</h2>
             <p>
-                Burada gördüğünüz yorum, haritanızdaki ana temaları ve dikkat çeken göstergeleri görünür kılar.
-                Kişisel danışmanlık ise bu verileri zamanlama, öncelik ve sizin gerçek sorularınızla birlikte derinleştirir.
+                Buradaki yorum ana temaları ve zamanlama sinyallerini görünür kılar.
+                Danışmanlık, aynı veriyi sizin sorunuz, karar eşiğiniz ve gerçek yaşam bağlamınızla birlikte ele alır.
             </p>
             <div class="consultation-progression">
                 <span class="consultation-dot" aria-hidden="true"></span>
-                <span><strong>Doğal sonraki adım:</strong> Eğer bu okuma kariyer, ilişki, yön değişimi veya zamanlama konusunda bir soruyu tetiklediyse, danışmanlık bu sonucu daha uygulanabilir bir çerçeveye taşır.</span>
+                <span><strong>Doğal sonraki adım:</strong> Bu okuma kariyer, ilişki, yön değişimi veya zamanlama sorusu doğurduysa, canlı seans sonucu daha net bir karar çerçevesine taşır.</span>
             </div>
         </div>
     </div>
@@ -913,31 +913,31 @@
 <section class="page-section" style="padding-top:0;">
     <div class="container">
         <div class="consultation-bridge">
-            <div class="section-kicker">Sınırları bilmek güven verir</div>
-            <h2>Bu sonuç neyi gösterir, neyi göstermez?</h2>
+            <div class="section-kicker">Okumanın sınırı</div>
+            <h2>Önizleme neyi netleştirir, danışmanlık neyi derinleştirir?</h2>
             <div class="consultation-comparison">
                 <div class="consultation-compare-column">
-                    <h3>Bu sonuçta netleşenler</h3>
+                    <h3>Önizlemede netleşenler</h3>
                     <ul class="consultation-list">
-                        <li>Ana temalar ve öne çıkan yaşam alanları</li>
-                        <li>Dikkat çeken astrolojik göstergeler</li>
-                        <li>İlk farkındalık ve karar alanları</li>
-                        <li>Karar alırken dikkate alınabilecek ilk yön işaretleri</li>
+                        <li>Ana tema ve öne çıkan yaşam alanları</li>
+                        <li>Dikkat isteyen zamanlama sinyalleri</li>
+                        <li>İlk karar ve öncelik alanları</li>
+                        <li>Daha derin bakılması gereken başlıklar</li>
                     </ul>
                 </div>
                 <div class="consultation-compare-column">
                     <h3>Danışmanlıkta derinleşenler</h3>
                     <ul class="consultation-list">
-                        <li>Zamanlama ve dönemsel analiz</li>
-                        <li>Kariyer, ilişki veya geçiş dönemlerine özel karar desteği</li>
-                        <li>Risk ve fırsat pencerelerinin kişisel bağlama göre yorumlanması</li>
-                        <li>Haritanızın tek bir soruya odaklanan stratejik sentezi</li>
+                        <li>Kişisel sorunuza göre canlı yorum</li>
+                        <li>Kariyer, ilişki veya geçiş dönemlerine özel bağlam</li>
+                        <li>Risk ve fırsat pencerelerinin sizin durumunuza göre okunması</li>
+                        <li>Tek soruya odaklanan stratejik sentez</li>
                     </ul>
                 </div>
             </div>
             <div class="conversion-actions">
                 <a class="btn btn-primary" href="/personal-consultation">{{ t("common.cta_detailed_analysis") }}</a>
-                <span class="premium-note">Raporu okumaya devam edebilir, hazır olduğunuzda analizi danışmanlıkla derinleştirebilirsiniz.</span>
+                <span class="premium-note">Önce sonucu okuyabilir, karar kişisel bağlam gerektiriyorsa danışmanlıkla derinleştirebilirsiniz.</span>
             </div>
         </div>
     </div>
@@ -947,7 +947,7 @@
 <section class="page-section" style="padding-top:0;">
     <div class="container">
         <div class="unlock-success">
-            Your full reading is now unlocked. You can continue with the complete interpretation and downloadable PDF.
+            {{ "Tam okumanız açıldı. Yoruma ve indirilebilir PDF raporuna devam edebilirsiniz." if ui_lang == "tr" else "Your full reading is now unlocked. You can continue with the complete interpretation and downloadable PDF." }}
         </div>
     </div>
 </section>
@@ -1470,7 +1470,7 @@
             </div>
             <div class="consultation-progression">
                 <span class="consultation-dot" aria-hidden="true"></span>
-                <span><strong>Birçok kullanıcı bu aşamadan sonra derin yorum tercih eder.</strong> Özellikle önemli karar dönemlerinde kişisel analiz, raporda görünen temaları daha uygulanabilir ve sakin bir karar zeminine taşır.</span>
+                <span><strong>Bu noktadan sonra derinleşme ihtiyacı netleşir.</strong> Özellikle önemli karar dönemlerinde kişisel analiz, raporda görünen temaları daha uygulanabilir ve sakin bir karar zeminine taşır.</span>
             </div>
         </div>
     </div>
@@ -1480,13 +1480,13 @@
     <div class="container">
         <div class="next-product-panel">
             <div>
-                <div class="section-kicker">Sizin için en uygun bir sonraki adım</div>
+                <div class="section-kicker">Sıradaki en mantıklı adım</div>
                 {% if next_product_key == "consultation" %}
-                <h2 class="section-title" style="margin-top:12px;">Buradan iki farklı şekilde devam edebilirsiniz.</h2>
-                <p class="section-lead">Bu sonuç tek bir başlığa indirgenemeyecek kadar geniş görünüyorsa, en dürüst sonraki adım seçenekleri odaklı raporları incelemek veya doğrudan birebir senteze geçmektir.</p>
+                <h2 class="section-title" style="margin-top:12px;">Sonucu iki şekilde derinleştirebilirsiniz.</h2>
+                <p class="section-lead">Tek bir alan baskınsa raporla ilerleyin. Birden fazla konu veya kişisel karar eşiği varsa danışmanlık daha net bir sentez sunar.</p>
                 {% else %}
-                <h2 class="section-title" style="margin-top:12px;">Bu sonuca göre en güçlü devam yolu: {{ next_product_title }}</h2>
-                <p class="section-lead">Bu öneri kesin hüküm gibi değil, mevcut sonuç bağlamını daha doğru derinleştirmek için sakin bir yönlendirme olarak düşünülmelidir.</p>
+                <h2 class="section-title" style="margin-top:12px;">Bu sonuca en yakın devam yolu: {{ next_product_title }}</h2>
+                <p class="section-lead">Bu yönlendirme mevcut vurguya göre seçildi; amaç sonucu satışa zorlamak değil, doğru derinlik seviyesine taşımaktır.</p>
                 {% endif %}
             </div>
             <div class="next-product-grid">
@@ -1494,25 +1494,25 @@
                     <div class="next-product-label">{{ next_product_label }}</div>
                     <h3>{{ next_product_title }}</h3>
                     <p>{{ next_product_text }}</p>
-                    <p><strong style="color:var(--gold-light);">Neden bu öneri?</strong><br>{{ next_product_reason }}</p>
+                    <p><strong style="color:var(--gold-light);">Neden bu adım?</strong><br>{{ next_product_reason }}</p>
                     <div class="next-product-actions">
                         <a class="btn btn-primary" href="{{ next_product_route }}">{{ next_product_cta }}</a>
                     </div>
                 </article>
                 {% if next_product_key == "consultation" %}
                 <article class="next-product-card">
-                    <div class="next-product-label">Odaklı rapor yolu</div>
-                    <h3>Rapor koleksiyonunu inceleyin</h3>
-                    <p>Tek bir alan öne çıkıyorsa Doğum Haritası Karma’sı, Yıllık Transit, Kariyer veya Ebeveyn-Çocuk raporlarından biri daha doğru başlangıç olabilir.</p>
+                    <div class="next-product-label">Odaklı rapor</div>
+                    <h3>Rapor seçeneklerini inceleyin</h3>
+                    <p>Tek bir konu öne çıkıyorsa yazılı rapor, sonucu sakin ve kalıcı bir referansa dönüştürür.</p>
                     <div class="next-product-actions">
                         <a class="btn btn-secondary" href="/reports">{{ t("common.cta_analysis_continue") }}</a>
                     </div>
                 </article>
                 {% else %}
                 <article class="next-product-card">
-                    <div class="next-product-label">Daha derin seçenek</div>
+                    <div class="next-product-label">Canlı derinleşme</div>
                     <h3>{{ t("common.consultation_full_name") }}</h3>
-                    <p>Birden fazla soru aynı anda aktifse veya karar kişisel bağlam gerektiriyorsa, 60 dk birebir vedik astroloji danışmanlığı rapor bilgisini daha geniş bir senteze taşır.</p>
+                    <p>Birden fazla soru aktifse veya karar kişisel bağlam gerektiriyorsa, 60 dakikalık birebir danışmanlık rapor bilgisini canlı senteze taşır.</p>
                     <div class="next-product-actions">
                         <a class="btn btn-secondary" href="/personal-consultation">{{ t("common.cta_personal_consultation") }}</a>
                     </div>
@@ -1556,7 +1556,7 @@
                 <div class="result-header-row">
                     <div class="result-header-copy">
                         <div class="section-kicker" data-result-text="ai_eyebrow">Daha derin yorum</div>
-                        <h2 class="section-title" data-result-text="ai_title">AI Stratejik Yorum</h2>
+                        <h2 class="section-title" data-result-text="ai_title">Stratejik Yorum</h2>
                         <p class="section-lead technical-intro" data-result-text="ai_intro">Bu bölüm, okumanın üst katmanlarını daha geniş bir anlatıya dönüştürür.</p>
                     </div>
                     <div class="result-header-actions">
@@ -1570,7 +1570,7 @@
                     <a class="btn btn-secondary" href="/reports">{{ "Daha sonra görüntüle" if ui_lang == "tr" else "View later" }}</a>
                     {% endif %}
                     {% if access.can_view_full_report %}
-                    <button class="btn btn-primary" id="interpret-btn" type="button" data-result-text="get_ai">Yapay Zeka Yorumu Al</button>
+                    <button class="btn btn-primary" id="interpret-btn" type="button" data-result-text="get_ai">Yorumu Hazırla</button>
                     {% endif %}
                     </div>
                 </div>
@@ -1583,13 +1583,13 @@
                     {% else %}
                     <div class="locked-ai-card">
                         <div class="premium-status">{{ "Tam yorum" if ui_lang == "tr" else "Full interpretation" }}</div>
-                        <p class="locked-copy">{{ "Stratejik AI yorumu önizleme modunda kilitli kalır; böylece ücretsiz deneyim faydalı olur ancak tam raporun tamamını açmaz." if ui_lang == "tr" else "The strategic AI reading stays locked in preview mode so the free experience remains useful without revealing the complete report." }}</p>
+                        <p class="locked-copy">{{ "Tam yorum önizleme modunda kilitli kalır; ücretsiz sonuç ana yönü gösterir ancak raporun tamamını açmaz." if ui_lang == "tr" else "The full interpretation stays locked in preview mode so the free result shows direction without revealing the complete report." }}</p>
                         <div class="locked-shell">
                             <div class="blur-line"></div>
                             <div class="blur-line short"></div>
                             <div class="blur-line"></div>
                         </div>
-                        <p class="locked-copy">{{ "Tam yorumu ve kişiselleştirilmiş PDF raporu açmak için tam okumaya devam edin." if ui_lang == "tr" else "Continue to your complete reading to open the full interpretation and personalized PDF report." }}</p>
+                        <p class="locked-copy">{{ "Tam yorumu ve kişiselleştirilmiş PDF raporu açmak için okumaya devam edin." if ui_lang == "tr" else "Continue to open the full interpretation and personalized PDF report." }}</p>
                     </div>
                     {% endif %}
                 </div>
@@ -1630,7 +1630,7 @@
         <div class="glass-card card-pad result-section-card result-section-card--application">
             <div class="locked-teaser-card">
                 <div class="premium-status">{{ "Uygulanabilir rehberlik" if ui_lang == "tr" else "Actionable guidance" }}</div>
-                <p class="locked-copy">{{ "Ücretsiz önizleme, tam yap / kaçın karar katmanından önce durur. Tam aksiyon rehberliğini açmak için okumaya devam edin." if ui_lang == "tr" else "The free preview stops before the full do / avoid decision layer. Continue to your complete reading to open the full action guidance." }}</p>
+                <p class="locked-copy">{{ "Ücretsiz önizleme, tam karar ve dikkat katmanından önce durur. Uygulanabilir rehberliğin tamamı için okumaya devam edin." if ui_lang == "tr" else "The free preview stops before the full decision and caution layer. Continue to open the complete actionable guidance." }}</p>
             </div>
         </div>
     </div>
@@ -1805,11 +1805,11 @@
 <section class="page-section">
     <div class="container">
         <div class="consultation-bridge consultation-bridge--strong">
-            <div class="section-kicker">Sonraki derinlik</div>
-            <h2>Bu okumayı daha derin bir çerçeveye taşıyın.</h2>
+            <div class="section-kicker">Canlı derinleşme</div>
+            <h2>Sorunuz kişiselse, en güçlü sonraki adım danışmanlıktır.</h2>
             <p>
-                Haritanızdaki bu ilk okuma önemli bir başlangıç noktasıdır. Eğer konu karar, zamanlama veya yön değişimiyle ilgiliyse,
-                kişisel danışmanlık sonucu daha bilinçli ve uygulanabilir bir çerçeveye taşır.
+                Bu okuma ana yapıyı gösterir. Danışmanlık, aynı veriyi sizin karar eşiğiniz,
+                zamanlama ihtiyacınız ve canlı sorularınızla birlikte netleştirir.
             </p>
             <div class="result-reassurance-grid">
                 <div class="result-reassurance-item">
@@ -1822,16 +1822,16 @@
                 </div>
                 <div class="result-reassurance-item">
                     <strong>En çok hangi konularda işe yarar?</strong>
-                    <span>Kariyer, ilişki, geçiş dönemleri ve zamanlama kararlarında daha fazla netlik sağlar.</span>
+                    <span>Kariyer, ilişki, geçiş dönemleri ve zamanlama kararlarında kişisel bağlamı netleştirir.</span>
                 </div>
                 <div class="result-reassurance-item">
                     <strong>Bu rapor boşa mı çıkıyor?</strong>
-                    <span>Hayır. Danışmanlık bu raporu temel alır ve gördüğünüz temaları kişisel bağlama yerleştirir.</span>
+                    <span>Hayır. Danışmanlık bu sonucu temel alır ve gördüğünüz temaları kişisel karar bağlamına yerleştirir.</span>
                 </div>
             </div>
             <div class="conversion-actions">
                 <a class="btn btn-primary" href="/personal-consultation">{{ t("common.cta_personal_consultation") }}</a>
-                <span class="premium-note">Önemli kararları yalnızca genel yorumla değil, daha derin bağlamla değerlendirin.</span>
+                <span class="premium-note">Genel yorumu karar bağlamına taşımak için canlı seans daha doğru zemindir.</span>
             </div>
         </div>
     </div>
@@ -1854,10 +1854,60 @@
         </div>
     </div>
 </section>
+
+<section class="page-section" style="padding-top:0;">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <div class="section-header">
+                <div class="section-kicker">Bu sonucu nasıl okumalı?</div>
+                <h2 class="section-title">Önizleme yönü gösterir; rapor ve danışmanlık kararı netleştirir.</h2>
+                <p class="section-text">Bu sayfa ana dinamikleri görünür kılar. Yazılı rapor seçili konuyu derinleştirir; danışmanlık aynı veriyi kişisel soru ve zamanlama bağlamında canlı yorumlar.</p>
+            </div>
+            <div class="grid-3">
+                <div style="display:grid; gap:12px; padding:0 0 0 18px; border-left:1px solid var(--border);">
+                    <div class="section-kicker">Önizleme</div>
+                    <p class="muted" style="margin:0;">İlk katman: ana tema, karar alanı ve dikkat çeken zamanlama sinyalleri.</p>
+                </div>
+                <div style="display:grid; gap:12px; padding:0 0 0 18px; border-left:1px solid var(--border);">
+                    <div class="section-kicker">Yazılı rapor</div>
+                    <p class="muted" style="margin:0;">Seçtiğiniz konuya odaklanan, 7 gün içinde e-posta ile teslim edilen kapsamlı analiz.</p>
+                </div>
+                <div style="display:grid; gap:12px; padding:0 0 0 18px; border-left:1px solid var(--border);">
+                    <div class="section-kicker">Danışmanlık</div>
+                    <p class="muted" style="margin:0;">Canlı görüşmede sorularınız, bağlamınız ve zamanlama ihtiyacınız birlikte ele alınır.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+<section class="page-section" style="padding-top:0;">
+  <div class="container">
+    <div class="glass-card card-pad">
+      <div class="section-header">
+        <div class="section-kicker">Sonraki adım</div>
+        <h2 class="section-title">Sonucu doğru derinlikte değerlendirin</h2>
+        <p class="section-text">Harita hesaplaması ilk yönü gösterir. Yazılı rapor seçili konuyu genişletir; danışmanlık kişisel karar eşiğini canlı olarak netleştirir.</p>
+      </div>
+      <div class="grid-2">
+        <div style="display:grid; gap:12px; padding:0 0 0 18px; border-left:1px solid var(--border);">
+          <div class="section-kicker">Dijital Rapor</div>
+          <p class="muted" style="margin:0;">Odaklı ve yazılı analiz. Zamanlama, tema ve karar alanlarını kalıcı bir referansa dönüştürür.</p>
+          <div><a class="btn btn-primary" href="/reports">Rapor Seçenekleri</a></div>
+        </div>
+        <div style="display:grid; gap:12px; padding:0 0 0 18px; border-left:1px solid var(--border);">
+          <div class="section-kicker">Birebir Danışmanlık</div>
+          <p class="muted" style="margin:0;">60 dakikalık canlı seans. Sorunuzu doğrudan ele alır, haritanızı kişisel bağlamınızla birlikte yorumlar.</p>
+          <div><a class="btn btn-secondary" href="/personal-consultation">Danışmanlık Hakkında</a></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
 {% endblock %}
 
 {% block scripts %}
 <script>
+const csrfToken = "{{ csrf_token if csrf_token is defined else csrf_token_for(request) }}";
 const rawInterpretationContext = {{ (interpretation_context or {})|tojson }};
 const resultState = {
     primaryFocus: rawInterpretationContext.primary_focus || "Ana yasam odagi",
@@ -1888,9 +1938,9 @@ const resultTranslations = {
         opportunity_window: "Firsat Donemi",
         pressure_window: "Baski Donemi",
         ai_eyebrow: "Daha derin yorum",
-        ai_title: "Daha Derin Yorum",
+        ai_title: "Stratejik Yorum",
         ai_intro: "Bu bölüm, üstte gördüğünüz temaları daha geniş bir anlatıya dönüştürür.",
-        get_ai: "Yapay Zeka Yorumu Al",
+        get_ai: "Yorumu Hazırla",
         pdf_export: "PDF Olustur",
         pdf_preview: "PDF Onizleme",
         loading_text: "Yorum hazirlaniyor...",
@@ -2008,9 +2058,9 @@ const resultTranslations = {
         opportunity_window: "Opportunity Window",
         pressure_window: "Pressure Window",
         ai_eyebrow: "Deeper interpretation",
-        ai_title: "Deeper Interpretation",
+        ai_title: "Strategic Interpretation",
         ai_intro: "This layer turns the themes above into a wider narrative you can sit with more calmly.",
-        get_ai: "Get AI Interpretation",
+        get_ai: "Generate Interpretation",
         pdf_export: "Create PDF",
         pdf_preview: "PDF Preview",
         loading_text: "Preparing interpretation...",
@@ -2395,8 +2445,13 @@ function submitReportForm(action) {
     languageInput.type = "hidden";
     languageInput.name = "language";
     languageInput.value = currentLanguage();
+    const csrfInput = document.createElement("input");
+    csrfInput.type = "hidden";
+    csrfInput.name = "csrf_token";
+    csrfInput.value = csrfToken;
     form.appendChild(payloadInput);
     form.appendChild(languageInput);
+    form.appendChild(csrfInput);
     document.body.appendChild(form);
     form.submit();
     form.remove();
@@ -2611,7 +2666,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 payload.language = currentLanguage();
                 const response = await fetch("/interpret", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
                     body: JSON.stringify(payload)
                 });
                 const data = await response.json();

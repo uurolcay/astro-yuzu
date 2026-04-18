@@ -5,6 +5,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{% block title %}Focus Astrology{% endblock %}</title>
+    <meta name="description" content="{% block meta_description %}Vedik astroloji ile doğum haritanızı keşfedin. Kişisel raporlar, harita hesaplama ve birebir danışmanlık hizmetleri.{% endblock %}">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1300,6 +1301,7 @@
                         </div>
                     </div>
                     <a href="/articles" data-i18n="nav_articles">{{ t("common.nav_articles") }}</a>
+                    <a href="/sss">{{ t("common.nav_faq") }}</a>
                     <a href="/about" data-i18n="nav_about">{{ t("common.nav_about") }}</a>
                     {% if request.state.current_user %}
                     {% if request.state.current_user.is_admin %}
@@ -1309,6 +1311,13 @@
                     {% endif %}
                 </nav>
                 <div class="nav-utilities">
+                    <a href="https://www.instagram.com/feruze.olcay/" target="_blank" rel="noopener noreferrer" aria-label="Instagram" style="display:inline-flex; align-items:center; color:rgba(240,220,149,.52); transition:color .22s ease; padding:4px;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+                            <circle cx="12" cy="12" r="4"/>
+                            <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/>
+                        </svg>
+                    </a>
                     <div class="language-toggle" aria-label="Language toggle">
                         <button class="language-btn" type="button" data-language-btn="tr">TR</button>
                         <button class="language-btn" type="button" data-language-btn="en">EN</button>
@@ -1363,6 +1372,7 @@
                         <a href="/personal-consultation">{{ t("common.nav_consultation") }}</a>
                         <a href="/calculator">{{ t("common.nav_calculator") }}</a>
                         <a href="/articles">{{ t("common.nav_articles") }}</a>
+                        <a href="/sss">{{ t("common.nav_faq") }}</a>
                         <a href="/about">{{ t("common.nav_about") }}</a>
                     </div>
                 </div>
@@ -1379,6 +1389,14 @@
             </div>
             <div class="footer-bottom">
                 <div class="footer-small">Focus Astrology</div>
+                <a href="https://www.instagram.com/feruze.olcay/" target="_blank" rel="noopener noreferrer" aria-label="Focus Astrology Instagram" style="display:inline-flex; align-items:center; gap:8px; color:var(--text-soft); font-size:.88rem; text-decoration:none; transition:color .2s ease;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+                        <circle cx="12" cy="12" r="4"/>
+                        <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/>
+                    </svg>
+                    Instagram
+                </a>
                 <div class="footer-small">{{ t("common.footer_beta") }}</div>
             </div>
         </div>

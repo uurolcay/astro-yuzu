@@ -65,7 +65,24 @@ def render_email_template(template_name, **context):
     return html_template.render(**context), text_template.render(**context)
 
 
-def send_transactional_email(to_email, subject, html_body, text_body=None):
+def _attach_files(message, attachments=None):
+    for item in attachments or []:
+        path = Path(item.get("path") if isinstance(item, dict) else item)
+        filename = (item.get("filename") if isinstance(item, dict) else None) or path.name
+        if not path.exists() or not path.is_file():
+            raise FileNotFoundError(f"Email attachment not found: {path}")
+        data = path.read_bytes()
+        if not data:
+            raise ValueError(f"Email attachment is empty: {path}")
+        message.add_attachment(
+            data,
+            maintype=(item.get("maintype") if isinstance(item, dict) else None) or "application",
+            subtype=(item.get("subtype") if isinstance(item, dict) else None) or "pdf",
+            filename=filename,
+        )
+
+
+def send_transactional_email(to_email, subject, html_body, text_body=None, attachments=None):
     if not is_email_configured():
         logger.warning("Transactional email skipped because mail configuration is missing")
         return EmailSendResult(ok=False, status="skipped", subject=subject, error_message="mail_not_configured")
@@ -80,6 +97,7 @@ def send_transactional_email(to_email, subject, html_body, text_body=None):
     message.add_alternative(html_body, subtype="html")
 
     try:
+        _attach_files(message, attachments=attachments)
         if config["use_ssl"]:
             server = smtplib.SMTP_SSL(config["host"], config["port"], timeout=20)
         else:
@@ -97,6 +115,6 @@ def send_transactional_email(to_email, subject, html_body, text_body=None):
         return EmailSendResult(ok=False, status="failed", subject=subject, error_message=str(exc))
 
 
-def send_template_email(to_email, template_name, subject, **context):
+def send_template_email(to_email, template_name, subject, attachments=None, **context):
     html_body, text_body = render_email_template(template_name, **context)
-    return send_transactional_email(to_email, subject, html_body, text_body=text_body)
+    return send_transactional_email(to_email, subject, html_body, text_body=text_body, attachments=attachments)

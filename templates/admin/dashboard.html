@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+
+{% block title %}Jyotish | Business Dashboard{% endblock %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <div class="row-between" style="gap:18px;">
+                <div>
+                    <p class="eyebrow">Internal Business Dashboard</p>
+                    <h1 class="hero-title" style="font-size:2.3rem;">Business Dashboard</h1>
+                    <p class="muted">Verified payment revenue, fulfillment load, refunds, and product performance from real order states.</p>
+                </div>
+                <div class="chip-row">
+                    <a class="chip" href="/admin">Admin Home</a>
+                    <a class="chip" href="/admin/orders">Orders</a>
+                    <a class="chip" href="/admin/revenue">Revenue</a>
+                </div>
+            </div>
+
+            <div class="chip-row" style="margin-top:20px;">
+                {% for key, label in dashboard.range_options.items() %}
+                <a class="chip" href="/admin/dashboard?range={{ key }}" {% if dashboard.range.key == key %}style="border-color:rgba(223,192,112,.5); color:var(--accent);"{% endif %}>{{ label }}</a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="page-section">
+    <div class="container">
+        <div class="grid-4">
+            {% for card in dashboard.kpis %}
+            <div class="metric-card">
+                <div class="metric-label">{{ card.label }}</div>
+                <div class="metric-value">{{ card.value }}</div>
+                <div class="muted">{{ card.note }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+
+<section class="page-section">
+    <div class="container">
+        <div class="grid-2">
+            <div class="glass-card card-pad">
+                <h2 class="section-title">Revenue Detail</h2>
+                <p class="muted">Range: {{ dashboard.range.label }}. Gross revenue is verified paid orders by paid_at. Refunds are actual refunded orders by refunded_at. Net revenue is gross minus refunds; platform and payment fees are not deducted.</p>
+                <div class="grid-2" style="margin-top:18px;">
+                    <div class="metric-card">
+                        <div class="metric-label">Gross Revenue</div>
+                        <div class="metric-value">{{ dashboard.selected_revenue.gross_revenue_label }}</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Refunded Amount</div>
+                        <div class="metric-value">{{ dashboard.selected_revenue.refunded_amount_label }}</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Net Revenue</div>
+                        <div class="metric-value">{{ dashboard.selected_revenue.net_revenue_label }}</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Average Order Value</div>
+                        <div class="metric-value">{{ dashboard.selected_revenue.average_order_value_label }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-card card-pad">
+                <h2 class="section-title">Status Breakdown</h2>
+                <p class="muted">Counts are based on created_at for the selected range, except all time includes the full order table.</p>
+                <div style="overflow:auto; margin-top:18px;">
+                    <table style="width:100%; border-collapse:collapse;">
+                        <thead>
+                            <tr class="muted" style="text-align:left;">
+                                <th style="padding:8px;">Status</th>
+                                <th style="padding:8px;">Count</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in dashboard.status_breakdown %}
+                            <tr style="border-top:1px solid rgba(223,192,112,.12);">
+                                <td style="padding:9px;"><span class="chip">{{ row.status }}</span></td>
+                                <td style="padding:9px;">{{ row.count }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="page-section">
+    <div class="container">
+        <div class="glass-card card-pad">
+            <h2 class="section-title">Product Performance</h2>
+            <p class="muted">Revenue is net of recorded refunds on the order, sorted highest first.</p>
+            <div style="overflow:auto; margin-top:18px;">
+                <table style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr class="muted" style="text-align:left;">
+                            <th style="padding:10px;">Product</th>
+                            <th style="padding:10px;">Type</th>
+                            <th style="padding:10px;">Paid Orders</th>
+                            <th style="padding:10px;">Revenue</th>
+                            <th style="padding:10px;">Delivered</th>
+                            <th style="padding:10px;">Completed</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for product in dashboard.product_performance %}
+                        <tr style="border-top:1px solid rgba(223,192,112,.12);">
+                            <td style="padding:12px;"><strong>{{ product.product_name }}</strong></td>
+                            <td style="padding:12px;">{{ product.product_type }}</td>
+                            <td style="padding:12px;">{{ product.paid_order_count }}</td>
+                            <td style="padding:12px;">{{ product.revenue_label }}</td>
+                            <td style="padding:12px;">{{ product.delivered_count }}</td>
+                            <td style="padding:12px;">{{ product.completed_count }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="muted" style="padding:18px;">No paid product activity in this range.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="page-section">
+    <div class="container">
+        <div class="grid-2">
+            <div class="glass-card card-pad">
+                <h2 class="section-title">Recent Activity</h2>
+                <div style="overflow:auto; margin-top:18px;">
+                    <table style="width:100%; border-collapse:collapse;">
+                        <thead>
+                            <tr class="muted" style="text-align:left;">
+                                <th style="padding:8px;">Time</th>
+                                <th style="padding:8px;">Order</th>
+                                <th style="padding:8px;">Customer</th>
+                                <th style="padding:8px;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for event in dashboard.recent_activity %}
+                            <tr style="border-top:1px solid rgba(223,192,112,.12);">
+                                <td style="padding:9px;">{{ event.timestamp }}</td>
+                                <td style="padding:9px;"><a href="/admin/orders/{{ event.order_id }}">#{{ event.order_id }}</a></td>
+                                <td style="padding:9px;">{{ event.customer }}</td>
+                                <td style="padding:9px;">{{ event.action }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="muted" style="padding:18px;">No recent activity yet.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="glass-card card-pad">
+                <h2 class="section-title">Daily Trend</h2>
+                <p class="muted">Daily paid orders and net revenue for the selected range.</p>
+                <div style="overflow:auto; margin-top:18px; max-height:460px;">
+                    <table style="width:100%; border-collapse:collapse;">
+                        <thead>
+                            <tr class="muted" style="text-align:left;">
+                                <th style="padding:8px;">Date</th>
+                                <th style="padding:8px;">Paid Orders</th>
+                                <th style="padding:8px;">Gross</th>
+                                <th style="padding:8px;">Refunds</th>
+                                <th style="padding:8px;">Net</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in dashboard.timeseries %}
+                            <tr style="border-top:1px solid rgba(223,192,112,.12);">
+                                <td style="padding:9px;">{{ row.date }}</td>
+                                <td style="padding:9px;">{{ row.paid_orders }}</td>
+                                <td style="padding:9px;">{{ row.gross_revenue_label }}</td>
+                                <td style="padding:9px;">{{ row.refunded_amount_label }}</td>
+                                <td style="padding:9px;">{{ row.net_revenue_label }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="5" class="muted" style="padding:18px;">No trend data in this range.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

@@ -46,6 +46,7 @@
             </div>
 
             <form action="/calculate" method="post" class="person-grid">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token or csrf_token_for(request) }}">
                 <input type="hidden" name="report_type" value="parent_child">
                 <section class="person-card">
                     <div class="eyebrow">{{ t("parent_child_form.parent_eyebrow") }}</div>

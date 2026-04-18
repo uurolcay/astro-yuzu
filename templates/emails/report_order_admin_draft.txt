@@ -1,16 +1,25 @@
-Yeni rapor talebi
+Ic inceleme hazir
 
 Rapor: {{ product.title }}
-Rapor türü: {{ order.report_type }}
+Rapor turu: {{ order.report_type }}
+Order ID: {{ order.order_id or "-" }}
+Order token: {{ order.order_token or "-" }}
 
-Müşteri: {{ order.full_name }}
+Musteri: {{ order.full_name }}
 E-posta: {{ order.email }}
-Doğum bilgileri: {{ order.birth_date }} · {{ order.birth_time }} · {{ order.birth_city }}
+Dogum tarihi: {{ order.birth_date }}
+Dogum saati: {{ order.birth_time }}
+Sehir: {{ order.birth_city or order.birth_place or "-" }}
+Ilce: {{ order.birth_district or "-" }}
 Not: {{ order.optional_note or "-" }}
-Gönderim zamanı: {{ order.submitted_at }}
+Gonderim zamani: {{ order.submitted_at }}
 Taslak durumu: {{ draft_status }}
+PDF durumu: {{ order.pdf_status or "-" }}
+
+Admin detay:
+{{ order.admin_detail_url }}
 
 AI destekli taslak:
 {{ draft_text }}
 
-Bu taslak yalnızca yönetici incelemesi içindir. Müşteriye otomatik gönderilmez.
+Bu e-posta yalnizca ic inceleme icindir. Musteriye otomatik gonderilmez ve raporu teslim edilmis saymaz.
