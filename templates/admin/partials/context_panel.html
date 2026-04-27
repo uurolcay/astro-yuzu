@@ -1,0 +1,27 @@
+<div class="admin-context-card">
+  <div class="admin-context-title">Quick Actions</div>
+  <div class="admin-context-list">
+    {% if active_page == "accounting" %}
+    <a class="admin-context-link" href="/admin/accounting/invoices?tab=ready"><span>Ready invoices</span><span>Open</span></a>
+    <a class="admin-context-link" href="/admin/accounting/invoices?invoice_view=awaiting_send"><span>Awaiting send</span><span>Review</span></a>
+    <a class="admin-context-link" href="/admin/accounting/month-close"><span>Month-end review</span><span>Close</span></a>
+    <a class="admin-context-link" href="/admin/accounting/documents"><span>Documents archive</span><span>Browse</span></a>
+    {% else %}
+    <a class="admin-context-link" href="/admin/reports?status=pending"><span>Pending reports</span><span>Open</span></a>
+    <a class="admin-context-link" href="/admin/consultations?status=pending"><span>Pending consultations</span><span>Open</span></a>
+    <a class="admin-context-link" href="/admin/articles/new"><span>New article</span><span>Create</span></a>
+    <a class="admin-context-link" href="/admin/logs"><span>Activity logs</span><span>View</span></a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="admin-context-card">
+  <div class="admin-context-title">Operational Notes</div>
+  <p style="color:var(--muted); font-size:.84rem; line-height:1.65; margin:0;">
+    {% if active_page == "accounting" %}
+    Finance values are operational estimates. Confirm official accounting, tax, and filing obligations with the accountant before external use.
+    {% else %}
+    Use this panel for shortcuts and contextual next steps while the main workspace stays focused on the current queue or record.
+    {% endif %}
+  </p>
+</div>

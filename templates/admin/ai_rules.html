@@ -1,0 +1,60 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}AI Behavior Rules{% endblock %}
+{% block admin_content %}
+<section class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Astro AI Behavior Rules</h1>
+    <p class="admin-page-sub">Internal behavior governance for Admin Astro Workspace and Astro Chat.</p>
+  </div>
+  <div class="admin-page-actions">
+    <a class="btn-admin" href="/admin/astro-workspace">Astro Workspace</a>
+    <a class="btn-admin" href="/admin/astro-workspace/chat">Ask AI</a>
+  </div>
+</section>
+
+{% if notice %}<div class="admin-alert admin-alert-success">{{ notice }}</div>{% endif %}
+
+<section class="admin-card">
+  <div class="admin-card-title">Immutable Grounding Rules</div>
+  <div class="admin-grid-2">
+    {% for rule in immutable_rules %}
+    <div class="admin-warning-card">{{ rule }}</div>
+    {% endfor %}
+  </div>
+</section>
+
+<form method="post" class="admin-section">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  {% for section, rules in sections.items() %}
+  <section class="admin-card">
+    <div class="admin-card-title">{{ section }}</div>
+    {% if rules %}
+    <div class="admin-form" style="max-width:none;">
+      {% for rule in rules %}
+      <div style="display:grid; grid-template-columns:160px minmax(0,1fr); gap:14px; padding:12px 0; border-bottom:1px solid var(--border-soft);">
+        <label class="admin-muted" style="display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" name="rule_enabled_{{ rule.id }}" value="1" {% if rule.is_enabled %}checked{% endif %} {% if not rule.is_editable %}disabled{% endif %}>
+          Enabled
+        </label>
+        <div class="admin-field">
+          <label>{{ rule.title }} <span class="admin-muted">· {{ rule.category }}</span></label>
+          <textarea name="rule_content_{{ rule.id }}" {% if not rule.is_editable %}readonly{% endif %}>{{ rule.content }}</textarea>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="admin-muted">No editable rules in this group yet.</p>
+    {% endif %}
+  </section>
+  {% endfor %}
+  <button class="btn-admin btn-admin-primary" type="submit">Save Behavior Rules</button>
+</form>
+{% endblock %}
+
+{% block admin_context %}
+<div class="admin-context-card">
+  <div class="admin-context-title">Active Prompt Block</div>
+  <pre style="white-space:pre-wrap; color:var(--muted); font-size:.78rem; line-height:1.55;">{{ prompt_block }}</pre>
+</div>
+{% endblock %}

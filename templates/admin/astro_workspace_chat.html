@@ -1,0 +1,115 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Astro Chat{% endblock %}
+{% block admin_content %}
+<section class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Ask AI</h1>
+    <p class="admin-page-sub">Chart-grounded internal chat using computed astrology context, saved interpretations, and workspace profiles.</p>
+  </div>
+  <div class="admin-page-actions">
+    <a class="btn-admin" href="/admin/astro-workspace">Generate Report</a>
+    <a class="btn-admin" href="/admin/astro-workspace/profiles">Profiles</a>
+  </div>
+</section>
+
+<div class="admin-warning-card">
+  Chat answers are grounded in prepared chart context. The assistant is instructed not to assume planetary positions or invent missing astrology data.
+</div>
+
+<form class="admin-section" method="post" action="{% if chat_session %}/admin/astro-workspace/chat/sessions/{{ chat_session.id }}/message{% else %}/admin/astro-workspace/chat/sessions{% endif %}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  {% if chat_session %}<input type="hidden" name="session_id" value="{{ chat_session.id }}">{% endif %}
+
+  <div class="admin-action-bar">
+    <div class="admin-field" style="min-width:220px">
+      <label>Mode</label>
+      <select name="mode">
+        {% for key, label in chat_modes.items() %}
+        <option value="{{ key }}" {% if chat_session and chat_session.mode == key %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="admin-field" style="min-width:220px">
+      <label>Report context</label>
+      <select name="report_type">
+        {% for option in report_options %}
+        <option value="{{ option.value }}" {% if chat_session and chat_session.report_type == option.value %}selected{% endif %}>{{ option.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:minmax(280px, .8fr) minmax(380px, 1.2fr); gap:18px; align-items:start;">
+    <section class="admin-card">
+      <div class="admin-card-title">Context</div>
+      <div class="admin-form">
+        <div class="admin-field">
+          <label>Primary profile</label>
+          <select name="profile_id" {% if chat_session %}disabled{% endif %}>
+            <option value="">Select profile</option>
+            {% for profile in profiles %}
+            <option value="{{ profile.id }}" {% if selected_profile and selected_profile.id == profile.id %}selected{% endif %}>{{ "★ " if profile.is_favorite else "" }}{{ profile.full_name or profile.birth_place_label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="admin-field">
+          <label>Secondary profile</label>
+          <select name="secondary_profile_id" {% if chat_session %}disabled{% endif %}>
+            <option value="">None</option>
+            {% for profile in profiles %}
+            <option value="{{ profile.id }}" {% if chat_session and chat_session.secondary_profile_id == profile.id %}selected{% endif %}>{{ "★ " if profile.is_favorite else "" }}{{ profile.full_name or profile.birth_place_label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="admin-field">
+          <label>Session title</label>
+          <input name="title" value="{{ chat_session.title if chat_session else '' }}" {% if chat_session %}readonly{% endif %}>
+        </div>
+      </div>
+    </section>
+
+    <section class="admin-card">
+      <div class="admin-card-title">Question</div>
+      <div class="admin-form">
+        <div class="admin-field">
+          <label>Ask about the computed chart context</label>
+          <textarea name="question" placeholder="What is the strongest career theme here?"></textarea>
+        </div>
+        <button class="btn-admin btn-admin-primary" type="submit">{{ "Ask AI" if chat_session else "Create Session & Ask" }}</button>
+      </div>
+    </section>
+  </div>
+</form>
+
+{% if chat_session %}
+<section class="admin-card">
+  <div class="admin-card-title">Conversation</div>
+  <div style="display:grid; gap:12px;">
+    {% for message in chat_session.messages %}
+    <article style="padding:12px 14px; border:1px solid var(--border-soft); border-radius:12px; background:rgba(255,255,255,.035);">
+      <div class="admin-section-title">{{ message.role|title }} · {{ message.created_at.strftime("%Y-%m-%d %H:%M") if message.created_at else "" }}</div>
+      <div style="white-space:pre-wrap; line-height:1.65; margin-top:8px;">{{ message.message_text }}</div>
+    </article>
+    {% else %}
+    <div class="admin-empty-state"><div class="admin-empty-title">No messages yet</div></div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block admin_context %}
+<div class="admin-context-card">
+  <div class="admin-context-title">History</div>
+  <div class="admin-context-list">
+    {% for item in sessions %}
+    <a class="admin-context-link" href="/admin/astro-workspace/chat/sessions/{{ item.id }}">
+      <span>{{ item.title or "Chat" }}</span>
+      <span>{{ item.mode }}</span>
+    </a>
+    {% else %}
+    <span class="admin-muted">No chat sessions yet.</span>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

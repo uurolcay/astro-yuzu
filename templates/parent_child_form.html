@@ -36,6 +36,7 @@
 {% endblock %}
 
 {% block content %}
+{% set parent_child_lang = language if language is defined and language in ["tr", "en"] else (lang if lang is defined and lang in ["tr", "en"] else (request.state.lang if request is defined and request.state is defined and request.state.lang in ["tr", "en"] else "tr")) %}
 <section class="page-section">
     <div class="container">
         <div class="dual-form-shell">
@@ -45,7 +46,7 @@
                 <p class="hero-text">{{ t("parent_child_form.hero_text") }}</p>
             </div>
 
-            <form action="/calculate" method="post" class="person-grid">
+            <form action="/calculate" method="post" class="person-grid" {% if not enable_free_calculator %}data-launch-disabled="1"{% endif %}>
                 <input type="hidden" name="csrf_token" value="{{ csrf_token or csrf_token_for(request) }}">
                 <input type="hidden" name="report_type" value="parent_child">
                 <section class="person-card">
@@ -117,9 +118,16 @@
                 </section>
 
                 <div class="field-full" style="display:flex; gap:12px; flex-wrap:wrap;">
+                    {% if enable_free_calculator %}
                     <button class="btn btn-primary" type="submit">{{ t("parent_child_form.cta_submit") }}</button>
+                    {% else %}
+                    <button class="btn btn-primary disabled-launch" type="submit" disabled aria-disabled="true">{{ "Chart Analysis Coming Soon" if parent_child_lang == "en" else "Harita Analizi Yakında" }}</button>
+                    {% endif %}
                     <a class="btn btn-secondary" href="/reports">{{ t("parent_child_form.cta_back") }}</a>
                 </div>
+                {% if not enable_free_calculator %}
+                <p class="launch-inline-note field-full">{{ "Parent-child chart analysis is temporarily paused until launch preparation is complete." if parent_child_lang == "en" else "Ebeveyn-çocuk harita analizi lansman hazırlığı tamamlanana kadar geçici olarak kapalıdır." }}</p>
+                {% endif %}
             </form>
         </div>
     </div>
@@ -242,6 +250,12 @@
     }
 
     document.addEventListener("DOMContentLoaded", () => {
+        const launchLockedForm = document.querySelector('form[data-launch-disabled="1"]');
+        if (launchLockedForm) {
+            launchLockedForm.addEventListener("submit", (event) => {
+                event.preventDefault();
+            });
+        }
         attachBirthplaceAutocomplete("parent");
         attachBirthplaceAutocomplete("child");
     });

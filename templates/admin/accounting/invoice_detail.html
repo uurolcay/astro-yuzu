@@ -1,0 +1,62 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Invoice {{ invoice.invoice_number or invoice.id }}{% endblock %}
+{% block admin_content %}
+<div class="admin-page-header">
+  <div><h1 class="admin-page-title">Invoice {{ invoice.invoice_number or invoice.id }}</h1><p class="admin-page-sub">{{ accounting_disclaimer }}</p></div>
+  <a class="btn-admin" href="/admin/accounting/invoices">← Invoices</a>
+</div>
+
+<div class="admin-card">
+  <div class="admin-card-title">Progress Timeline</div>
+  <div style="display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:10px;">
+    <div class="admin-stat"><div class="admin-stat-label">Draft Created</div><div class="admin-stat-value" style="font-size:1rem;">{{ invoice.created_at }}</div></div>
+    <div class="admin-stat"><div class="admin-stat-label">Issued</div><div class="admin-stat-value" style="font-size:1rem;">{{ invoice.issue_date or "—" }}</div></div>
+    <div class="admin-stat"><div class="admin-stat-label">PDF</div><div class="admin-stat-value" style="font-size:1rem;">{{ invoice.pdf_status or "not_generated" }}</div></div>
+    <div class="admin-stat"><div class="admin-stat-label">PDF Ready At</div><div class="admin-stat-value" style="font-size:1rem;">{{ invoice.pdf_generated_at or "—" }}</div></div>
+    <div class="admin-stat"><div class="admin-stat-label">Sent</div><div class="admin-stat-value" style="font-size:1rem;">{{ invoice.sent_at or "—" }}</div></div>
+    <div class="admin-stat"><div class="admin-stat-label">Cancelled</div><div class="admin-stat-value" style="font-size:1rem;">{{ invoice.cancelled_at or "—" }}</div></div>
+  </div>
+  {% if invoice.send_error_message or invoice.pdf_error_message %}
+  <div class="admin-alert admin-alert-danger" style="margin-top:14px;">{{ invoice.send_error_message or invoice.pdf_error_message }}</div>
+  {% endif %}
+</div>
+
+<div class="admin-grid-2">
+  <div class="admin-card">
+    <div class="admin-card-title">Invoice Details</div>
+    <table class="admin-table"><tbody>
+      <tr><td class="admin-muted">Customer</td><td>{{ invoice.customer.email if invoice.customer else "—" }}</td></tr>
+      <tr><td class="admin-muted">Transaction</td><td>{{ invoice.transaction_id }}</td></tr>
+      <tr><td class="admin-muted">Subtotal</td><td>{{ invoice.subtotal }}</td></tr>
+      <tr><td class="admin-muted">VAT</td><td>{{ invoice.vat_amount }}</td></tr>
+      <tr><td class="admin-muted">Total</td><td>{{ invoice.total_amount }}</td></tr>
+      <tr><td class="admin-muted">Lifecycle</td><td><span class="badge badge-muted">{{ invoice.status }}</span></td></tr>
+      <tr><td class="admin-muted">PDF Status</td><td><span class="badge {% if invoice.pdf_status == 'ready' %}badge-success{% elif invoice.pdf_status == 'failed' %}badge-danger{% else %}badge-muted{% endif %}">{{ invoice.pdf_status or "not_generated" }}</span></td></tr>
+      <tr><td class="admin-muted">Send Status</td><td><span class="badge {% if invoice.send_status == 'sent' %}badge-success{% elif invoice.send_status == 'failed' %}badge-danger{% else %}badge-muted{% endif %}">{{ invoice.send_status or "not_sent" }}</span></td></tr>
+      <tr><td class="admin-muted">Sent To</td><td>{{ invoice.sent_to_email or "—" }}</td></tr>
+    </tbody></table>
+  </div>
+  <div class="admin-card">
+    <div class="admin-card-title">Next Actions</div>
+    <div style="display:flex; flex-wrap:wrap; gap:8px;">
+      {% if invoice.status == 'draft' %}
+      <form method="post" action="/admin/accounting/invoices/{{ invoice.id }}/issue"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn-admin btn-admin-primary" type="submit">Issue Invoice</button></form>
+      {% endif %}
+      {% if invoice.pdf_status != 'ready' and invoice.status != 'cancelled' %}
+      <form method="post" action="/admin/accounting/invoices/{{ invoice.id }}/generate-pdf"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn-admin" type="submit">Generate PDF</button></form>
+      {% endif %}
+      {% if invoice.pdf_status == 'ready' %}
+      <a class="btn-admin" href="/admin/accounting/invoices/{{ invoice.id }}/download">Download PDF</a>
+      {% endif %}
+      {% if invoice.status in ['issued', 'sent'] and invoice.pdf_status == 'ready' and invoice.send_status in ['not_sent', None] %}
+      <form method="post" action="/admin/accounting/invoices/{{ invoice.id }}/send"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn-admin btn-admin-primary" type="submit">Send Invoice</button></form>
+      {% elif invoice.send_status == 'failed' %}
+      <form method="post" action="/admin/accounting/invoices/{{ invoice.id }}/retry-send"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn-admin btn-admin-primary" type="submit">Retry Send</button></form>
+      {% endif %}
+      {% if invoice.status != 'cancelled' %}
+      <form method="post" action="/admin/accounting/invoices/{{ invoice.id }}/cancel"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn-admin btn-admin-danger" type="submit">Cancel Invoice</button></form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

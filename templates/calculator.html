@@ -1,7 +1,8 @@
 {% extends "base.html" %}
+{% set meta_lang = language if language is defined and language in ["tr", "en"] else (lang if lang is defined and lang in ["tr", "en"] else (request.state.lang if request is defined and request.state is defined and request.state.lang in ["tr", "en"] else "tr")) %}
 
 {% block title %}{{ t("index.calculator_title") }} | Focus Astrology{% endblock %}
-{% block meta_description %}Ücretsiz vedik doğum haritası hesaplama ile lagna, yükselen burç, gezegen konumları ve temel harita göstergelerinizi keşfedin.{% endblock %}
+{% block meta_description %}{{ "Use the free Vedic birth chart calculator to see Lagna, ascendant, planetary placements, and core chart indicators." if meta_lang == "en" else "Ücretsiz vedik doğum haritası hesaplama ile lagna, yükselen burç, gezegen konumları ve temel harita göstergelerinizi keşfedin." }}{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -177,6 +178,7 @@
 {% endblock %}
 
 {% block content %}
+{% set page_lang = language if language is defined and language in ["tr", "en"] else (lang if lang is defined and lang in ["tr", "en"] else (request.state.lang if request is defined and request.state is defined and request.state.lang in ["tr", "en"] else "tr")) %}
 <section class="page-section">
     <div class="container">
         <div class="calculator-page-shell">
@@ -189,15 +191,15 @@
                             <p class="section-text">{{ t("index.calculator_text") }}</p>
                         </div>
                         <div class="calculator-outcome-card">
-                            <div class="section-kicker">Hesaplama sonrası</div>
+                            <div class="section-kicker">{{ "After calculation" if page_lang == "en" else "Hesaplama sonrası" }}</div>
                             <div class="calculator-outcome-grid">
-                                <span>Lagna, yükselen ve temel yerleşimlerinizi görürsünüz.</span>
-                                <span>Haritanızdaki baskın yaşam temaları öne çıkarılır.</span>
-                                <span>Size uygun rapor veya danışmanlık yönlendirmesi sunulur.</span>
-                                <span>Sonuç ücretsiz bir önizleme olarak karar vermenizi kolaylaştırır.</span>
+                                <span>{{ "See your Lagna, ascendant, and core placements." if page_lang == "en" else "Lagna, yükselen ve temel yerleşimlerinizi görürsünüz." }}</span>
+                                <span>{{ "Your dominant life themes are highlighted." if page_lang == "en" else "Haritanızdaki baskın yaşam temaları öne çıkarılır." }}</span>
+                                <span>{{ "Receive a clearer direction toward the right report or consultation." if page_lang == "en" else "Size uygun rapor veya danışmanlık yönlendirmesi sunulur." }}</span>
+                                <span>{{ "The free preview helps you decide the next step with more clarity." if page_lang == "en" else "Sonuç ücretsiz bir önizleme olarak karar vermenizi kolaylaştırır." }}</span>
                             </div>
                         </div>
-                        <form action="/calculate" method="post">
+                        <form action="/calculate" method="post" {% if not enable_free_calculator %}data-launch-disabled="1"{% endif %}>
                             <input type="hidden" name="csrf_token" value="{{ csrf_token or csrf_token_for(request) }}">
                             <input type="hidden" name="report_type" value="premium">
                             <div class="form-fields">
@@ -239,9 +241,16 @@
                                 </div>
                             </div>
                             <div class="cta-row">
+                                {% if enable_free_calculator %}
                                 <button class="btn btn-primary" type="submit">{{ t("index.cta_start") }}</button>
+                                {% else %}
+                                <button class="btn btn-primary disabled-launch" type="submit" disabled aria-disabled="true">{{ "Chart Analysis Coming Soon" if page_lang == "en" else "Harita Analizi Yakında" }}</button>
+                                {% endif %}
                                 <a class="btn btn-secondary" href="/reports">{{ t("common.nav_reports") }}</a>
                             </div>
+                            {% if not enable_free_calculator %}
+                            <p class="launch-inline-note">{{ "The free chart calculation and interpretation flow is temporarily paused until launch preparation is complete." if page_lang == "en" else "Ücretsiz harita hesaplama ve yorum akışı lansman hazırlığı tamamlanana kadar geçici olarak kapalıdır." }}</p>
+                            {% endif %}
                         </form>
                     </div>
                     <div class="calculator-side">
@@ -269,6 +278,12 @@
     }
 
     (() => {
+        const launchLockedForm = document.querySelector('form[data-launch-disabled="1"]');
+        if (launchLockedForm) {
+            launchLockedForm.addEventListener("submit", (event) => {
+                event.preventDefault();
+            });
+        }
         const input = document.getElementById("birth_city");
         const list = document.getElementById("birthplace-suggestions");
         const status = document.getElementById("birthplace-status");

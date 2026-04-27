@@ -1,0 +1,49 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Internal Profile{% endblock %}
+{% block admin_content %}
+<section class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">{{ profile.full_name or "Private profile" }}</h1>
+    <p class="admin-page-sub">{{ profile.birth_date }} {{ profile.birth_time }} · {{ profile.birth_place_label }}</p>
+  </div>
+  <div class="admin-page-actions">
+    <a class="btn-admin" href="/admin/astro-workspace/profiles">Back to Library</a>
+    <a class="btn-admin btn-admin-primary" href="/admin/astro-workspace?profile_id={{ profile.id }}">Regenerate</a>
+  </div>
+</section>
+
+<div class="admin-grid-2">
+  <section class="admin-card">
+    <div class="admin-card-title">Profile</div>
+    <p><strong>Gender:</strong> {{ profile.gender or "-" }}</p>
+    <p><strong>Timezone:</strong> {{ profile.birth_timezone or "-" }}</p>
+    <p><strong>Coordinates:</strong> {{ profile.birth_lat or "-" }}, {{ profile.birth_lng or "-" }}</p>
+    {% if profile.notes %}<p style="margin-top:12px; white-space:pre-wrap;">{{ profile.notes }}</p>{% endif %}
+  </section>
+  <section class="admin-card">
+    <div class="admin-card-title">History</div>
+    <p class="admin-muted">Created {{ profile.created_at.strftime("%Y-%m-%d %H:%M") if profile.created_at else "-" }}</p>
+    <p class="admin-muted">Last generated {{ profile.last_generated_at.strftime("%Y-%m-%d %H:%M") if profile.last_generated_at else "-" }}</p>
+  </section>
+</div>
+
+<div class="admin-table-wrap">
+  <div class="admin-table-header"><div class="admin-table-title">Saved interpretations</div></div>
+  <table class="admin-table">
+    <thead><tr><th>Type</th><th>Language</th><th>Preview</th><th>Created</th><th>PDF</th></tr></thead>
+    <tbody>
+      {% for item in interpretations %}
+      <tr>
+        <td>{{ item.report_type_label }}</td>
+        <td>{{ item.language|upper }}</td>
+        <td>{{ item.preview or "-" }}</td>
+        <td>{{ item.created_at.strftime("%Y-%m-%d %H:%M") if item.created_at else "-" }}</td>
+        <td>{{ "Ready" if item.pdf_path else "-" }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5"><div class="admin-empty-state"><div class="admin-empty-title">No saved interpretations yet</div></div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

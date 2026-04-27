@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Focus Astrology | Randevu Bulunamadı{% endblock %}
+
+{% block meta_description %}Danışmanlık randevunuz ödeme adımıyla eşleştirilemedi. Lütfen bilgilerinizi kontrol edin veya bizimle iletişime geçin.{% endblock %}
+
+{% block content %}
+<section class="page-section">
+  <div class="container">
+    <div class="legal-page">
+      <header class="legal-hero">
+        <div class="section-kicker">Danışmanlık</div>
+        <h1 class="hero-title">Randevu eşleştirilemedi</h1>
+        <p class="section-text">
+          Calendly randevunuzu ödeme adımıyla eşleştiremedik. Bu durum genellikle bağlantı eksik açıldığında veya randevu bilgisinin henüz sisteme ulaşmadığında olur.
+        </p>
+      </header>
+      <div class="glass-card card-pad" style="display:grid; gap:16px;">
+        <p class="muted" style="margin:0;">Lütfen birkaç dakika sonra Calendly yönlendirme bağlantısını tekrar deneyin. Sorun devam ederse bize randevu e-postanızla birlikte ulaşın.</p>
+        <div style="display:flex; flex-wrap:wrap; gap:10px;">
+          <a class="btn btn-primary" href="/contact">İletişim</a>
+          <a class="btn btn-secondary" href="/personal-consultation">Danışmanlık Sayfası</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

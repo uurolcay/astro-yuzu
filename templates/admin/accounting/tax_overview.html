@@ -1,0 +1,24 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Tax Overview{% endblock %}
+{% block admin_content %}
+<div class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Tax Overview</h1>
+    <p class="admin-page-sub">{{ accounting_disclaimer }}</p>
+  </div>
+  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+    <a class="btn-admin" href="/admin/accounting">Dashboard</a>
+    <a class="btn-admin btn-admin-primary" href="/admin/accounting/month-close">Month-End Review</a>
+  </div>
+</div>
+<div class="admin-stats">
+  <div class="admin-stat"><div class="admin-stat-label">Gross Sales</div><div class="admin-stat-value">{{ overview.gross_sales }}</div></div>
+  <div class="admin-stat"><div class="admin-stat-label">Refunded</div><div class="admin-stat-value">{{ overview.refunded_amount }}</div></div>
+  <div class="admin-stat"><div class="admin-stat-label">Commissions</div><div class="admin-stat-value">{{ overview.commission_totals }}</div></div>
+  <div class="admin-stat"><div class="admin-stat-label">Expenses</div><div class="admin-stat-value">{{ overview.expenses }}</div></div>
+  <div class="admin-stat"><div class="admin-stat-label">Profit Base Estimate</div><div class="admin-stat-value">{{ overview.estimated_profit_base }}</div></div>
+  <div class="admin-stat"><div class="admin-stat-label">Estimated VAT</div><div class="admin-stat-value">{{ overview.estimated_vat }}</div></div>
+  <div class="admin-stat"><div class="admin-stat-label">Estimated Tax</div><div class="admin-stat-value">{{ overview.estimated_tax }}</div></div>
+</div>
+<div class="admin-card"><div class="admin-card-title">Important</div><p class="admin-muted">These values are operational estimates. Confirm official VAT, income/corporate tax, and filing obligations with your accountant.</p></div>
+{% endblock %}

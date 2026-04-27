@@ -55,22 +55,26 @@
                     <h2 class="section-title" style="font-size:1.45rem;">Admin Actions</h2>
                     {% if order.service_type == "report" %}
                     <form method="post" action="/admin/orders/{{ order.id }}/transition" class="chip-row" style="margin-top:12px;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <button class="btn btn-secondary" name="action" value="mark_draft_ready" type="submit">Mark Draft Ready</button>
                         <button class="btn btn-secondary" name="action" value="mark_under_review" type="submit">Mark Under Review</button>
                         <button class="btn btn-secondary" name="action" value="mark_ready_to_send" type="submit">Mark Ready to Send</button>
                         <button class="btn btn-secondary" name="action" value="mark_delivered" type="submit">Mark Delivered</button>
                     </form>
                     <form method="post" action="/admin/orders/{{ order.id }}/send-report" style="margin-top:14px;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <button class="btn btn-primary" type="submit">Send Final Report</button>
                         <p class="muted" style="margin-top:8px;">Requires ready_to_send. Delivery is marked only after the email provider accepts the message.</p>
                     </form>
                     {% else %}
                     <form method="post" action="/admin/orders/{{ order.id }}/transition" class="chip-row" style="margin-top:12px;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <button class="btn btn-secondary" name="action" value="mark_confirmed" type="submit">Mark Confirmed</button>
                         <button class="btn btn-secondary" name="action" value="mark_prepared" type="submit">Mark Prepared</button>
                         <button class="btn btn-primary" name="action" value="mark_completed" type="submit">Mark Completed</button>
                     </form>
                     <form method="post" action="/admin/orders/{{ order.id }}/mark-no-show" style="margin-top:14px;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <input type="text" name="no_show_reason" placeholder="No-show note" style="width:100%; margin-bottom:10px;">
                         <button class="btn btn-secondary" type="submit">Mark No-Show</button>
                     </form>
@@ -94,6 +98,7 @@
                 <div class="metric-card">
                     <h2 class="section-title" style="font-size:1.45rem;">Refund / Cancellation</h2>
                     <form method="post" action="/admin/orders/{{ order.id }}/refund" style="display:grid; gap:10px;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <input type="text" name="refund_amount" placeholder="Refund amount, blank for full">
                         <input type="text" name="refund_reason" placeholder="Refund reason">
                         <select name="refund_mode">
@@ -103,6 +108,7 @@
                         <button class="btn btn-secondary" type="submit">Record Refund</button>
                     </form>
                     <form method="post" action="/admin/orders/{{ order.id }}/cancel" style="display:grid; gap:10px; margin-top:16px;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <input type="text" name="cancellation_reason" placeholder="Cancellation reason">
                         <label class="muted"><input type="checkbox" name="admin_override" value="1"> Admin override for late consultation cancellation</label>
                         <button class="btn btn-secondary" type="submit">Cancel Order</button>
@@ -112,6 +118,7 @@
                     <h2 class="section-title" style="font-size:1.45rem;">Payment Reconciliation</h2>
                     <p class="muted">Use when callback/webhook delivery failed but iyzico can still be retrieved server-side.</p>
                     <form method="post" action="/admin/orders/{{ order.id }}/reconcile-payment" style="display:grid; gap:10px;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <input type="text" name="payment_token" placeholder="Iyzico token, blank uses stored token">
                         <input type="text" name="payment_id" placeholder="Payment ID for payment-detail reconciliation">
                         <input type="text" name="conversation_id" placeholder="Conversation ID, blank uses stored conversation">
@@ -126,6 +133,7 @@
             <div class="glass-card card-pad" style="margin-top:24px;">
                 <h2 class="section-title" style="font-size:1.45rem;">Internal Notes</h2>
                 <form method="post" action="/admin/orders/{{ order.id }}/notes">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <textarea name="internal_notes" rows="7" style="width:100%; margin-top:12px;">{{ order.internal_notes or "" }}</textarea>
                     <button class="btn btn-secondary" type="submit" style="margin-top:12px;">Save Internal Notes</button>
                 </form>

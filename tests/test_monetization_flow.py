@@ -1,4 +1,5 @@
-import json
+﻿import json
+import re
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -67,6 +68,105 @@ def sample_interpretation_context():
             "opportunity_windows": [{"title": "Career opening", "time_window": "May 2 - May 28"}],
             "risk_windows": [{"title": "Pressure cluster", "time_window": "Jun 1 - Jun 21"}],
         },
+    }
+
+
+def sample_paid_chart_bundle():
+    birth_context = {
+        "raw_birth_place_input": "Istanbul, Turkey",
+        "normalized_birth_place": "Istanbul, Turkey",
+        "latitude": 41.0082,
+        "longitude": 28.9784,
+        "timezone": "Europe/Istanbul",
+        "geocode_provider": "test-suite",
+        "geocode_confidence": 0.99,
+    }
+    return {
+        "birth_context": birth_context,
+        "natal_data": {
+            "planets": [
+                {"name": "Sun", "sign_idx": 0, "degree": 10.0, "nakshatra": "Ashwini", "abs_longitude": 10.0},
+                {"name": "Moon", "sign_idx": 7, "degree": 21.2, "nakshatra": "Vishakha", "abs_longitude": 201.2},
+                {"name": "Mars", "sign_idx": 8, "degree": 5.0, "nakshatra": "Mula", "abs_longitude": 245.0},
+                {"name": "Mercury", "sign_idx": 5, "degree": 7.0, "nakshatra": "Hasta", "abs_longitude": 157.0},
+                {"name": "Jupiter", "sign_idx": 3, "degree": 28.0, "nakshatra": "Punarvasu", "abs_longitude": 88.0},
+                {"name": "Venus", "sign_idx": 11, "degree": 4.0, "nakshatra": "Purva Bhadrapada", "abs_longitude": 334.0},
+                {"name": "Saturn", "sign_idx": 6, "degree": 2.0, "nakshatra": "Swati", "abs_longitude": 182.0},
+                {"name": "Rahu", "sign_idx": 0, "degree": 25.0, "nakshatra": "Bharani", "abs_longitude": 25.0},
+                {"name": "Ketu", "sign_idx": 6, "degree": 25.0, "nakshatra": "Swati", "abs_longitude": 205.0},
+            ],
+            "ascendant": {"sign_idx": 3, "degree": 4.2, "abs_longitude": 94.2},
+        },
+        "navamsa_data": {
+            "planets": [
+                {"name": "Sun", "sign_idx": 0},
+                {"name": "Moon", "sign_idx": 7},
+                {"name": "Jupiter", "sign_idx": 3},
+                {"name": "Venus", "sign_idx": 11},
+            ]
+        },
+        "dasha_data": [
+            {"planet": "Jupiter", "start": "2025-01-01", "end": "2027-12-31"},
+            {"planet": "Saturn", "start": "2028-01-01", "end": "2030-12-31"},
+        ],
+        "transit_data": [{"planet": "Jupiter", "title": "Transit emphasis"}],
+        "interpretation_context": sample_interpretation_context(),
+        "calculation_config": {
+            "zodiac": "sidereal",
+            "ayanamsa": "lahiri",
+            "node_mode": "true",
+            "house_system": "whole_sign",
+            "engine_version": "test-suite",
+        },
+        "calculation_metadata": {"engine_version": "test-suite"},
+    }
+
+
+def sample_parent_child_paid_order_payload():
+    child_bundle = sample_paid_chart_bundle()
+    parent_bundle = sample_paid_chart_bundle()
+    parent_bundle["natal_data"] = {
+        "planets": [
+            {"name": "Sun", "sign_idx": 4, "degree": 9.1, "nakshatra": "Magha", "abs_longitude": 129.1},
+            {"name": "Moon", "sign_idx": 3, "degree": 3.2, "nakshatra": "Pushya", "abs_longitude": 93.2},
+            {"name": "Mars", "sign_idx": 7, "degree": 26.5, "nakshatra": "Jyeshtha", "abs_longitude": 236.5},
+            {"name": "Mercury", "sign_idx": 5, "degree": 23.0, "nakshatra": "Hasta", "abs_longitude": 173.0},
+            {"name": "Jupiter", "sign_idx": 1, "degree": 14.3, "nakshatra": "Rohini", "abs_longitude": 44.3},
+            {"name": "Venus", "sign_idx": 1, "degree": 17.6, "nakshatra": "Rohini", "abs_longitude": 47.6},
+            {"name": "Saturn", "sign_idx": 9, "degree": 11.9, "nakshatra": "Shravana", "abs_longitude": 281.9},
+            {"name": "Rahu", "sign_idx": 0, "degree": 1.0, "nakshatra": "Ashwini", "abs_longitude": 1.0},
+            {"name": "Ketu", "sign_idx": 6, "degree": 1.0, "nakshatra": "Swati", "abs_longitude": 181.0},
+        ],
+        "ascendant": {"nakshatra": "Rohini", "abs_longitude": 44.1, "degree": 14.1, "sign_idx": 1},
+    }
+    return {
+        "full_name": "Child Example",
+        "email": "family@example.com",
+        "birth_date": "2018-04-01",
+        "birth_time": "08:30",
+        "birth_city": "Istanbul, Turkey",
+        "report_type": "parent_child",
+        "user_lang": "tr",
+        "natal_data": child_bundle["natal_data"],
+        "navamsa_data": child_bundle["navamsa_data"],
+        "dasha_data": child_bundle["dasha_data"],
+        "interpretation_context": child_bundle["interpretation_context"],
+        "parent_profile": {
+            "full_name": "Parent Example",
+            "birth_date": "1986-02-12",
+            "birth_time": "09:15",
+            "birth_city": "Ankara, Turkey",
+            "birth_country": "Turkey",
+        },
+        "child_profile_meta": {
+            "full_name": "Child Example",
+            "birth_date": "2018-04-01",
+            "birth_time": "08:30",
+            "birth_city": "Istanbul, Turkey",
+            "birth_country": "Turkey",
+        },
+        "parent_natal_data": parent_bundle["natal_data"],
+        "parent_dasha_data": parent_bundle["dasha_data"],
     }
 
 
@@ -401,8 +501,8 @@ class MonetizationFlowTests(unittest.TestCase):
         self.assertIn("Enter your email to save your reading", response.text)
         self.assertIn("Save &amp; Continue", response.text)
         self.assertIn("Get Personal Consultation", response.text)
-        self.assertIn("Bu sonuç neyi gösterir, neyi göstermez?", response.text)
-        self.assertIn("Danışmanlık neden farklıdır?", response.text)
+        self.assertIn("Bu sonuÃ§ neyi gÃ¶sterir, neyi gÃ¶stermez?", response.text)
+        self.assertIn("DanÄ±ÅŸmanlÄ±k neden farklÄ±dÄ±r?", response.text)
         self.assertGreaterEqual(response.text.count('href="/personal-consultation"'), 3)
 
     def test_beta_users_see_beta_unlock_cta(self):
@@ -427,24 +527,24 @@ class MonetizationFlowTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Preview", response.text)
         self.assertIn("Purchased", response.text)
-        self.assertIn("Önizlemeyi görüntüle", response.text)
-        self.assertIn("Tam raporu görüntüle", response.text)
+        self.assertIn("Ã–nizlemeyi gÃ¶rÃ¼ntÃ¼le", response.text)
+        self.assertIn("Tam raporu gÃ¶rÃ¼ntÃ¼le", response.text)
 
     def test_reports_page_product_cards_have_differentiated_copy(self):
         _report, user = self._create_report(email="selection@example.com")
         with patch.object(app, "get_request_user", return_value=self._bound_user(user)):
             response = self.client.get("/reports", headers={"accept-language": "tr"})
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Doğum Haritası Karma’sı", response.text)
-        self.assertIn("Yıllık Transit", response.text)
+        self.assertIn("DoÄŸum HaritasÄ± Karmaâ€™sÄ±", response.text)
+        self.assertIn("YÄ±llÄ±k Transit", response.text)
         self.assertIn("Kariyer", response.text)
-        self.assertIn("Ebeveyn-Çocuk", response.text)
-        self.assertIn("Yaşam temalarınızı, karmik örüntülerinizi", response.text)
-        self.assertIn("Önümüzdeki dönemin vurgu alanlarını", response.text)
-        self.assertIn("Mesleki yönünüzü, çalışma biçiminizi", response.text)
-        self.assertIn("Çocuğun doğasını, ebeveyn-çocuk ilişkisindeki akışı", response.text)
+        self.assertIn("Ebeveyn-Ã‡ocuk", response.text)
+        self.assertIn("YaÅŸam temalarÄ±nÄ±zÄ±, karmik Ã¶rÃ¼ntÃ¼lerinizi", response.text)
+        self.assertIn("Ã–nÃ¼mÃ¼zdeki dÃ¶nemin vurgu alanlarÄ±nÄ±", response.text)
+        self.assertIn("Mesleki yÃ¶nÃ¼nÃ¼zÃ¼, Ã§alÄ±ÅŸma biÃ§iminizi", response.text)
+        self.assertIn("Ã‡ocuÄŸun doÄŸasÄ±nÄ±, ebeveyn-Ã§ocuk iliÅŸkisindeki akÄ±ÅŸÄ±", response.text)
         self.assertIn("Bu Raporu Al", response.text)
-        self.assertIn("Danışmanlıkla Derinleştir", response.text)
+        self.assertIn("DanÄ±ÅŸmanlÄ±kla DerinleÅŸtir", response.text)
         self.assertNotIn("Start With Calculator", response.text)
         self.assertIn('class="btn btn-primary" href="/reports/order/birth_chart_karma">Bu Raporu Al', response.text)
         self.assertIn('class="btn btn-primary" href="/reports/order/annual_transit">Bu Raporu Al', response.text)
@@ -457,18 +557,18 @@ class MonetizationFlowTests(unittest.TestCase):
             response = self.client.get("/reports")
         self.assertEqual(response.status_code, 200)
         self.assertIn("Paket mimarisi", response.text)
-        self.assertIn("₺1.900", response.text)
-        self.assertIn("₺1.490", response.text)
-        self.assertIn("₺1.690", response.text)
-        self.assertIn("₺1.790", response.text)
+        self.assertIn("â‚º1.900", response.text)
+        self.assertIn("â‚º1.490", response.text)
+        self.assertIn("â‚º1.690", response.text)
+        self.assertIn("â‚º1.790", response.text)
         self.assertIn("Astrology Deep Dive", response.text)
         self.assertIn("Life Path Bundle", response.text)
         self.assertIn("Full Year Insight Bundle", response.text)
         self.assertIn("Deep Family Insight", response.text)
-        self.assertIn("₺7.900", response.text)
-        self.assertIn("₺3.290", response.text)
-        self.assertIn("₺2.890", response.text)
-        self.assertIn("₺3.390", response.text)
+        self.assertIn("â‚º7.900", response.text)
+        self.assertIn("â‚º3.290", response.text)
+        self.assertIn("â‚º2.890", response.text)
+        self.assertIn("â‚º3.390", response.text)
         self.assertIn("/reports/order/bundle/life_path_bundle", response.text)
 
     def test_bundle_order_submission_records_bundle_metadata(self):
@@ -479,7 +579,7 @@ class MonetizationFlowTests(unittest.TestCase):
             "birth_date": "1990-01-02",
             "birth_time": "08:30",
             "birth_city": "Istanbul, Turkey",
-            "optional_note": "Yaşam yönü ve kariyer",
+            "optional_note": "YaÅŸam yÃ¶nÃ¼ ve kariyer",
         }
         payload["csrf_token"] = csrf_token
         response = self.client.post("/reports/order/bundle/life_path_bundle", data=payload, follow_redirects=False)
@@ -492,7 +592,7 @@ class MonetizationFlowTests(unittest.TestCase):
         self.assertEqual(order.bundle_type, "life_path_bundle")
         self.assertIn("birth_chart_karma", order.included_products_json)
         self.assertIn("career", order.included_products_json)
-        self.assertEqual(order.amount_label, "₺3.290")
+        self.assertEqual(order.amount_label, "â‚º3.290")
 
     def test_reports_page_includes_decision_guidance_block(self):
         _report, user = self._create_report(email="decision@example.com")
@@ -501,8 +601,8 @@ class MonetizationFlowTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('aria-label="Hangi rapor size uygun?"', response.text)
         self.assertIn("Hangi rapor size uygun?", response.text)
-        self.assertIn("Genel yaşam temaları", response.text)
-        self.assertIn("Ebeveyn-çocuk dinamiği", response.text)
+        self.assertIn("Genel yaÅŸam temalarÄ±", response.text)
+        self.assertIn("Ebeveyn-Ã§ocuk dinamiÄŸi", response.text)
         self.assertIn("Birden fazla soru", response.text)
 
     def test_reports_page_references_consultation_without_major_spotlight(self):
@@ -511,17 +611,17 @@ class MonetizationFlowTests(unittest.TestCase):
             response = self.client.get("/reports", headers={"accept-language": "tr"})
         self.assertEqual(response.status_code, 200)
         self.assertIn("/personal-consultation", response.text)
-        self.assertIn("Kişisel Danışmanlık Al", response.text)
-        self.assertIn("Rapor mu, danışmanlık mı?", response.text)
+        self.assertIn("KiÅŸisel DanÄ±ÅŸmanlÄ±k Al", response.text)
+        self.assertIn("Rapor mu, danÄ±ÅŸmanlÄ±k mÄ±?", response.text)
         self.assertNotIn('class="reports-consultation-feature"', response.text)
 
     def test_reports_decision_guidance_stays_short_and_does_not_break_cards(self):
         template = Path("C:\\Users\\uolca\\Documents\\Chatgpt Codex\\astro-yuzu\\templates\\reports.html").read_text(encoding="utf-8")
-        self.assertIn("Doğum Haritası Karma’sı", template)
-        self.assertIn("Yıllık Transit", template)
+        self.assertIn("DoÄŸum HaritasÄ± Karmaâ€™sÄ±", template)
+        self.assertIn("YÄ±llÄ±k Transit", template)
         self.assertIn("Kariyer", template)
-        self.assertIn("Ebeveyn-Çocuk", template)
-        self.assertIn("60 dk birebir danışmanlık", template)
+        self.assertIn("Ebeveyn-Ã‡ocuk", template)
+        self.assertIn("60 dk birebir danÄ±ÅŸmanlÄ±k", template)
         self.assertNotIn("data-reports-i18n", template)
         self.assertIn(".reports-card {", template)
         self.assertIn(".reports-card-actions {", template)
@@ -529,13 +629,13 @@ class MonetizationFlowTests(unittest.TestCase):
         self.assertIn("justify-content:center;", template)
         self.assertIn('href="/reports/parent-child">{{ t("common.cta_report_buy") }}', template)
         self.assertNotIn('class="reports-consultation-feature"', template)
-        self.assertNotIn("Hesaplayıcı ile Başla", template)
+        self.assertNotIn("HesaplayÄ±cÄ± ile BaÅŸla", template)
 
     def test_reports_template_includes_tr_and_en_product_copy_support(self):
         translations_module = Path("C:\\Users\\uolca\\Documents\\Chatgpt Codex\\astro-yuzu\\translations.py").read_text(encoding="utf-8")
-        self.assertIn('"order_cta": "Sipariş Ver"', translations_module)
+        self.assertIn('"order_cta": "SipariÅŸ Ver"', translations_module)
         self.assertIn('"order_cta": "Order Now"', translations_module)
-        self.assertIn('"price_placeholder": "Yakında paylaşılacak"', translations_module)
+        self.assertIn('"price_placeholder": "YakÄ±nda paylaÅŸÄ±lacak"', translations_module)
         self.assertIn('"price_placeholder": "Available soon"', translations_module)
 
     def test_reports_page_renders_turkish_order_cta_without_old_label(self):
@@ -547,7 +647,7 @@ class MonetizationFlowTests(unittest.TestCase):
         self.assertNotIn("Hesaplayıcı ile Başla", response.text)
 
     def test_report_order_form_captures_explicit_report_type(self):
-        response = self.client.get("/reports/order/birth_chart_karma")
+        response = self.client.get("/reports/order/birth_chart_karma", headers={"accept-language": "tr"})
         self.assertEqual(response.status_code, 200)
         self.assertIn("Doğum Haritası Karma’sı", response.text)
         self.assertIn('name="selected_report_type" value="birth_chart_karma"', response.text)
@@ -568,7 +668,7 @@ class MonetizationFlowTests(unittest.TestCase):
             "birth_time": "08:30",
             "birth_city": "Istanbul, Turkey",
             "selected_report_type": "career",
-            "optional_note": "Kariyer yönü",
+            "optional_note": "Kariyer yÃ¶nÃ¼",
         }
         payload["csrf_token"] = csrf_token
         with (
@@ -593,16 +693,16 @@ class MonetizationFlowTests(unittest.TestCase):
             status="awaiting_payment",
             customer_name="Aylin Test",
             customer_email="customer@example.com",
-            amount_label="₺1.690",
+            amount_label="â‚º1.690",
             currency="TRY",
         )
         self.db.add(order)
         self.db.commit()
         response = self.client.get("/checkout/report/report_test_token")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Rapor talebiniz ödeme sonrası inceleme sürecine alınır.", response.text)
-        self.assertIn("yalnızca yönetici incelemesine gönderilir", response.text)
-        self.assertIn("Rapor Ödemesini Başlat", response.text)
+        self.assertIn("Rapor talebiniz Ã¶deme sonrasÄ± inceleme sÃ¼recine alÄ±nÄ±r.", response.text)
+        self.assertIn("yalnÄ±zca yÃ¶netici incelemesine gÃ¶nderilir", response.text)
+        self.assertIn("Rapor Ã–demesini BaÅŸlat", response.text)
         self.assertIn("Full Year Insight Bundle", response.text)
 
     def test_parent_child_order_uses_existing_parent_child_flow(self):
@@ -613,13 +713,13 @@ class MonetizationFlowTests(unittest.TestCase):
     def test_consultation_checkout_page_precedes_booking_handoff(self):
         response = self.client.get("/checkout/consultation")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Randevu seçiminizi ödeme adımıyla kesinleştirin.", response.text)
-        self.assertIn("Önce Calendly üzerinden uygun zamanı seçersiniz.", response.text)
-        self.assertIn("Ödemeyi Başlat", response.text)
+        self.assertIn("Randevu seÃ§iminizi Ã¶deme adÄ±mÄ±yla kesinleÅŸtirin.", response.text)
+        self.assertIn("Ã–nce Calendly Ã¼zerinden uygun zamanÄ± seÃ§ersiniz.", response.text)
+        self.assertIn("Ã–demeyi BaÅŸlat", response.text)
         booking = self.client.get("/personal-consultation/book")
         self.assertEqual(booking.status_code, 200)
         self.assertIn('href="/checkout/consultation"', booking.text)
-        self.assertIn("Randevu seçimi tek başına satın alma tamamlandığı anlamına gelmez.", booking.text)
+        self.assertIn("Randevu seÃ§imi tek baÅŸÄ±na satÄ±n alma tamamlandÄ±ÄŸÄ± anlamÄ±na gelmez.", booking.text)
 
     def test_calendly_invitee_created_creates_consultation_order(self):
         payload = self._calendly_payload()
@@ -753,7 +853,7 @@ class MonetizationFlowTests(unittest.TestCase):
     def test_admin_dashboard_route_renders_kpis(self):
         admin = self._create_admin_user()
         self._service_order(status="paid", paid=True, customer_email="dashboard-paid@example.com")
-        with patch.object(app, "get_request_user", return_value=self._bound_user(admin)):
+        with patch.object(app, "get_request_user", side_effect=self._request_admin_user(admin.email)):
             response = self.client.get("/admin/dashboard")
         self.assertEqual(response.status_code, 200)
         self.assertIn("Business Dashboard", response.text)
@@ -1032,8 +1132,9 @@ class MonetizationFlowTests(unittest.TestCase):
     def test_admin_send_report_rejects_unpaid_order(self):
         admin = self._create_admin_user()
         order = self._service_order(status="ready_to_send", paid=False)
+        csrf_token = self._admin_csrf_token(admin, path=f"/admin/orders/{order.id}")
         with patch.object(app, "get_request_user", return_value=self._bound_user(admin)):
-            response = self.client.post(f"/admin/orders/{order.id}/send-report", follow_redirects=False)
+            response = self.client.post(f"/admin/orders/{order.id}/send-report", data={"csrf_token": csrf_token}, follow_redirects=False)
         self.assertEqual(response.status_code, 303)
         self.assertIn("error=", response.headers["location"])
         self.db.refresh(order)
@@ -1042,11 +1143,12 @@ class MonetizationFlowTests(unittest.TestCase):
     def test_admin_send_report_queues_delivery_tasks(self):
         admin = self._create_admin_user()
         order = self._service_order(status="ready_to_send", paid=True, ai_draft_text="Final human-reviewed report.")
+        csrf_token = self._admin_csrf_token(admin, path=f"/admin/orders/{order.id}")
         with (
             patch.object(app, "get_request_user", return_value=self._bound_user(admin)),
             patch.object(app, "enqueue_final_report_delivery_tasks", return_value={"pdf": "task_pdf", "delivery": "task_delivery"}) as enqueue_mock,
         ):
-            response = self.client.post(f"/admin/orders/{order.id}/send-report", follow_redirects=False)
+            response = self.client.post(f"/admin/orders/{order.id}/send-report", data={"csrf_token": csrf_token}, follow_redirects=False)
         self.assertEqual(response.status_code, 303)
         self.assertIn("notice=report_queued", response.headers["location"])
         self.db.refresh(order)
@@ -1058,11 +1160,12 @@ class MonetizationFlowTests(unittest.TestCase):
     def test_admin_duplicate_send_report_is_blocked(self):
         admin = self._create_admin_user()
         order = self._service_order(status="delivered", paid=True, delivered=True)
+        csrf_token = self._admin_csrf_token(admin, path=f"/admin/orders/{order.id}")
         with (
             patch.object(app, "get_request_user", return_value=self._bound_user(admin)),
             patch.object(app, "safe_send_template_email") as email_mock,
         ):
-            response = self.client.post(f"/admin/orders/{order.id}/send-report", follow_redirects=False)
+            response = self.client.post(f"/admin/orders/{order.id}/send-report", data={"csrf_token": csrf_token}, follow_redirects=False)
         self.assertEqual(response.status_code, 303)
         self.assertIn("error=", response.headers["location"])
         email_mock.assert_not_called()
@@ -1105,8 +1208,9 @@ class MonetizationFlowTests(unittest.TestCase):
     def test_admin_report_approve_updates_status_to_ready_to_send(self):
         admin = self._create_admin_user()
         order = self._service_order(service_type="report", status="under_review", paid=True)
+        csrf_token = self._admin_csrf_token(admin, path=f"/admin/reports/{order.id}")
         with patch.object(app, "get_request_user", return_value=self._bound_user(admin)):
-            response = self.client.post(f"/admin/reports/{order.id}/approve", follow_redirects=False)
+            response = self.client.post(f"/admin/reports/{order.id}/approve", data={"csrf_token": csrf_token}, follow_redirects=False)
 
         self.assertEqual(response.status_code, 303)
         self.db.refresh(order)
@@ -1116,11 +1220,12 @@ class MonetizationFlowTests(unittest.TestCase):
     def test_admin_report_send_uses_existing_delivery_queue(self):
         admin = self._create_admin_user()
         order = self._service_order(service_type="report", status="ready_to_send", paid=True)
+        csrf_token = self._admin_csrf_token(admin, path=f"/admin/reports/{order.id}")
         with (
             patch.object(app, "get_request_user", return_value=self._bound_user(admin)),
             patch.object(app, "enqueue_final_report_delivery_tasks", return_value={"pdf": "task_pdf", "delivery": "queued_after_pdf_success"}) as enqueue_mock,
         ):
-            response = self.client.post(f"/admin/reports/{order.id}/send", follow_redirects=False)
+            response = self.client.post(f"/admin/reports/{order.id}/send", data={"csrf_token": csrf_token}, follow_redirects=False)
 
         self.assertEqual(response.status_code, 303)
         self.assertIn("notice=report_queued", response.headers["location"])
@@ -1129,12 +1234,13 @@ class MonetizationFlowTests(unittest.TestCase):
     def test_admin_report_regenerate_queues_existing_ai_task(self):
         admin = self._create_admin_user()
         order = self._service_order(service_type="report", status="draft_ready", paid=True)
+        csrf_token = self._admin_csrf_token(admin, path=f"/admin/reports/{order.id}")
         with (
             patch.object(app, "get_request_user", return_value=self._bound_user(admin)),
             patch("report_tasks.generate_ai_draft_task.delay") as delay_mock,
         ):
             delay_mock.return_value.id = "regen-task"
-            response = self.client.post(f"/admin/reports/{order.id}/regenerate", follow_redirects=False)
+            response = self.client.post(f"/admin/reports/{order.id}/regenerate", data={"csrf_token": csrf_token}, follow_redirects=False)
 
         self.assertEqual(response.status_code, 303)
         self.db.refresh(order)
@@ -1253,12 +1359,12 @@ class MonetizationFlowTests(unittest.TestCase):
             paid=True,
             customer_email="not-consult@example.com",
         )
-        with patch.object(app, "get_request_user", return_value=self._bound_user(admin)):
+        with patch.object(app, "get_request_user", side_effect=self._request_admin_user(admin.email)):
             response = self.client.get("/admin/consultations")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("monitor-consult@example.com", response.text)
-        self.assertIn("Yes", response.text)
+        self.assertTrue("Yes" in response.text or "Ã–dendi" in response.text or "Ãƒâ€“dendi" in response.text)
         self.assertNotIn("not-consult@example.com", response.text)
         self.assertIn(f"/admin/orders/{consultation.id}", response.text)
 
@@ -1266,10 +1372,11 @@ class MonetizationFlowTests(unittest.TestCase):
         admin = self._create_admin_user()
         unique_slug = f"premium-timing-note-{int(app.time.time() * 1000000)}"
         unique_title = f"Premium Timing Note {unique_slug}"
-        with patch.object(app, "get_request_user", return_value=self._bound_user(admin)):
+        csrf_token = self._admin_csrf_token(admin, path="/admin/content/new")
+        with patch.object(app, "get_request_user", side_effect=self._request_admin_user(admin.email)):
             create_response = self.client.post(
                 "/admin/content/new",
-                data={"title": unique_title, "slug": unique_slug, "content": "Draft body", "status": "draft"},
+                data={"title": unique_title, "slug": unique_slug, "content": "Draft body", "status": "draft", "csrf_token": csrf_token},
                 follow_redirects=False,
             )
         self.assertEqual(create_response.status_code, 303)
@@ -1277,11 +1384,12 @@ class MonetizationFlowTests(unittest.TestCase):
         self.assertIsNotNone(article)
         self.assertFalse(article.is_published)
 
-        with patch.object(app, "get_request_user", return_value=self._bound_user(admin)):
+        with patch.object(app, "get_request_user", side_effect=self._request_admin_user(admin.email)):
             list_response = self.client.get("/admin/content")
+            edit_csrf = self._admin_csrf_token(admin, path=f"/admin/content/{article.id}/edit")
             edit_response = self.client.post(
                 f"/admin/content/{article.id}/edit",
-                data={"title": "Premium Timing Note Updated", "slug": unique_slug, "content": "Published body", "status": "published"},
+                data={"title": "Premium Timing Note Updated", "slug": unique_slug, "content": "Published body", "status": "published", "csrf_token": edit_csrf},
                 follow_redirects=False,
             )
         self.assertEqual(list_response.status_code, 200)
@@ -1315,10 +1423,11 @@ class MonetizationFlowTests(unittest.TestCase):
     def test_admin_internal_notes_can_be_saved(self):
         admin = self._create_admin_user()
         order = self._service_order(status="paid", paid=True)
-        with patch.object(app, "get_request_user", return_value=self._bound_user(admin)):
+        csrf_token = self._admin_csrf_token(admin, path=f"/admin/orders/{order.id}")
+        with patch.object(app, "get_request_user", side_effect=self._request_admin_user(admin.email)):
             response = self.client.post(
                 f"/admin/orders/{order.id}/notes",
-                data={"internal_notes": "Review tone before final delivery."},
+                data={"internal_notes": "Review tone before final delivery.", "csrf_token": csrf_token},
                 follow_redirects=False,
             )
         self.assertEqual(response.status_code, 303)
@@ -1330,10 +1439,11 @@ class MonetizationFlowTests(unittest.TestCase):
     def test_admin_invalid_status_transition_is_rejected(self):
         admin = self._create_admin_user()
         order = self._service_order(status="paid", paid=True)
-        with patch.object(app, "get_request_user", return_value=self._bound_user(admin)):
+        csrf_token = self._admin_csrf_token(admin, path=f"/admin/orders/{order.id}")
+        with patch.object(app, "get_request_user", side_effect=self._request_admin_user(admin.email)):
             response = self.client.post(
                 f"/admin/orders/{order.id}/transition",
-                data={"action": "mark_ready_to_send"},
+                data={"action": "mark_ready_to_send", "csrf_token": csrf_token},
                 follow_redirects=False,
             )
         self.assertEqual(response.status_code, 303)
@@ -1344,14 +1454,15 @@ class MonetizationFlowTests(unittest.TestCase):
     def test_admin_refund_flow_records_audited_refund(self):
         admin = self._create_admin_user()
         order = self._service_order(status="paid", paid=True)
+        csrf_token = self._admin_csrf_token(admin, path=f"/admin/orders/{order.id}")
         with (
-            patch.object(app, "get_request_user", return_value=self._bound_user(admin)),
+            patch.object(app, "get_request_user", side_effect=self._request_admin_user(admin.email)),
             patch.object(app, "refund_service_order_payment", return_value={"status": "refunded", "refund_reference": "rf_1"}) as refund_mock,
             patch.object(app, "safe_send_template_email", return_value={"status": "sent", "email_log_id": 52}),
         ):
             response = self.client.post(
                 f"/admin/orders/{order.id}/refund",
-                data={"refund_amount": "1690.00", "refund_reason": "Customer request", "refund_mode": "provider"},
+                data={"refund_amount": "1690.00", "refund_reason": "Customer request", "refund_mode": "provider", "csrf_token": csrf_token},
                 follow_redirects=False,
             )
         self.assertEqual(response.status_code, 303)
@@ -1370,13 +1481,14 @@ class MonetizationFlowTests(unittest.TestCase):
     def test_admin_refund_failure_does_not_mark_refunded(self):
         admin = self._create_admin_user()
         order = self._service_order(status="paid", paid=True)
+        csrf_token = self._admin_csrf_token(admin, path=f"/admin/orders/{order.id}")
         with (
-            patch.object(app, "get_request_user", return_value=self._bound_user(admin)),
+            patch.object(app, "get_request_user", side_effect=self._request_admin_user(admin.email)),
             patch.object(app, "refund_service_order_payment", side_effect=app.payments.PaymentVerificationError("provider rejected")),
         ):
             response = self.client.post(
                 f"/admin/orders/{order.id}/refund",
-                data={"refund_amount": "1690.00", "refund_reason": "Customer request", "refund_mode": "provider"},
+                data={"refund_amount": "1690.00", "refund_reason": "Customer request", "refund_mode": "provider", "csrf_token": csrf_token},
                 follow_redirects=False,
             )
         self.assertEqual(response.status_code, 303)
@@ -1389,14 +1501,16 @@ class MonetizationFlowTests(unittest.TestCase):
     def test_admin_double_refund_is_blocked(self):
         admin = self._create_admin_user()
         order = self._service_order(status="refunded", paid=True)
+        order = self.db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.id == order.id).first()
         order.refund_status = "refunded"
         order.refunded_at = app.datetime.utcnow()
         self.db.commit()
+        csrf_token = self._admin_csrf_token(admin, path=f"/admin/orders/{order.id}")
         with (
-            patch.object(app, "get_request_user", return_value=self._bound_user(admin)),
+            patch.object(app, "get_request_user", side_effect=self._request_admin_user(admin.email)),
             patch.object(app, "refund_service_order_payment") as refund_mock,
         ):
-            response = self.client.post(f"/admin/orders/{order.id}/refund", data={"refund_mode": "provider"}, follow_redirects=False)
+            response = self.client.post(f"/admin/orders/{order.id}/refund", data={"refund_mode": "provider", "csrf_token": csrf_token}, follow_redirects=False)
         self.assertEqual(response.status_code, 303)
         self.assertIn("error=", response.headers["location"])
         refund_mock.assert_not_called()
@@ -1407,19 +1521,20 @@ class MonetizationFlowTests(unittest.TestCase):
         late_order.scheduled_start = app.datetime.utcnow() + app.timedelta(hours=3)
         late_order.scheduled_end = late_order.scheduled_start + app.timedelta(hours=1)
         self.db.commit()
-        with patch.object(app, "get_request_user", return_value=self._bound_user(admin)):
-            blocked = self.client.post(f"/admin/orders/{late_order.id}/cancel", data={"cancellation_reason": "Late request"}, follow_redirects=False)
+        csrf_token = self._admin_csrf_token(admin, path=f"/admin/orders/{late_order.id}")
+        with patch.object(app, "get_request_user", side_effect=self._request_admin_user(admin.email)):
+            blocked = self.client.post(f"/admin/orders/{late_order.id}/cancel", data={"cancellation_reason": "Late request", "csrf_token": csrf_token}, follow_redirects=False)
         self.assertEqual(blocked.status_code, 303)
         self.assertIn("error=", blocked.headers["location"])
         self.db.refresh(late_order)
         self.assertEqual(late_order.status, "paid")
         with (
-            patch.object(app, "get_request_user", return_value=self._bound_user(admin)),
+            patch.object(app, "get_request_user", side_effect=self._request_admin_user(admin.email)),
             patch.object(app, "safe_send_template_email", return_value={"status": "sent", "email_log_id": 53}),
         ):
             allowed = self.client.post(
                 f"/admin/orders/{late_order.id}/cancel",
-                data={"cancellation_reason": "Admin approved exception", "admin_override": "1"},
+                data={"cancellation_reason": "Admin approved exception", "admin_override": "1", "csrf_token": csrf_token},
                 follow_redirects=False,
             )
         self.assertEqual(allowed.status_code, 303)
@@ -1430,8 +1545,9 @@ class MonetizationFlowTests(unittest.TestCase):
     def test_admin_marks_consultation_no_show(self):
         admin = self._create_admin_user()
         order = self._service_order(service_type="consultation", product_type="consultation_60_min", status="confirmed", paid=True)
-        with patch.object(app, "get_request_user", return_value=self._bound_user(admin)):
-            response = self.client.post(f"/admin/orders/{order.id}/mark-no-show", data={"no_show_reason": "Client did not attend"}, follow_redirects=False)
+        csrf_token = self._admin_csrf_token(admin, path=f"/admin/orders/{order.id}")
+        with patch.object(app, "get_request_user", side_effect=self._request_admin_user(admin.email)):
+            response = self.client.post(f"/admin/orders/{order.id}/mark-no-show", data={"no_show_reason": "Client did not attend", "csrf_token": csrf_token}, follow_redirects=False)
         self.assertEqual(response.status_code, 303)
         self.db.refresh(order)
         self.assertEqual(order.status, "no_show")
@@ -1443,6 +1559,7 @@ class MonetizationFlowTests(unittest.TestCase):
         order.provider_token = "reconcile-token"
         order.provider_conversation_id = order.public_token
         self.db.commit()
+        csrf_token = self._admin_csrf_token(admin, path=f"/admin/orders/{order.id}")
 
         class _ReconcileProvider:
             provider_name = "iyzico"
@@ -1462,11 +1579,11 @@ class MonetizationFlowTests(unittest.TestCase):
                 return payload
 
         with (
-            patch.object(app, "get_request_user", return_value=self._bound_user(admin)),
+            patch.object(app, "get_request_user", side_effect=self._request_admin_user(admin.email)),
             patch.object(app.payments, "get_payment_provider", return_value=_ReconcileProvider()),
             patch.object(app, "run_post_payment_triggers", return_value={"status": "ok"}) as triggers,
         ):
-            response = self.client.post(f"/admin/orders/{order.id}/reconcile-payment", data={"payment_token": "reconcile-token"}, follow_redirects=False)
+            response = self.client.post(f"/admin/orders/{order.id}/reconcile-payment", data={"payment_token": "reconcile-token", "csrf_token": csrf_token}, follow_redirects=False)
         self.assertEqual(response.status_code, 303)
         self.assertIn("notice=reconciled", response.headers["location"])
         self.db.refresh(order)
@@ -1480,6 +1597,7 @@ class MonetizationFlowTests(unittest.TestCase):
         order = self._service_order(status="awaiting_payment", paid=False)
         order.provider_conversation_id = order.public_token
         self.db.commit()
+        csrf_token = self._admin_csrf_token(admin, path=f"/admin/orders/{order.id}")
 
         class _DetailProvider:
             provider_name = "iyzico"
@@ -1498,11 +1616,11 @@ class MonetizationFlowTests(unittest.TestCase):
                 }
 
         with (
-            patch.object(app, "get_request_user", return_value=self._bound_user(admin)),
+            patch.object(app, "get_request_user", side_effect=self._request_admin_user(admin.email)),
             patch.object(app.payments, "get_payment_provider", return_value=_DetailProvider()),
             patch.object(app, "run_post_payment_triggers", return_value={"status": "ok"}),
         ):
-            response = self.client.post(f"/admin/orders/{order.id}/reconcile-payment", data={"payment_token": "", "payment_id": "pay_detail_1"}, follow_redirects=False)
+            response = self.client.post(f"/admin/orders/{order.id}/reconcile-payment", data={"payment_token": "", "payment_id": "pay_detail_1", "csrf_token": csrf_token}, follow_redirects=False)
         self.assertEqual(response.status_code, 303)
         self.db.refresh(order)
         self.assertEqual(order.status, "paid")
@@ -1574,6 +1692,135 @@ class MonetizationFlowTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("client-review@example.com", response.text)
         self.assertIn("draft_ready", response.text)
+
+    def test_paid_report_draft_payload_includes_astro_signal_context_when_birth_data_exists(self):
+        order = self._service_order(status="paid", paid=True, ai_draft_text="")
+
+        with (
+            patch.object(app, "_build_birth_context", return_value=sample_paid_chart_bundle()["birth_context"]) as birth_context_mock,
+            patch.object(app, "_calculate_chart_bundle_from_birth_context", return_value=sample_paid_chart_bundle()) as chart_bundle_mock,
+        ):
+            payload = app._build_report_order_payload(app._order_data_from_service_order(order), app._service_order_product(order))
+
+        birth_context_mock.assert_called_once()
+        chart_bundle_mock.assert_called_once()
+        self.assertEqual(payload["report_order_type"], "career")
+        self.assertEqual(payload["language"], "tr")
+        self.assertIn("natal_data", payload)
+        self.assertIn("astro_signal_context", payload)
+        self.assertIn("nakshatra_signals", payload["astro_signal_context"])
+        self.assertIn("yoga_signals", payload["astro_signal_context"])
+        self.assertIn("dasha_activation_signals", payload["astro_signal_context"])
+        self.assertIn("dasha_signal_bundle", payload["astro_signal_context"])
+        self.assertIn("atmakaraka_signals", payload["astro_signal_context"])
+
+    def test_paid_report_payload_reuses_existing_chart_payload_without_recalculation(self):
+        chart_bundle = sample_paid_chart_bundle()
+        order = db_mod.ServiceOrder(
+            order_token="report_payload_reuse_test",
+            public_token="report_payload_reuse_test",
+            service_type="report",
+            product_type="career",
+            status="paid",
+            customer_name="Aylin Test",
+            customer_email="payload-reuse@example.com",
+            birth_date="1990-01-02",
+            birth_time="08:30",
+            birth_place="Istanbul, Turkey",
+            optional_note="Internal fulfillment test.",
+            amount=app.Decimal("1690.00"),
+            amount_label="TRY 1690.00",
+            currency="TRY",
+            paid_at=app.datetime.utcnow(),
+            provider_name="iyzico",
+            provider_payment_id="pay_payload_reuse_test",
+            payload_json=json.dumps(
+                {
+                    "full_name": "Aylin Test",
+                    "email": "payload-reuse@example.com",
+                    "birth_date": "1990-01-02",
+                    "birth_time": "08:30",
+                    "birth_city": "Istanbul, Turkey",
+                    "report_type": "career",
+                    "user_lang": "en",
+                    "natal_data": chart_bundle["natal_data"],
+                    "navamsa_data": chart_bundle["navamsa_data"],
+                    "dasha_data": chart_bundle["dasha_data"],
+                    "interpretation_context": chart_bundle["interpretation_context"],
+                },
+                ensure_ascii=False,
+            ),
+        )
+        self.db.add(order)
+        self.db.commit()
+        self.db.refresh(order)
+        with (
+            patch.object(app, "_build_birth_context") as birth_context_mock,
+            patch.object(app, "_calculate_chart_bundle_from_birth_context") as chart_bundle_mock,
+        ):
+            payload = app._build_report_order_payload(app._order_data_from_service_order(order), app._service_order_product(order))
+
+        birth_context_mock.assert_not_called()
+        chart_bundle_mock.assert_not_called()
+        self.assertEqual(payload["language"], "en")
+        self.assertIn("astro_signal_context", payload)
+
+    def test_paid_report_parent_child_payload_builds_dual_signal_context(self):
+        order_payload = sample_parent_child_paid_order_payload()
+        order = db_mod.ServiceOrder(
+            order_token="parent_child_payload_test",
+            public_token="parent_child_payload_test",
+            service_type="report",
+            product_type="parent_child",
+            status="paid",
+            customer_name="Child Example",
+            customer_email="family@example.com",
+            birth_date="2018-04-01",
+            birth_time="08:30",
+            birth_place="Istanbul, Turkey",
+            optional_note="Internal fulfillment test.",
+            amount=app.Decimal("1790.00"),
+            amount_label="TRY 1790.00",
+            currency="TRY",
+            paid_at=app.datetime.utcnow(),
+            provider_name="iyzico",
+            provider_payment_id="pay_parent_child_payload_test",
+            payload_json=json.dumps(order_payload, ensure_ascii=False),
+        )
+        self.db.add(order)
+        self.db.commit()
+        self.db.refresh(order)
+
+        payload = app._build_report_order_payload(app._order_data_from_service_order(order), app._service_order_product(order))
+
+        self.assertEqual(payload["report_order_type"], "parent_child")
+        self.assertIn("parent_astro_signal_context", payload)
+        self.assertIn("child_astro_signal_context", payload)
+        self.assertIn("astro_signal_context", payload)
+        self.assertIn("parent_profile_signals", payload["astro_signal_context"])
+        self.assertIn("child_profile_signals", payload["astro_signal_context"])
+
+    def test_paid_report_draft_missing_chart_data_does_not_crash(self):
+        order = self._service_order(status="paid", paid=True, ai_draft_text="")
+        order.birth_date = ""
+        order.birth_place = ""
+        order.payload_json = json.dumps({"full_name": "Aylin Test", "email": order.customer_email}, ensure_ascii=False)
+        self.db.commit()
+        captured = {}
+
+        def capture_payload(payload):
+            captured["payload"] = payload
+            return "Generated review draft.", "generated"
+
+        with patch.object(app, "_generate_report_order_draft", side_effect=capture_payload):
+            result = app.generate_ai_draft_for_order(self.db, order)
+
+        self.assertEqual(result["status"], "generated")
+        self.db.refresh(order)
+        self.assertEqual(order.status, "draft_ready")
+        self.assertNotIn("astro_signal_context", captured["payload"])
+        confidence_notes = (captured["payload"].get("interpretation_context") or {}).get("confidence_notes") or []
+        self.assertIn("Chart context unavailable; interpretation generated without signal enrichment.", confidence_notes)
 
     def test_disabled_internal_review_helper_does_not_send_or_mark_delivered(self):
         order = self._service_order(status="draft_ready", paid=True, ai_draft_text="Reviewed draft.", customer_email="client-pdf-review@example.com")
@@ -1727,7 +1974,7 @@ class MonetizationFlowTests(unittest.TestCase):
             service_type="consultation",
             product_type="consultation_60_min",
             status="booking_pending_payment",
-            amount_label="₺4.900",
+            amount_label="â‚º4.900",
             currency="TRY",
         )
         with patch.dict(
@@ -1995,11 +2242,23 @@ class MonetizationFlowTests(unittest.TestCase):
         self.assertEqual(fresh_order.status, "booking_pending_payment")
 
     def _create_admin_user(self, email="admin@example.com"):
+        existing = self.db.query(db_mod.AppUser).filter(db_mod.AppUser.email == email).first()
+        if existing:
+            existing.is_admin = True
+            existing.is_active = True
+            self.db.commit()
+            self.db.refresh(existing)
+            return existing
         user = self._create_user(email)
         user.is_admin = True
         self.db.commit()
         self.db.refresh(user)
         return user
+
+    def _request_admin_user(self, email):
+        def _loader(request, db):
+            return db.query(db_mod.AppUser).filter(db_mod.AppUser.email == email).first()
+        return _loader
 
     def _calendly_event_uri(self):
         return "https://api.calendly.com/scheduled_events/event_123"
@@ -2187,6 +2446,25 @@ class MonetizationFlowTests(unittest.TestCase):
         user_id = identity[0] if identity else user.__dict__.get("id")
         return self.db.get(db_mod.AppUser, user_id) or self.db.merge(user)
 
+    def _admin_csrf_token(self, admin, path="/admin/content/new"):
+        admin_email = admin if isinstance(admin, str) else getattr(admin, "email", None)
+        candidate_paths = [path]
+        if path != "/admin/content/new":
+            candidate_paths.append("/admin/content/new")
+        response = None
+        for candidate_path in candidate_paths:
+            with patch.object(app, "get_request_user", side_effect=self._request_admin_user(admin_email)):
+                response = self.client.get(candidate_path)
+            if response.status_code != 200:
+                continue
+            match = re.search(r'name=["\']csrf_token["\'][^>]*value=["\']([^"\']+)["\']', response.text)
+            if not match:
+                match = re.search(r'value=["\']([^"\']+)["\'][^>]*name=["\']csrf_token["\']', response.text)
+            if match:
+                return match.group(1)
+        raise AssertionError(response.text[:500] if response is not None else "No admin CSRF response")
+
 
 if __name__ == "__main__":
     unittest.main()
+

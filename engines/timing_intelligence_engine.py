@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from collections import Counter
 from datetime import date, datetime, timedelta
@@ -32,6 +32,12 @@ TRANSFORMATION_THEMES = {
     "identity_reinvention",
     "release_and_closure",
 }
+# Outer planets (Uranus, Neptune, Pluto) are included here as background/
+# transpersonal weight contributors. They are NOT calculated in natal_data
+# by default (engines_natal.py only computes the 7 classical planets + nodes).
+# These weights apply only when outer planet events appear in scored transit
+# data passed in from external sources. Missing natal Uranus/Neptune/Pluto
+# does not reduce scoring confidence — it is expected behavior.
 BACKGROUND_PLANET_WEIGHTS = {
     "Jupiter": 16,
     "Saturn": 22,

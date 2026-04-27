@@ -1,0 +1,121 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Documents & Archive{% endblock %}
+{% block admin_content %}
+<style>
+  .archive-tabs { display:flex; gap:8px; flex-wrap:wrap; }
+  .archive-summary { display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:12px; }
+  .archive-actions { display:flex; gap:6px; flex-wrap:wrap; }
+  @media (max-width:1180px) { .archive-summary { grid-template-columns:repeat(3, minmax(0, 1fr)); } }
+  @media (max-width:760px) { .archive-summary { grid-template-columns:1fr; } }
+</style>
+
+<div class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Documents & Archive</h1>
+    <p class="admin-page-sub">Unified accounting file visibility. Internal operational archive only.</p>
+  </div>
+  <div class="admin-page-actions">
+    <a class="btn-admin" href="/admin/accounting">Dashboard</a>
+    <a class="btn-admin" href="/admin/accounting/invoices">Invoices</a>
+    <a class="btn-admin" href="/admin/accounting/month-close">Month-End Review</a>
+  </div>
+</div>
+
+<div class="archive-summary">
+  <div class="admin-stat"><div class="admin-stat-label">Total Documents</div><div class="admin-stat-value">{{ summary.total_documents }}</div></div>
+  <div class="admin-stat"><div class="admin-stat-label">Invoice PDFs</div><div class="admin-stat-value">{{ summary.invoice_pdfs }}</div></div>
+  <div class="admin-stat"><div class="admin-stat-label">Monthly Exports</div><div class="admin-stat-value">{{ summary.monthly_exports }}</div></div>
+  <div class="admin-stat"><div class="admin-stat-label">Expense Receipts</div><div class="admin-stat-value">{{ summary.expense_receipts }}</div></div>
+  <div class="admin-stat {% if summary.missing_files > 0 %}finance-kpi-warning{% endif %}"><div class="admin-stat-label">Missing Files</div><div class="admin-stat-value">{{ summary.missing_files }}</div></div>
+  <div class="admin-stat {% if summary.failed_files > 0 %}finance-kpi-danger{% endif %}"><div class="admin-stat-label">Failed Files</div><div class="admin-stat-value">{{ summary.failed_files }}</div></div>
+</div>
+
+<div class="archive-tabs admin-tabs">
+  <a class="btn-admin {% if not document_type and not status and not expense_only and not month_close_only %}btn-admin-primary{% endif %}" href="/admin/accounting/documents">All Documents</a>
+  <a class="btn-admin {% if document_type == 'invoice_pdf' %}btn-admin-primary{% endif %}" href="/admin/accounting/documents?document_type=invoice_pdf">Invoice Files</a>
+  <a class="btn-admin {% if month_close_only %}btn-admin-primary{% endif %}" href="/admin/accounting/documents?month_close_only=true">Monthly Exports</a>
+  <a class="btn-admin {% if expense_only %}btn-admin-primary{% endif %}" href="/admin/accounting/documents?expense_only=true">Expense Documents</a>
+  <a class="btn-admin {% if status == 'missing' %}btn-admin-primary{% endif %}" href="/admin/accounting/documents?status=missing">Missing / Failed</a>
+</div>
+
+<form class="admin-filter-bar" method="get">
+  <input type="text" name="q" value="{{ q or '' }}" placeholder="Customer, invoice, transaction, filename..." style="min-width:260px;">
+  <input type="date" name="start_date" value="{{ start_date or '' }}">
+  <input type="date" name="end_date" value="{{ end_date or '' }}">
+  <input type="number" name="year" value="{{ year or '' }}" placeholder="Year" min="2020" max="2100" style="width:100px;">
+  <select name="month">
+    <option value="">Month</option>
+    {% for m in range(1, 13) %}
+    <option value="{{ m }}" {% if month == m %}selected{% endif %}>{{ "%02d"|format(m) }}</option>
+    {% endfor %}
+  </select>
+  <select name="document_type">
+    <option value="">All types</option>
+    <option value="invoice_pdf" {% if document_type == 'invoice_pdf' %}selected{% endif %}>Invoice PDF</option>
+    <option value="monthly_zip" {% if document_type == 'monthly_zip' %}selected{% endif %}>Monthly ZIP</option>
+    <option value="expense_receipt" {% if document_type == 'expense_receipt' %}selected{% endif %}>Expense Receipt</option>
+    <option value="accounting_document" {% if document_type == 'accounting_document' %}selected{% endif %}>Accounting Document</option>
+  </select>
+  <select name="status">
+    <option value="">All statuses</option>
+    <option value="ready" {% if status == 'ready' %}selected{% endif %}>Ready</option>
+    <option value="missing" {% if status == 'missing' %}selected{% endif %}>Missing</option>
+    <option value="failed" {% if status == 'failed' %}selected{% endif %}>Failed</option>
+    <option value="generating" {% if status == 'generating' %}selected{% endif %}>Generating</option>
+  </select>
+  <button class="btn-admin btn-admin-primary" type="submit">Filter</button>
+  <a class="btn-admin" href="/admin/accounting/documents">Reset</a>
+</form>
+
+<div class="admin-table-wrap">
+  <div class="admin-table-header">
+    <span class="admin-table-title">{{ documents|length }} archive item(s)</span>
+    <span style="font-size:.8rem; color:var(--muted);">File status checks use current filesystem availability.</span>
+  </div>
+  <table class="admin-table">
+    <thead><tr>
+      <th>Type</th><th>Title / File</th><th>Month</th><th>Customer</th><th>Related</th><th>Created</th><th>Status</th><th>Format</th><th>Actions</th>
+    </tr></thead>
+    <tbody>
+      {% for doc in documents %}
+      <tr>
+        <td><span class="badge badge-muted">{{ doc.document_type }}</span></td>
+        <td>
+          <div>{{ doc.title }}</div>
+          {% if doc.path %}<div style="font-size:.74rem; color:var(--muted); font-family:monospace;">{{ doc.path }}</div>{% endif %}
+          {% if doc.error %}<div style="font-size:.74rem; color:var(--danger);">{{ doc.error }}</div>{% endif %}
+        </td>
+        <td>{{ doc.related_month or "—" }}</td>
+        <td style="font-size:.82rem;">{{ doc.customer or "—" }}</td>
+        <td style="font-size:.8rem; color:var(--muted);">
+          {% if doc.invoice_number %}Invoice {{ doc.invoice_number }}{% elif doc.invoice_id %}Invoice #{{ doc.invoice_id }}
+          {% elif doc.transaction_id %}Transaction #{{ doc.transaction_id }}
+          {% elif doc.expense_id %}Expense #{{ doc.expense_id }}
+          {% elif doc.tax_period_id %}Month Review #{{ doc.tax_period_id }}
+          {% else %}—{% endif %}
+        </td>
+        <td style="font-size:.78rem; color:var(--muted); white-space:nowrap;">{{ doc.created_at or "—" }}</td>
+        <td>
+          {% if doc.file_status == "ready" %}<span class="badge badge-success">Ready</span>
+          {% elif doc.file_status == "failed" %}<span class="badge badge-danger">Failed</span>
+          {% elif doc.file_status == "generating" %}<span class="badge badge-info">Generating</span>
+          {% else %}<span class="badge badge-warning">Missing</span>{% endif %}
+        </td>
+        <td><span class="badge badge-muted">{{ doc.file_format }}</span></td>
+        <td>
+          <div class="archive-actions admin-table-actions">
+            {% if doc.download_url %}<a class="btn-admin btn-admin-primary" href="{{ doc.download_url }}">Download</a>{% endif %}
+            {% if doc.detail_url %}<a class="btn-admin" href="{{ doc.detail_url }}">Open Detail</a>{% endif %}
+            {% if doc.document_type == "invoice_pdf" and doc.invoice_id and doc.file_status != "ready" %}
+            <form method="post" action="/admin/accounting/invoices/{{ doc.invoice_id }}/generate-pdf"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn-admin" type="submit">Generate PDF</button></form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9"><div class="admin-empty-state"><div class="admin-empty-title">No accounting documents found</div><div class="admin-empty-text">Try clearing filters, choosing another month, or opening invoice/expense workflows to generate documents.</div></div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

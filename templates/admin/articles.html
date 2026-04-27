@@ -1,0 +1,47 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Makaleler{% endblock %}
+
+{% block admin_content %}
+<div class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Makaleler</h1>
+    <p class="admin-page-sub">{{ total }} makale</p>
+  </div>
+  <a class="btn-admin btn-admin-primary" href="/admin/articles/new">+ Yeni Makale</a>
+</div>
+
+<div class="admin-table-wrap">
+  <table class="admin-table">
+    <thead><tr>
+      <th>Başlık</th><th>Kategori</th><th>Okuma Süresi</th><th>Yayın Tarihi</th><th>Durum</th><th></th>
+    </tr></thead>
+    <tbody>
+      {% for a in articles %}
+      <tr>
+        <td>
+          <div>{{ a.title }}</div>
+          <div style="font-size:.75rem; color:var(--muted);">/articles/{{ a.slug }}</div>
+        </td>
+        <td><span class="badge badge-muted">{{ a.category or '—' }}</span></td>
+        <td style="font-size:.8rem; color:var(--muted);">{{ a.reading_time or '—' }} dk</td>
+        <td style="font-size:.8rem; color:var(--muted);">{{ a.published_at or '—' }}</td>
+        <td>
+          {% if a.is_published %}<span class="badge badge-success">Yayında</span>
+          {% else %}<span class="badge badge-warning">Taslak</span>{% endif %}
+        </td>
+        <td style="display:flex; gap:6px;">
+          <a class="btn-admin" href="/admin/articles/{{ a.id }}/edit">Düzenle</a>
+          <a class="btn-admin" href="/articles/{{ a.slug }}" target="_blank">Gör</a>
+          <form method="post" action="/admin/articles/{{ a.id }}/delete" onsubmit="return confirm('Makaleyi silmek istediğinizden emin misiniz?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="btn-admin btn-admin-danger" type="submit">Sil</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" style="color:var(--muted); text-align:center; padding:32px;">Makale bulunamadı</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

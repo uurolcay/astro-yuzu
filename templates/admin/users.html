@@ -1,35 +1,65 @@
-{% extends "base.html" %}
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Users{% endblock %}
 
-{% block title %}Jyotish | Admin Users{% endblock %}
+{% block admin_content %}
+<div class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Users</h1>
+    <p class="admin-page-sub">{{ total }} users. Search, filter, and open customer/admin records from one consistent workspace.</p>
+  </div>
+  <div class="admin-page-actions">
+    <a class="btn-admin" href="/admin">Dashboard</a>
+  </div>
+</div>
 
-{% block content %}
-<section class="page-section">
-    <div class="container">
-        <div class="glass-card card-pad">
-            <div class="row-between">
-                <h1 class="hero-title" style="font-size:2.3rem;">Users</h1>
-                <a class="chip" href="/admin">Admin Home</a>
-            </div>
-            <form method="get" style="display:grid; grid-template-columns:2fr 1fr 1fr auto; gap:12px; margin-top:20px;">
-                <input type="text" name="q" placeholder="Search email" value="{{ filters.q }}">
-                <input type="text" name="plan" placeholder="Plan" value="{{ filters.plan }}">
-                <input type="text" name="status" placeholder="Status" value="{{ filters.status }}">
-                <button class="btn btn-secondary" type="submit">Filter</button>
-            </form>
-            <div style="display:grid; gap:14px; margin-top:24px;">
-                {% for user in users %}
-                <div class="metric-card">
-                    <div class="row-between">
-                        <div>
-                            <div class="metric-value"><a href="/admin/users/{{ user.id }}">#{{ user.id }} • {{ user.email }}</a></div>
-                            <div class="muted">{{ user.name }} • {{ user.plan_code|title }} • {{ user.subscription_status }} • Reports: {{ user.report_count }}</div>
-                        </div>
-                        <div class="muted">{{ user.created_at }}</div>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
+<form class="admin-filter-bar" method="get">
+  <input type="text" name="q" value="{{ q or '' }}" placeholder="Search name or email..." style="min-width:220px;">
+  <select name="plan">
+    <option value="">All plans</option>
+    <option value="free" {% if plan == 'free' %}selected{% endif %}>Free</option>
+    <option value="basic" {% if plan == 'basic' %}selected{% endif %}>Basic</option>
+    <option value="premium" {% if plan == 'premium' %}selected{% endif %}>Premium</option>
+    <option value="elite" {% if plan == 'elite' %}selected{% endif %}>Elite</option>
+  </select>
+  <button class="btn-admin btn-admin-primary" type="submit">Filter</button>
+  {% if q or plan %}<a class="btn-admin" href="/admin/users">Clear</a>{% endif %}
+</form>
+
+<div class="admin-table-wrap">
+  <div class="admin-table-header">
+    <span class="admin-table-title">User Directory</span>
+    <span class="admin-muted" style="font-size:.8rem;">{{ users|length }} shown</span>
+  </div>
+  <table class="admin-table">
+    <thead><tr>
+      <th>User</th><th>Plan</th><th>Reports</th><th>Created</th><th>Role</th><th>Actions</th>
+    </tr></thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td>
+          <div>{{ u.name or '—' }}</div>
+          <div style="font-size:.75rem; color:var(--muted);">{{ u.email }}</div>
+        </td>
+        <td><span class="badge badge-muted">{{ u.plan_code or 'free' }}</span></td>
+        <td>{{ u.report_count or 0 }}</td>
+        <td style="color:var(--muted); font-size:.8rem;">{{ u.created_at }}</td>
+        <td>{% if u.is_admin %}<span class="badge badge-info">Admin</span>{% else %}<span class="badge badge-muted">User</span>{% endif %}</td>
+        <td><div class="admin-table-actions"><a class="btn-admin" href="/admin/users/{{ u.id }}">Edit</a></div></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6"><div class="admin-empty-state"><div class="admin-empty-title">No users found</div><div class="admin-empty-text">Try clearing filters or searching by a broader email/name fragment.</div></div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if total > 50 %}
+  <div class="admin-action-bar" style="border-radius:0; border-left:0; border-right:0; border-bottom:0;">
+    <span class="admin-muted">{{ total }} total users, {{ users|length }} shown</span>
+    <div class="admin-page-actions">
+      {% if page > 1 %}<a class="btn-admin" href="?page={{ page-1 }}&q={{ q or '' }}&plan={{ plan or '' }}">Previous</a>{% endif %}
+      {% if users|length == 50 %}<a class="btn-admin" href="?page={{ page+1 }}&q={{ q or '' }}&plan={{ plan or '' }}">Next</a>{% endif %}
     </div>
-</section>
+  </div>
+  {% endif %}
+</div>
 {% endblock %}

@@ -206,6 +206,9 @@ def _natal_activation_score(
             total += 10
         elif hit_name in SOCIAL_PLANETS:
             total += 7
+        # Outer planets (Uranus, Neptune, Pluto) are not in natal_data by default.
+        # If a transit event involves them, natal activation score will be 0,
+        # which is correct — they act as background/transpersonal indicators only.
         elif hit_name in OUTER_PLANETS:
             total += 5
         else:
@@ -403,6 +406,7 @@ def _event_planet(event: dict[str, Any]) -> str:
     return ""
 
 
+# _sort_date is duplicated intentionally pending a shared utils module.
 def _sort_date(value: Any) -> datetime:
     if isinstance(value, datetime):
         return value.replace(tzinfo=None)

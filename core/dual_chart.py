@@ -74,7 +74,7 @@ def build_parent_child_interpretation(parent_bundle, child_bundle):
     }
 
 
-def build_parent_child_ai_summary(interpretation_context):
+def build_parent_child_ai_summary(interpretation_context, language="en"):
     child_profile = interpretation_context.get("child_profile") or {}
     relationship_dynamics = interpretation_context.get("relationship_dynamics") or {}
     school_guidance = interpretation_context.get("school_guidance") or {}
@@ -82,31 +82,32 @@ def build_parent_child_ai_summary(interpretation_context):
     growth_guidance = interpretation_context.get("growth_guidance") or {}
     watch_areas = interpretation_context.get("watch_areas") or []
     timing_notes = interpretation_context.get("timing_notes") or []
+    is_tr = str(language or "en").lower() == "tr"
     lines = [
-        "### Child Core Nature",
+        "### Çocuğun Temel Doğası" if is_tr else "### Child Core Nature",
         child_profile.get("temperament") or "",
         child_profile.get("emotional_needs") or "",
         "",
-        "### Parent-Child Dynamic",
+        "### Ebeveyn-Çocuk Dinamiği" if is_tr else "### Parent-Child Dynamic",
         relationship_dynamics.get("emotional_compatibility") or "",
         relationship_dynamics.get("communication_style_difference") or "",
         "",
-        "### School & Growth Guidance",
+        "### Okul ve Gelişim Rehberliği" if is_tr else "### School & Growth Guidance",
         school_guidance.get("learning_style") or "",
         school_guidance.get("attention_tendency") or "",
         school_guidance.get("expression_pattern") or "",
         "",
-        "### Recommended Approach",
+        "### Önerilen Yaklaşım" if is_tr else "### Recommended Approach",
         parenting_guidance.get("best_support") or "",
         parenting_guidance.get("communication_guidance") or "",
     ]
     if watch_areas:
-        lines.extend(["", "### Watch Areas"])
+        lines.extend(["", "### Dikkat Alanları" if is_tr else "### Watch Areas"])
         lines.extend(f"- {item}" for item in watch_areas[:4])
     if growth_guidance:
         lines.extend([
             "",
-            "### Growth Path",
+            "### Gelişim Yolu" if is_tr else "### Growth Path",
             growth_guidance.get("thrive_support") or "",
             growth_guidance.get("relationship_strengthening") or "",
             growth_guidance.get("next_growth_theme") or "",
@@ -114,7 +115,7 @@ def build_parent_child_ai_summary(interpretation_context):
     if timing_notes:
         lines.extend([
             "",
-            "### Timing Notes",
+            "### Zamanlama Notları" if is_tr else "### Timing Notes",
             f"- {timing_notes[0].get('title')}: {timing_notes[0].get('note')} ({timing_notes[0].get('time_window')})",
         ])
     return "\n".join(item for item in lines if item is not None)

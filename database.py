@@ -125,6 +125,7 @@ class ServiceOrder(Base):
     birth_date = Column(String, nullable=True)
     birth_time = Column(String, nullable=True)
     birth_place = Column(String, nullable=True)
+    user_lang = Column(String, nullable=True, default="tr", index=True)
     optional_note = Column(Text, nullable=True)
     amount = Column(Numeric(10, 2), nullable=True)
     amount_label = Column(String, nullable=True)
@@ -160,6 +161,7 @@ class ServiceOrder(Base):
     customer_confirmation_sent_at = Column(DateTime, nullable=True)
     last_task_error = Column(Text, nullable=True)
     internal_notes = Column(Text, nullable=True)
+    admin_note = Column(Text, nullable=True)
     review_started_at = Column(DateTime, nullable=True)
     ready_to_send_at = Column(DateTime, nullable=True)
     delivered_at = Column(DateTime, nullable=True)
@@ -176,6 +178,297 @@ class ServiceOrder(Base):
     cancelled_at = Column(DateTime, nullable=True)
     no_show_at = Column(DateTime, nullable=True)
     reconciliation_notes = Column(Text, nullable=True)
+    is_gift = Column(Boolean, default=False, nullable=False)
+    gift_recipient_name = Column(String, nullable=True)
+    gift_recipient_email = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class InternalProfile(Base):
+    __tablename__ = "internal_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    full_name = Column(String, nullable=True, index=True)
+    gender = Column(String, nullable=True)
+    birth_date = Column(String, nullable=False, index=True)
+    birth_time = Column(String, nullable=False)
+    birth_place_label = Column(String, nullable=False)
+    birth_country = Column(String, nullable=True)
+    birth_city = Column(String, nullable=True)
+    birth_lat = Column(Float, nullable=True)
+    birth_lng = Column(Float, nullable=True)
+    birth_timezone = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
+    is_favorite = Column(Boolean, default=False, nullable=False, index=True)
+    created_by_user_id = Column(Integer, ForeignKey("app_users.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    last_generated_at = Column(DateTime, nullable=True)
+
+    created_by = relationship("AppUser")
+    interpretations = relationship("InternalInterpretation", foreign_keys="InternalInterpretation.profile_id", back_populates="profile", cascade="all, delete-orphan")
+
+
+class InternalInterpretation(Base):
+    __tablename__ = "internal_interpretations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("internal_profiles.id"), nullable=True, index=True)
+    secondary_profile_id = Column(Integer, ForeignKey("internal_profiles.id"), nullable=True, index=True)
+    report_type = Column(String, nullable=False, index=True)
+    input_payload_json = Column(Text, nullable=False)
+    render_context_json = Column(Text, nullable=True)
+    interpretation_text = Column(Text, nullable=False)
+    pdf_path = Column(String, nullable=True)
+    generation_mode = Column(String, default="quick", nullable=False, index=True)
+    created_by_user_id = Column(Integer, ForeignKey("app_users.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    profile = relationship("InternalProfile", foreign_keys=[profile_id], back_populates="interpretations")
+    secondary_profile = relationship("InternalProfile", foreign_keys=[secondary_profile_id])
+    created_by = relationship("AppUser")
+
+
+class InternalChatSession(Base):
+    __tablename__ = "internal_chat_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("internal_profiles.id"), nullable=True, index=True)
+    secondary_profile_id = Column(Integer, ForeignKey("internal_profiles.id"), nullable=True, index=True)
+    title = Column(String, nullable=True)
+    report_type = Column(String, nullable=True, index=True)
+    mode = Column(String, default="grounded", nullable=False, index=True)
+    created_by_user_id = Column(Integer, ForeignKey("app_users.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    profile = relationship("InternalProfile", foreign_keys=[profile_id])
+    secondary_profile = relationship("InternalProfile", foreign_keys=[secondary_profile_id])
+    created_by = relationship("AppUser")
+    messages = relationship("InternalChatMessage", back_populates="session", cascade="all, delete-orphan")
+
+
+class InternalChatMessage(Base):
+    __tablename__ = "internal_chat_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("internal_chat_sessions.id"), nullable=False, index=True)
+    role = Column(String, nullable=False, index=True)
+    message_text = Column(Text, nullable=False)
+    tool_payload_json = Column(Text, nullable=True)
+    context_snapshot_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    session = relationship("InternalChatSession", back_populates="messages")
+
+
+class AiBehaviorRuleSet(Base):
+    __tablename__ = "ai_behavior_rule_sets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    created_by_user_id = Column(Integer, ForeignKey("app_users.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    created_by = relationship("AppUser")
+    rules = relationship("AiBehaviorRule", back_populates="rule_set", cascade="all, delete-orphan")
+
+
+class AiBehaviorRule(Base):
+    __tablename__ = "ai_behavior_rules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    rule_set_id = Column(Integer, ForeignKey("ai_behavior_rule_sets.id"), nullable=False, index=True)
+    category = Column(String, nullable=False, index=True)
+    section = Column(String, nullable=True, index=True)
+    code = Column(String, nullable=False, unique=True, index=True)
+    title = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    is_enabled = Column(Boolean, default=True, nullable=False, index=True)
+    is_editable = Column(Boolean, default=True, nullable=False)
+    sort_order = Column(Integer, default=0, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    rule_set = relationship("AiBehaviorRuleSet", back_populates="rules")
+
+
+class Customer(Base):
+    __tablename__ = "accounting_customers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=True)
+    email = Column(String, nullable=False, unique=True, index=True)
+    tax_id = Column(String, nullable=True)
+    customer_type = Column(String, nullable=True, default="individual")
+    identity_number = Column(String, nullable=True)
+    company_name = Column(String, nullable=True)
+    tax_office = Column(String, nullable=True)
+    billing_address = Column(Text, nullable=True)
+    city = Column(String, nullable=True)
+    country = Column(String, nullable=True, default="TR")
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class Transaction(Base):
+    __tablename__ = "accounting_transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    service_order_id = Column(Integer, ForeignKey("service_orders.id"), unique=True, nullable=True, index=True)
+    customer_id = Column(Integer, ForeignKey("accounting_customers.id"), nullable=True, index=True)
+    provider_payment_id = Column(String, nullable=True, index=True)
+    product_type = Column(String, nullable=True, index=True)
+    service_type = Column(String, nullable=True, index=True)
+    currency = Column(String, nullable=True, default="TRY")
+    gross_amount = Column(Numeric(12, 2), default=0, nullable=False)
+    commission_amount = Column(Numeric(12, 2), default=0, nullable=False)
+    refunded_amount = Column(Numeric(12, 2), default=0, nullable=False)
+    net_amount = Column(Numeric(12, 2), default=0, nullable=False)
+    payment_status = Column(String, default="paid", nullable=False, index=True)
+    invoice_status = Column(String, default="uninvoiced", nullable=False, index=True)
+    paid_at = Column(DateTime, nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    order = relationship("ServiceOrder")
+    customer = relationship("Customer")
+
+
+class Invoice(Base):
+    __tablename__ = "accounting_invoices"
+
+    id = Column(Integer, primary_key=True, index=True)
+    invoice_number = Column(String, unique=True, nullable=True, index=True)
+    transaction_id = Column(Integer, ForeignKey("accounting_transactions.id"), nullable=True, index=True)
+    customer_id = Column(Integer, ForeignKey("accounting_customers.id"), nullable=True, index=True)
+    status = Column(String, default="draft", nullable=False, index=True)
+    issue_date = Column(DateTime, nullable=True, index=True)
+    due_date = Column(DateTime, nullable=True)
+    subtotal = Column(Numeric(12, 2), default=0, nullable=False)
+    vat_amount = Column(Numeric(12, 2), default=0, nullable=False)
+    total_amount = Column(Numeric(12, 2), default=0, nullable=False)
+    currency = Column(String, nullable=True, default="TRY")
+    notes = Column(Text, nullable=True)
+    pdf_path = Column(String, nullable=True)
+    pdf_status = Column(String, default="not_generated", nullable=False, index=True)
+    pdf_generated_at = Column(DateTime, nullable=True)
+    pdf_error_message = Column(Text, nullable=True)
+    send_status = Column(String, default="not_sent", nullable=False, index=True)
+    sent_at = Column(DateTime, nullable=True)
+    sent_to_email = Column(String, nullable=True)
+    send_error_message = Column(Text, nullable=True)
+    last_send_attempt_at = Column(DateTime, nullable=True)
+    cancelled_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    transaction = relationship("Transaction")
+    customer = relationship("Customer")
+    items = relationship("InvoiceItem", back_populates="invoice", cascade="all, delete-orphan")
+
+
+class InvoiceItem(Base):
+    __tablename__ = "accounting_invoice_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    invoice_id = Column(Integer, ForeignKey("accounting_invoices.id"), nullable=False, index=True)
+    description = Column(String, nullable=False)
+    quantity = Column(Numeric(10, 2), default=1, nullable=False)
+    unit_price = Column(Numeric(12, 2), default=0, nullable=False)
+    vat_rate = Column(Numeric(5, 2), default=20, nullable=False)
+    line_total = Column(Numeric(12, 2), default=0, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    invoice = relationship("Invoice", back_populates="items")
+
+
+class Expense(Base):
+    __tablename__ = "accounting_expenses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    expense_date = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    supplier = Column(String, nullable=True, index=True)
+    category = Column(String, nullable=True, index=True)
+    description = Column(Text, nullable=True)
+    amount = Column(Numeric(12, 2), default=0, nullable=False)
+    vat_amount = Column(Numeric(12, 2), default=0, nullable=False)
+    currency = Column(String, nullable=True, default="TRY")
+    receipt_path = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class TaxRate(Base):
+    __tablename__ = "accounting_tax_rates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, unique=True, index=True)
+    rate_percent = Column(Numeric(5, 2), default=0, nullable=False)
+    tax_type = Column(String, nullable=False, index=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class TaxPeriod(Base):
+    __tablename__ = "accounting_tax_periods"
+
+    id = Column(Integer, primary_key=True, index=True)
+    period_key = Column(String, nullable=False, unique=True, index=True)
+    start_date = Column(DateTime, nullable=False)
+    end_date = Column(DateTime, nullable=False)
+    estimated_vat = Column(Numeric(12, 2), default=0, nullable=False)
+    estimated_tax = Column(Numeric(12, 2), default=0, nullable=False)
+    status = Column(String, default="open", nullable=False, index=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    reviewed_by = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
+    snapshot_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class Payout(Base):
+    __tablename__ = "accounting_payouts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    provider = Column(String, nullable=True, index=True)
+    payout_reference = Column(String, nullable=True, unique=True, index=True)
+    amount = Column(Numeric(12, 2), default=0, nullable=False)
+    currency = Column(String, nullable=True, default="TRY")
+    payout_date = Column(DateTime, nullable=True, index=True)
+    status = Column(String, default="pending", nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class AccountingDocument(Base):
+    __tablename__ = "accounting_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    document_type = Column(String, nullable=False, index=True)
+    related_type = Column(String, nullable=True, index=True)
+    related_id = Column(Integer, nullable=True, index=True)
+    file_path = Column(String, nullable=False)
+    file_name = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class Reminder(Base):
+    __tablename__ = "accounting_reminders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    reminder_type = Column(String, nullable=False, index=True)
+    title = Column(String, nullable=False)
+    detail = Column(Text, nullable=True)
+    due_date = Column(DateTime, nullable=True, index=True)
+    status = Column(String, default="open", nullable=False, index=True)
+    related_type = Column(String, nullable=True, index=True)
+    related_id = Column(Integer, nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -191,6 +484,53 @@ class AdminActionLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
 
+class ActivityLog(Base):
+    __tablename__ = "activity_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_email = Column(String, nullable=True, index=True)
+    action = Column(String, nullable=False, index=True)
+    target_type = Column(String, nullable=True, index=True)
+    target_id = Column(String, nullable=True, index=True)
+    detail = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
+class FAQItem(Base):
+    __tablename__ = "faq_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    category = Column(String, nullable=False, index=True)
+    question_tr = Column(Text, nullable=False)
+    question_en = Column(Text, nullable=False)
+    answer_tr = Column(Text, nullable=False)
+    answer_en = Column(Text, nullable=False)
+    sort_order = Column(Integer, default=0, nullable=False, index=True)
+    is_published = Column(Boolean, default=True, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class SiteSetting(Base):
+    __tablename__ = "site_settings"
+
+    key = Column(String, primary_key=True, index=True)
+    value = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class ContactMessage(Base):
+    __tablename__ = "contact_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=True)
+    email = Column(String, nullable=True, index=True)
+    subject = Column(String, nullable=True)
+    message = Column(Text, nullable=True)
+    is_read = Column(Boolean, default=False, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
 class Article(Base):
     __tablename__ = "articles"
 
@@ -200,7 +540,10 @@ class Article(Base):
     category = Column(String, nullable=False, index=True)
     excerpt = Column(Text, nullable=True)
     body = Column(Text, nullable=False)
+    content = Column(Text, nullable=True)
     cover_image = Column(String, nullable=True)
+    meta_title = Column(String, nullable=True)
+    meta_description = Column(Text, nullable=True)
     is_published = Column(Boolean, default=True, nullable=False, index=True)
     published_at = Column(DateTime, nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -326,8 +669,27 @@ def _add_missing_columns():
         for table_name in inspector.get_table_names()
     }
     with engine.begin() as connection:
+        def add_col(table, column, ddl):
+            if table in table_columns and column not in table_columns[table]:
+                connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
+
         if "app_users" in table_columns and "is_admin" not in table_columns["app_users"]:
             connection.execute(text("ALTER TABLE app_users ADD COLUMN is_admin BOOLEAN DEFAULT 0 NOT NULL"))
+        add_col("accounting_customers", "customer_type", "VARCHAR")
+        add_col("accounting_customers", "identity_number", "VARCHAR")
+        add_col("accounting_customers", "tax_office", "VARCHAR")
+        add_col("accounting_customers", "city", "VARCHAR")
+        add_col("accounting_invoices", "pdf_status", "VARCHAR DEFAULT 'not_generated'")
+        add_col("accounting_invoices", "pdf_generated_at", "DATETIME")
+        add_col("accounting_invoices", "pdf_error_message", "TEXT")
+        add_col("accounting_invoices", "send_status", "VARCHAR DEFAULT 'not_sent'")
+        add_col("accounting_invoices", "sent_to_email", "VARCHAR")
+        add_col("accounting_invoices", "send_error_message", "TEXT")
+        add_col("accounting_invoices", "last_send_attempt_at", "DATETIME")
+        add_col("accounting_tax_periods", "reviewed_at", "DATETIME")
+        add_col("accounting_tax_periods", "reviewed_by", "VARCHAR")
+        add_col("accounting_tax_periods", "notes", "TEXT")
+        add_col("accounting_tax_periods", "snapshot_json", "TEXT")
         if "users" in table_columns:
             if "raw_birth_place_input" not in table_columns["users"]:
                 connection.execute(text("ALTER TABLE users ADD COLUMN raw_birth_place_input VARCHAR"))
@@ -411,6 +773,7 @@ def _add_missing_columns():
                 "customer_confirmation_sent_at": "DATETIME",
                 "last_task_error": "TEXT",
                 "internal_notes": "TEXT",
+                "admin_note": "TEXT",
                 "review_started_at": "DATETIME",
                 "ready_to_send_at": "DATETIME",
                 "delivered_at": "DATETIME",
@@ -427,10 +790,92 @@ def _add_missing_columns():
                 "cancelled_at": "DATETIME",
                 "no_show_at": "DATETIME",
                 "reconciliation_notes": "TEXT",
+                "is_gift": "BOOLEAN DEFAULT 0 NOT NULL",
+                "gift_recipient_name": "VARCHAR",
+                "gift_recipient_email": "VARCHAR",
+                "user_lang": "VARCHAR DEFAULT 'tr'",
             }
             for column_name, column_type in service_order_columns.items():
                 if column_name not in table_columns["service_orders"]:
                     connection.execute(text(f"ALTER TABLE service_orders ADD COLUMN {column_name} {column_type}"))
+        if "internal_profiles" in table_columns:
+            internal_profile_columns = {
+                "gender": "VARCHAR",
+                "birth_country": "VARCHAR",
+                "birth_city": "VARCHAR",
+                "birth_lat": "FLOAT",
+                "birth_lng": "FLOAT",
+                "birth_timezone": "VARCHAR",
+                "notes": "TEXT",
+                "is_favorite": "BOOLEAN DEFAULT 0 NOT NULL",
+                "created_by_user_id": "INTEGER",
+                "last_generated_at": "DATETIME",
+            }
+            for column_name, column_type in internal_profile_columns.items():
+                if column_name not in table_columns["internal_profiles"]:
+                    connection.execute(text(f"ALTER TABLE internal_profiles ADD COLUMN {column_name} {column_type}"))
+        if "internal_interpretations" in table_columns:
+            internal_interpretation_columns = {
+                "secondary_profile_id": "INTEGER",
+                "render_context_json": "TEXT",
+                "pdf_path": "VARCHAR",
+                "generation_mode": "VARCHAR DEFAULT 'quick' NOT NULL",
+                "created_by_user_id": "INTEGER",
+            }
+            for column_name, column_type in internal_interpretation_columns.items():
+                if column_name not in table_columns["internal_interpretations"]:
+                    connection.execute(text(f"ALTER TABLE internal_interpretations ADD COLUMN {column_name} {column_type}"))
+        if "internal_chat_sessions" in table_columns:
+            internal_chat_session_columns = {
+                "profile_id": "INTEGER",
+                "secondary_profile_id": "INTEGER",
+                "title": "VARCHAR",
+                "report_type": "VARCHAR",
+                "mode": "VARCHAR DEFAULT 'grounded' NOT NULL",
+                "created_by_user_id": "INTEGER",
+            }
+            for column_name, column_type in internal_chat_session_columns.items():
+                if column_name not in table_columns["internal_chat_sessions"]:
+                    connection.execute(text(f"ALTER TABLE internal_chat_sessions ADD COLUMN {column_name} {column_type}"))
+        if "internal_chat_messages" in table_columns:
+            internal_chat_message_columns = {
+                "tool_payload_json": "TEXT",
+                "context_snapshot_json": "TEXT",
+            }
+            for column_name, column_type in internal_chat_message_columns.items():
+                if column_name not in table_columns["internal_chat_messages"]:
+                    connection.execute(text(f"ALTER TABLE internal_chat_messages ADD COLUMN {column_name} {column_type}"))
+        if "ai_behavior_rule_sets" in table_columns:
+            ai_behavior_rule_set_columns = {
+                "description": "TEXT",
+                "is_active": "BOOLEAN DEFAULT 1 NOT NULL",
+                "created_by_user_id": "INTEGER",
+            }
+            for column_name, column_type in ai_behavior_rule_set_columns.items():
+                if column_name not in table_columns["ai_behavior_rule_sets"]:
+                    connection.execute(text(f"ALTER TABLE ai_behavior_rule_sets ADD COLUMN {column_name} {column_type}"))
+        if "ai_behavior_rules" in table_columns:
+            ai_behavior_rule_columns = {
+                "section": "VARCHAR",
+                "is_enabled": "BOOLEAN DEFAULT 1 NOT NULL",
+                "is_editable": "BOOLEAN DEFAULT 1 NOT NULL",
+                "sort_order": "INTEGER DEFAULT 0 NOT NULL",
+            }
+            for column_name, column_type in ai_behavior_rule_columns.items():
+                if column_name not in table_columns["ai_behavior_rules"]:
+                    connection.execute(text(f"ALTER TABLE ai_behavior_rules ADD COLUMN {column_name} {column_type}"))
+        if "articles" in table_columns:
+            if "meta_title" not in table_columns["articles"]:
+                connection.execute(text("ALTER TABLE articles ADD COLUMN meta_title VARCHAR"))
+            if "meta_description" not in table_columns["articles"]:
+                connection.execute(text("ALTER TABLE articles ADD COLUMN meta_description TEXT"))
+            if "is_published" not in table_columns["articles"]:
+                connection.execute(text("ALTER TABLE articles ADD COLUMN is_published INTEGER DEFAULT 0"))
+            if "content" not in table_columns["articles"]:
+                connection.execute(text("ALTER TABLE articles ADD COLUMN content TEXT"))
+        if "report_orders" in table_columns:
+            if "admin_note" not in table_columns["report_orders"]:
+                connection.execute(text("ALTER TABLE report_orders ADD COLUMN admin_note TEXT"))
         if "email_captures" in table_columns:
             if "source" not in table_columns["email_captures"]:
                 connection.execute(text("ALTER TABLE email_captures ADD COLUMN source VARCHAR DEFAULT 'result_page'"))

@@ -50,9 +50,15 @@ RULER_MAP = {
     "Leo": ["Sun"],
     "Virgo": ["Mercury"],
     "Libra": ["Venus"],
-    "Scorpio": ["Mars", "Pluto"],
+    "Scorpio": ["Mars"],
     "Sagittarius": ["Jupiter"],
     "Capricorn": ["Saturn"],
+    "Aquarius": ["Saturn"],
+    "Pisces": ["Jupiter"],
+}
+
+MODERN_CO_RULER_MAP = {
+    "Scorpio": ["Mars", "Pluto"],
     "Aquarius": ["Saturn", "Uranus"],
     "Pisces": ["Jupiter", "Neptune"],
 }

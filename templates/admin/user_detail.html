@@ -1,61 +1,71 @@
-{% extends "base.html" %}
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Kullanıcı: {{ detail_user.email }}{% endblock %}
 
-{% block title %}Jyotish | Admin User Detail{% endblock %}
+{% block admin_content %}
+<div class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">{{ detail_user.name or detail_user.email }}</h1>
+    <p class="admin-page-sub">{{ detail_user.email }} · Kayıt: {{ detail_user.created_at }}</p>
+  </div>
+  <div style="display:flex; gap:8px;">
+    <a class="btn-admin" href="/admin/users">← Geri</a>
+    <form method="post" action="/admin/users/{{ detail_user.id }}/delete" onsubmit="return confirm('Bu kullanıcıyı silmek istediğinizden emin misiniz?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn-admin btn-admin-danger" type="submit">Kullanıcıyı Sil</button>
+    </form>
+  </div>
+</div>
 
-{% block content %}
-<section class="page-section">
-    <div class="container">
-        <div class="glass-card card-pad">
-            <h1 class="hero-title" style="font-size:2.2rem;">{{ user_detail.email }}</h1>
-            <div class="grid-4" style="margin-top:20px;">
-                <div class="metric-card"><div class="metric-label">Plan</div><div class="metric-value">{{ user_detail.plan_code|title }}</div></div>
-                <div class="metric-card"><div class="metric-label">Subscription</div><div class="metric-value">{{ user_detail.subscription_status }}</div></div>
-                <div class="metric-card"><div class="metric-label">Reports</div><div class="metric-value">{{ user_detail.report_count }}</div></div>
-                <div class="metric-card"><div class="metric-label">Admin</div><div class="metric-value">{{ "Yes" if user_detail.is_admin else "No" }}</div></div>
-            </div>
-            <div class="grid-2" style="margin-top:24px;">
-                <div class="metric-card">
-                    <div class="metric-label">Created</div>
-                    <div class="metric-value">{{ user_detail.created_at or "-" }}</div>
-                    <div class="muted" style="margin-top:10px;">Plan started: {{ user_detail.plan_started_at or "-" }}</div>
-                    <div class="muted">Plan expires: {{ user_detail.plan_expires_at or "-" }}</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Stripe</div>
-                    <div class="metric-value">{{ user_detail.stripe_customer_id or "-" }}</div>
-                    <div class="muted" style="margin-top:10px;">Subscription: {{ user_detail.stripe_subscription_id or "-" }}</div>
-                </div>
-            </div>
-        </div>
-    </div>
-</section>
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+  <div class="admin-card">
+    <div class="admin-card-title">Kullanıcı Bilgileri</div>
+    <form class="admin-form" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="admin-field">
+        <label>Ad Soyad</label>
+        <input type="text" name="name" value="{{ detail_user.name or '' }}">
+      </div>
+      <div class="admin-field">
+        <label>E-posta</label>
+        <input type="email" value="{{ detail_user.email }}" disabled style="opacity:.5;">
+      </div>
+      <div class="admin-field">
+        <label>Plan</label>
+        <select name="plan_code">
+          <option value="free" {% if (detail_user.plan_code or 'free') == 'free' %}selected{% endif %}>Free</option>
+          <option value="basic" {% if detail_user.plan_code == 'basic' %}selected{% endif %}>Basic</option>
+          <option value="premium" {% if detail_user.plan_code == 'premium' %}selected{% endif %}>Premium</option>
+          <option value="elite" {% if detail_user.plan_code == 'elite' %}selected{% endif %}>Elite</option>
+        </select>
+      </div>
+      <div class="admin-field" style="display:flex; align-items:center; gap:10px;">
+        <input type="checkbox" name="is_admin" id="is_admin" {% if detail_user.is_admin %}checked{% endif %} style="width:18px; height:18px;">
+        <label for="is_admin" style="margin:0; cursor:pointer;">Admin yetkisi ver</label>
+      </div>
+      <button class="btn-admin btn-admin-primary" type="submit">Kaydet</button>
+    </form>
+  </div>
 
-<section class="page-section">
-    <div class="container">
-        <div class="grid-2">
-            <div class="glass-card card-pad">
-                <h2 class="section-title">Recent Reports</h2>
-                {% for report in recent_reports %}
-                <div class="metric-card" style="margin-top:14px;">
-                    <div class="metric-value"><a href="/admin/reports/{{ report.id }}">{{ report.title or "Vedic Report" }}</a></div>
-                    <div class="muted">{{ report.report_type|title }} • {{ report.created_at }}</div>
-                </div>
-                {% else %}
-                <p class="muted">No reports found.</p>
-                {% endfor %}
-            </div>
-            <div class="glass-card card-pad">
-                <h2 class="section-title">Recent Email Logs</h2>
-                {% for log in recent_emails %}
-                <div class="metric-card" style="margin-top:14px;">
-                    <div class="metric-value">{{ log.email_type }} • {{ log.status }}</div>
-                    <div class="muted">{{ log.related_event_type or "-" }} • {{ log.created_at }}</div>
-                </div>
-                {% else %}
-                <p class="muted">No email logs found.</p>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
-</section>
+  <div class="admin-card">
+    <div class="admin-card-title">Rapor Geçmişi</div>
+    <table class="admin-table" style="margin:-1px;">
+      <thead><tr><th>Tür</th><th>Tarih</th><th>Durum</th></tr></thead>
+      <tbody>
+        {% for r in user_reports %}
+        <tr>
+          <td>{{ r.report_type }}</td>
+          <td style="font-size:.8rem; color:var(--muted);">{{ r.created_at }}</td>
+          <td>
+            {% if r.status == 'pending' %}<span class="badge badge-warning">Bekliyor</span>
+            {% elif r.status == 'delivered' %}<span class="badge badge-success">Teslim</span>
+            {% else %}<span class="badge badge-muted">{{ r.status }}</span>{% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3" style="color:var(--muted); text-align:center; padding:20px;">Rapor yok</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
 {% endblock %}

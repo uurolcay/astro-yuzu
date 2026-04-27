@@ -1,0 +1,470 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Astro Workspace{% endblock %}
+{% block admin_content %}
+<style>
+  .autocomplete-shell { position: relative; }
+  .autocomplete-status { margin-top: 8px; font-size: 0.82rem; color: var(--muted); }
+  .autocomplete-status.warning { color: #f6d27a; }
+  .suggestion-list {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    z-index: 20;
+    margin: 0;
+    padding: 8px;
+    list-style: none;
+    border-radius: 16px;
+    border: 1px solid rgba(201, 168, 76, 0.18);
+    background: rgba(12, 12, 16, 0.96);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+    display: none;
+  }
+  .suggestion-list.active { display: block; }
+  .suggestion-item {
+    width: 100%;
+    padding: 12px 14px;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+  }
+  .suggestion-item:hover,
+  .suggestion-item.active,
+  .suggestion-item:focus {
+    background: rgba(201, 168, 76, 0.1);
+    outline: none;
+  }
+  .suggestion-main { display: block; font-weight: 600; }
+  .suggestion-sub { display: block; margin-top: 4px; font-size: 0.82rem; color: var(--muted); }
+  .secondary-profile-panel.is-hidden { display: none; }
+</style>
+<section class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Astro Workspace</h1>
+    <p class="admin-page-sub">Private internal chart workbench for manual readings, tests, and family or friend analysis.</p>
+  </div>
+  <div class="admin-page-actions">
+    <a class="btn-admin" href="/admin/astro-workspace/chat">Ask AI</a>
+    <a class="btn-admin" href="/admin/astro-workspace/profiles">Profile Library</a>
+  </div>
+</section>
+
+{% if error %}<div class="admin-alert admin-alert-danger">{{ error }}</div>{% endif %}
+
+<form class="admin-section" method="post" action="/admin/astro-workspace/generate">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="admin-action-bar">
+    <div class="admin-field" style="min-width:240px">
+      <label>Report type</label>
+      <select id="workspace_report_type" name="report_type">
+        {% for option in report_options %}
+        <option value="{{ option.value }}" {% if form_data.report_type == option.value %}selected{% endif %}>{{ option.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="admin-page-actions">
+      <label class="btn-admin"><input type="checkbox" name="save_profile" value="1" {% if form_data.save_profile %}checked{% endif %}> Save profile</label>
+      <label class="btn-admin"><input type="checkbox" name="save_report" value="1" {% if form_data.save_report or form_data.save_result %}checked{% endif %}> Save report</label>
+      <label class="btn-admin">
+        <input type="checkbox" name="debug_signals" value="1" {% if form_data.debug_signals %}checked{% endif %}>
+        {% if current_language == "en" %}Append signal debug info to report{% else %}Sinyal debug bilgisini rapora ekle{% endif %}
+      </label>
+      <button class="btn-admin btn-admin-primary" type="submit">Generate Interpretation</button>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:minmax(320px, .85fr) minmax(360px, 1.15fr); gap:18px; align-items:start;">
+    <div class="admin-card">
+      <div class="admin-card-title">Primary Profile</div>
+      <div class="admin-form">
+        <div class="admin-field">
+          <label>Use saved profile</label>
+          <select name="profile_id">
+            <option value="">Manual entry</option>
+            {% for profile in profiles %}
+            <option value="{{ profile.id }}" {% if selected_profile and selected_profile.id == profile.id %}selected{% endif %}>{{ "★ " if profile.is_favorite else "" }}{{ profile.full_name or profile.birth_place_label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="admin-grid-2">
+          <div class="admin-field"><label>Full name</label><input name="full_name" value="{{ form_data.full_name or '' }}"></div>
+          <div class="admin-field">
+            <label>Gender</label>
+            <select name="gender">
+              {% for option in gender_options %}
+              <option value="{{ option.value }}" {% if (form_data.gender or '') == option.value %}selected{% endif %}>{{ option.label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="admin-field"><label>Birth date</label><input type="date" name="birth_date" value="{{ form_data.birth_date or '' }}"></div>
+          <div class="admin-field"><label>Birth time</label><input type="time" name="birth_time" value="{{ form_data.birth_time or '' }}"></div>
+        </div>
+        <div class="admin-field">
+          <label for="primary_birth_city">Birth location</label>
+          <div class="autocomplete-shell">
+            <input
+              id="primary_birth_city"
+              name="birth_city"
+              value="{{ form_data.birth_city or form_data.birth_place_label or '' }}"
+              type="text"
+              autocomplete="off"
+              aria-expanded="false"
+              aria-controls="primary-birthplace-suggestions"
+              aria-autocomplete="list"
+              placeholder="Besiktas, Istanbul, Turkey"
+            >
+            <ul id="primary-birthplace-suggestions" class="suggestion-list" role="listbox" aria-label="Birthplace suggestions"></ul>
+          </div>
+          <input id="primary_birth_place_label" name="birth_place_label" type="hidden" value="{{ form_data.birth_place_label or '' }}">
+          <input id="primary_resolved_birth_place" name="resolved_birth_place" type="hidden" value="{{ form_data.resolved_birth_place or form_data.birth_place_label or '' }}">
+          <input id="primary_resolved_latitude" name="resolved_latitude" type="hidden" value="{{ form_data.resolved_latitude or '' }}">
+          <input id="primary_resolved_longitude" name="resolved_longitude" type="hidden" value="{{ form_data.resolved_longitude or '' }}">
+          <input id="primary_resolved_timezone" name="resolved_timezone" type="hidden" value="{{ form_data.resolved_timezone or '' }}">
+          <input id="primary_resolved_geocode_provider" name="resolved_geocode_provider" type="hidden" value="{{ form_data.resolved_geocode_provider or '' }}">
+          <input id="primary_resolved_geocode_confidence" name="resolved_geocode_confidence" type="hidden" value="{{ form_data.resolved_geocode_confidence or '' }}">
+          <input id="primary_birth_country" name="birth_country" type="hidden" value="{{ form_data.birth_country or '' }}">
+          <div id="primary-birthplace-status" class="autocomplete-status">Start typing and select a birth location from the dropdown.</div>
+        </div>
+        <div class="admin-field"><label>Notes</label><textarea name="notes">{{ form_data.notes or '' }}</textarea></div>
+        <label class="admin-muted"><input type="checkbox" name="is_favorite" value="1" {% if form_data.is_favorite %}checked{% endif %}> Favorite</label>
+      </div>
+    </div>
+
+    <div id="secondary-profile-panel" class="admin-card secondary-profile-panel {% if form_data.report_type != 'parent_child' %}is-hidden{% endif %}">
+      <div class="admin-card-title">Parent-Child Secondary Profile</div>
+      <div class="admin-form">
+        <div class="admin-field">
+          <label>Use saved secondary profile</label>
+          <select name="secondary_profile_id" data-secondary-field>
+            <option value="">Manual entry</option>
+            {% for profile in profiles %}
+            <option value="{{ profile.id }}">{{ "★ " if profile.is_favorite else "" }}{{ profile.full_name or profile.birth_place_label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="admin-grid-2">
+          <div class="admin-field"><label>Full name</label><input name="secondary_full_name" value="{{ form_data.secondary_full_name or '' }}" data-secondary-field></div>
+          <div class="admin-field">
+            <label>Gender</label>
+            <select name="secondary_gender" data-secondary-field>
+              {% for option in gender_options %}
+              <option value="{{ option.value }}" {% if (form_data.secondary_gender or '') == option.value %}selected{% endif %}>{{ option.label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="admin-field"><label>Birth date</label><input type="date" name="secondary_birth_date" value="{{ form_data.secondary_birth_date or '' }}" data-secondary-field></div>
+          <div class="admin-field"><label>Birth time</label><input type="time" name="secondary_birth_time" value="{{ form_data.secondary_birth_time or '' }}" data-secondary-field></div>
+        </div>
+        <div class="admin-field">
+          <label for="secondary_birth_city">Birth location</label>
+          <div class="autocomplete-shell">
+            <input
+              id="secondary_birth_city"
+              name="secondary_birth_city"
+              data-secondary-field
+              value="{{ form_data.secondary_birth_city or form_data.secondary_birth_place_label or '' }}"
+              type="text"
+              autocomplete="off"
+              aria-expanded="false"
+              aria-controls="secondary-birthplace-suggestions"
+              aria-autocomplete="list"
+              placeholder="Kadikoy, Istanbul, Turkey"
+            >
+            <ul id="secondary-birthplace-suggestions" class="suggestion-list" role="listbox" aria-label="Secondary birthplace suggestions"></ul>
+          </div>
+          <input id="secondary_birth_place_label" name="secondary_birth_place_label" type="hidden" value="{{ form_data.secondary_birth_place_label or '' }}" data-secondary-field>
+          <input id="secondary_resolved_birth_place" name="secondary_resolved_birth_place" type="hidden" value="{{ form_data.secondary_resolved_birth_place or form_data.secondary_birth_place_label or '' }}" data-secondary-field>
+          <input id="secondary_resolved_latitude" name="secondary_resolved_latitude" type="hidden" value="{{ form_data.secondary_resolved_latitude or '' }}" data-secondary-field>
+          <input id="secondary_resolved_longitude" name="secondary_resolved_longitude" type="hidden" value="{{ form_data.secondary_resolved_longitude or '' }}" data-secondary-field>
+          <input id="secondary_resolved_timezone" name="secondary_resolved_timezone" type="hidden" value="{{ form_data.secondary_resolved_timezone or '' }}" data-secondary-field>
+          <input id="secondary_resolved_geocode_provider" name="secondary_resolved_geocode_provider" type="hidden" value="{{ form_data.secondary_resolved_geocode_provider or '' }}" data-secondary-field>
+          <input id="secondary_resolved_geocode_confidence" name="secondary_resolved_geocode_confidence" type="hidden" value="{{ form_data.secondary_resolved_geocode_confidence or '' }}" data-secondary-field>
+          <input id="secondary_birth_country" name="secondary_birth_country" type="hidden" value="{{ form_data.secondary_birth_country or '' }}" data-secondary-field>
+          <div id="secondary-birthplace-status" class="autocomplete-status">Select a resolved location for parent-child analysis.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+{% endblock %}
+
+{% block admin_context %}
+<div class="admin-context-card">
+  <div class="admin-context-title">Workspace</div>
+  <div class="admin-context-list">
+    <a class="admin-context-link" href="/admin/astro-workspace"><span>New reading</span><span>Open</span></a>
+    <a class="admin-context-link" href="/admin/astro-workspace/chat"><span>Ask AI</span><span>Chat</span></a>
+    <a class="admin-context-link" href="/admin/astro-workspace/profiles"><span>Saved profiles</span><span>{{ profiles|length }}</span></a>
+  </div>
+</div>
+<script>
+  const workspaceBirthplaceCopy = {
+    form_help: "Start typing and select a birth location from the dropdown.",
+    autocomplete_searching: "Searching locations...",
+    autocomplete_no_results: "No matching locations found.",
+    autocomplete_unavailable: "Birthplace search is temporarily unavailable.",
+    autocomplete_reselect: "Location changed. Please reselect from the dropdown.",
+    autocomplete_submit_warning: "Select a location from the dropdown so coordinates and timezone are resolved.",
+  };
+
+  function workspaceBirthplaceText(key) {
+    return workspaceBirthplaceCopy[key] || key;
+  }
+
+  function attachWorkspaceBirthplaceAutocomplete(config) {
+    const input = document.getElementById(config.inputId);
+    const list = document.getElementById(config.listId);
+    const status = document.getElementById(config.statusId);
+    const resolvedFields = {
+      birth_place_label: document.getElementById(config.birthPlaceLabelId),
+      resolved_birth_place: document.getElementById(config.resolvedBirthPlaceId),
+      resolved_latitude: document.getElementById(config.resolvedLatitudeId),
+      resolved_longitude: document.getElementById(config.resolvedLongitudeId),
+      resolved_timezone: document.getElementById(config.resolvedTimezoneId),
+      resolved_geocode_provider: document.getElementById(config.resolvedProviderId),
+      resolved_geocode_confidence: document.getElementById(config.resolvedConfidenceId),
+      birth_country: document.getElementById(config.countryId),
+    };
+    if (!input || !list || !status) return;
+    const isActive = typeof config.isActive === "function" ? config.isActive : () => true;
+
+    let activeRequest = 0;
+    let debounceTimer = null;
+    let birthplaceSuggestionSelected = Boolean(
+      resolvedFields.birth_place_label?.value &&
+      resolvedFields.resolved_latitude?.value &&
+      resolvedFields.resolved_longitude?.value &&
+      resolvedFields.resolved_timezone?.value
+    );
+    let highlightedIndex = -1;
+    let suggestionItems = [];
+
+    function clearResolvedFields() {
+      Object.values(resolvedFields).forEach((field) => { if (field) field.value = ""; });
+      birthplaceSuggestionSelected = false;
+    }
+
+    function setStatus(message, tone = "") {
+      status.textContent = message;
+      status.classList.toggle("warning", tone === "warning");
+    }
+
+    function observeBirthplaceEvent(eventName, payload = {}) {
+      const params = new URLSearchParams({ event: eventName, scope: config.scope });
+      Object.entries(payload).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== "") params.set(key, String(value));
+      });
+      const url = `/api/v1/birthplace-observe?${params.toString()}`;
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(url);
+        return;
+      }
+      fetch(url, { method: "GET", keepalive: true, headers: { "Accept": "application/json" } }).catch(() => {});
+    }
+
+    function closeSuggestions() {
+      list.innerHTML = "";
+      list.classList.remove("active");
+      input.setAttribute("aria-expanded", "false");
+      input.removeAttribute("aria-activedescendant");
+      highlightedIndex = -1;
+      suggestionItems = [];
+    }
+
+    function setHighlightedIndex(nextIndex) {
+      highlightedIndex = nextIndex;
+      suggestionItems.forEach((button, index) => {
+        const active = index === highlightedIndex;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-selected", active ? "true" : "false");
+        if (active) {
+          input.setAttribute("aria-activedescendant", button.id);
+          button.scrollIntoView({ block: "nearest" });
+        }
+      });
+      if (highlightedIndex < 0) input.removeAttribute("aria-activedescendant");
+    }
+
+    function applySuggestion(item) {
+      input.value = item.display_name;
+      if (resolvedFields.birth_place_label) resolvedFields.birth_place_label.value = item.normalized_place || "";
+      if (resolvedFields.resolved_birth_place) resolvedFields.resolved_birth_place.value = item.normalized_place || "";
+      if (resolvedFields.resolved_latitude) resolvedFields.resolved_latitude.value = item.latitude ?? "";
+      if (resolvedFields.resolved_longitude) resolvedFields.resolved_longitude.value = item.longitude ?? "";
+      if (resolvedFields.resolved_timezone) resolvedFields.resolved_timezone.value = item.timezone || "";
+      if (resolvedFields.resolved_geocode_provider) resolvedFields.resolved_geocode_provider.value = item.provider || "";
+      if (resolvedFields.resolved_geocode_confidence) resolvedFields.resolved_geocode_confidence.value = item.confidence ?? "";
+      const displayParts = String(item.display_name || "").split(",").map((part) => part.trim()).filter(Boolean);
+      if (resolvedFields.birth_country) resolvedFields.birth_country.value = displayParts[displayParts.length - 1] || "";
+      birthplaceSuggestionSelected = true;
+      closeSuggestions();
+      setStatus(item.normalized_place || item.display_name);
+      observeBirthplaceEvent("suggestion_selected", {
+        provider: item.provider || "suggestion",
+        location_source: "suggestion_selection",
+        outcome: "selected",
+        confidence: item.confidence ?? "",
+      });
+    }
+
+    function renderSuggestions(items) {
+      list.innerHTML = "";
+      if (!items.length) {
+        closeSuggestions();
+        return;
+      }
+      suggestionItems = [];
+      items.forEach((item) => {
+        const li = document.createElement("li");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "suggestion-item";
+        button.id = `${config.scope}-birthplace-option-${suggestionItems.length}`;
+        button.setAttribute("role", "option");
+        button.setAttribute("aria-selected", "false");
+        button._payload = item;
+        button.innerHTML = `<span class="suggestion-main">${item.display_name}</span><span class="suggestion-sub">${item.normalized_place}</span>`;
+        button.addEventListener("pointerdown", (event) => { event.preventDefault(); applySuggestion(item); });
+        button.addEventListener("mouseenter", () => { setHighlightedIndex(suggestionItems.indexOf(button)); });
+        li.appendChild(button);
+        list.appendChild(li);
+        suggestionItems.push(button);
+      });
+      list.classList.add("active");
+      input.setAttribute("aria-expanded", "true");
+      setHighlightedIndex(-1);
+    }
+
+    async function fetchSuggestions(query) {
+      activeRequest += 1;
+      const requestId = activeRequest;
+      try {
+        const response = await fetch(`/api/v1/birthplace-suggestions?q=${encodeURIComponent(query)}`, { headers: { "Accept": "application/json" } });
+        const results = response.ok ? await response.json() : [];
+        if (requestId !== activeRequest) return;
+        renderSuggestions(Array.isArray(results) ? results : []);
+        if (!results.length) setStatus(workspaceBirthplaceText("autocomplete_no_results"));
+      } catch (_error) {
+        if (requestId !== activeRequest) return;
+        closeSuggestions();
+        setStatus(workspaceBirthplaceText("autocomplete_unavailable"));
+      }
+    }
+
+    input.addEventListener("input", () => {
+      if (birthplaceSuggestionSelected) {
+        clearResolvedFields();
+        setStatus(workspaceBirthplaceText("autocomplete_reselect"), "warning");
+      } else {
+        clearResolvedFields();
+      }
+      closeSuggestions();
+      const query = input.value.trim();
+      if (debounceTimer) clearTimeout(debounceTimer);
+      if (query.length < 2) {
+        setStatus(workspaceBirthplaceText("form_help"));
+        return;
+      }
+      setStatus(workspaceBirthplaceText("autocomplete_searching"));
+      debounceTimer = setTimeout(() => fetchSuggestions(query), 220);
+    });
+
+    input.addEventListener("keydown", (event) => {
+      if (!list.classList.contains("active") || !suggestionItems.length) {
+        if (event.key === "Escape") closeSuggestions();
+        return;
+      }
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setHighlightedIndex(highlightedIndex < suggestionItems.length - 1 ? highlightedIndex + 1 : 0);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setHighlightedIndex(highlightedIndex > 0 ? highlightedIndex - 1 : suggestionItems.length - 1);
+        return;
+      }
+      if (event.key === "Enter" && highlightedIndex >= 0) {
+        event.preventDefault();
+        applySuggestion(suggestionItems[highlightedIndex]._payload);
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeSuggestions();
+      }
+    });
+
+    input.form?.addEventListener("submit", () => {
+      if (!isActive()) return;
+      if (!birthplaceSuggestionSelected || !resolvedFields.birth_place_label?.value || !resolvedFields.resolved_latitude?.value || !resolvedFields.resolved_longitude?.value) {
+        setStatus(workspaceBirthplaceText("autocomplete_submit_warning"), "warning");
+      }
+    });
+
+    document.addEventListener("pointerdown", (event) => {
+      if (!list.contains(event.target) && event.target !== input) closeSuggestions();
+    });
+
+    if (birthplaceSuggestionSelected) {
+      setStatus(resolvedFields.birth_place_label?.value || input.value || workspaceBirthplaceText("form_help"));
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const reportTypeSelect = document.getElementById("workspace_report_type");
+    const secondaryPanel = document.getElementById("secondary-profile-panel");
+    const secondaryFields = Array.from(document.querySelectorAll("[data-secondary-field]"));
+
+    function secondaryProfileEnabled() {
+      return reportTypeSelect?.value === "parent_child";
+    }
+
+    function syncSecondaryPanel() {
+      const enabled = secondaryProfileEnabled();
+      if (secondaryPanel) {
+        secondaryPanel.classList.toggle("is-hidden", !enabled);
+        secondaryPanel.setAttribute("aria-hidden", enabled ? "false" : "true");
+      }
+      secondaryFields.forEach((field) => {
+        field.disabled = !enabled;
+      });
+    }
+
+    attachWorkspaceBirthplaceAutocomplete({
+      scope: "primary",
+      inputId: "primary_birth_city",
+      listId: "primary-birthplace-suggestions",
+      statusId: "primary-birthplace-status",
+      birthPlaceLabelId: "primary_birth_place_label",
+      resolvedBirthPlaceId: "primary_resolved_birth_place",
+      resolvedLatitudeId: "primary_resolved_latitude",
+      resolvedLongitudeId: "primary_resolved_longitude",
+      resolvedTimezoneId: "primary_resolved_timezone",
+      resolvedProviderId: "primary_resolved_geocode_provider",
+      resolvedConfidenceId: "primary_resolved_geocode_confidence",
+      countryId: "primary_birth_country",
+    });
+    attachWorkspaceBirthplaceAutocomplete({
+      scope: "secondary",
+      isActive: secondaryProfileEnabled,
+      inputId: "secondary_birth_city",
+      listId: "secondary-birthplace-suggestions",
+      statusId: "secondary-birthplace-status",
+      birthPlaceLabelId: "secondary_birth_place_label",
+      resolvedBirthPlaceId: "secondary_resolved_birth_place",
+      resolvedLatitudeId: "secondary_resolved_latitude",
+      resolvedLongitudeId: "secondary_resolved_longitude",
+      resolvedTimezoneId: "secondary_resolved_timezone",
+      resolvedProviderId: "secondary_resolved_geocode_provider",
+      resolvedConfidenceId: "secondary_resolved_geocode_confidence",
+      countryId: "secondary_birth_country",
+    });
+    syncSecondaryPanel();
+    reportTypeSelect?.addEventListener("change", syncSecondaryPanel);
+  });
+</script>
+{% endblock %}

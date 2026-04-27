@@ -35,6 +35,159 @@ class _FakeClient:
 
 
 class AgentPipelineTests(unittest.TestCase):
+    def test_localize_signal_explanations_returns_unchanged_for_english(self):
+        context = {"dominant_signals": [{"explanation": "Mars drives urgency."}]}
+        result = agent_pipeline.localize_signal_explanations(context, "en")
+        self.assertIs(result, context)
+
+    def test_rebuild_nakshatra_explanation_tr_returns_turkish_string(self):
+        signal = {
+            "planet": "Moon",
+            "domain": "emotional pattern, mental rhythm, and security need",
+            "nakshatra_profile": {
+                "nakshatra": "Rohini",
+                "core_action": "synchronizes and performs",
+                "dependency": "Choose value over comfort.",
+                "output": "Pressure increases.",
+                "risk_pattern": "Mars drives urgency.",
+                "evolution_path": "Choose value over comfort.",
+            },
+        }
+
+        result = agent_pipeline._rebuild_nakshatra_explanation_tr(signal)
+
+        self.assertEqual(
+            result,
+            "Moon – Rohini: duygusal örüntü, zihinsel ritim ve güvenlik ihtiyacı. "
+            "Temel eylem: senkronize olur ve icra eder; bağımlılık: Konfor yerine degeri sec.; "
+            "çıktı: Baski artar.; risk: Mars aciliyeti artirir.; evrim yolu: Konfor yerine degeri sec..",
+        )
+
+    def test_rebuild_nakshatra_explanation_tr_returns_none_without_profile(self):
+        self.assertIsNone(agent_pipeline._rebuild_nakshatra_explanation_tr({"planet": "Moon"}))
+
+    def test_localize_signal_explanations_translates_known_string_for_turkish(self):
+        context = {
+            "dominant_signals": [{"explanation": "synchronizes and performs"}],
+        }
+
+        result = agent_pipeline.localize_signal_explanations(context, "tr")
+
+        self.assertEqual(result["dominant_signals"][0]["explanation"], "senkronize olur ve icra eder")
+
+    def test_localize_signal_explanations_leaves_unknown_string_unchanged(self):
+        context = {"dominant_signals": [{"explanation": "Unknown phrase"}]}
+
+        result = agent_pipeline.localize_signal_explanations(context, "tr")
+
+        self.assertEqual(result["dominant_signals"][0]["explanation"], "Unknown phrase")
+
+    def test_localize_signal_explanations_does_not_mutate_input(self):
+        context = {
+            "dominant_signals": [{"explanation": "synchronizes and performs"}],
+            "atmakaraka_signals": {"soul_lesson": "Choose value over comfort."},
+            "yoga_signals": {"detected_yogas": [{"base_condition": "Current phase"}]},
+        }
+
+        result = agent_pipeline.localize_signal_explanations(context, "tr")
+
+        self.assertIsNot(result, context)
+        self.assertEqual(result["dominant_signals"][0]["explanation"], "senkronize olur ve icra eder")
+        self.assertEqual(result["atmakaraka_signals"]["soul_lesson"], "Konfor yerine degeri sec.")
+        self.assertEqual(result["yoga_signals"]["detected_yogas"][0]["base_condition"], "Mevcut donem")
+        self.assertEqual(context["dominant_signals"][0]["explanation"], "synchronizes and performs")
+        self.assertEqual(context["atmakaraka_signals"]["soul_lesson"], "Choose value over comfort.")
+        self.assertEqual(context["yoga_signals"]["detected_yogas"][0]["base_condition"], "Current phase")
+
+    def test_localize_signal_explanations_rebuilds_nakshatra_explanation(self):
+        context = {
+            "dominant_signals": [
+                {
+                    "planet": "Moon",
+                    "domain": "emotional pattern, mental rhythm, and security need",
+                    "explanation": "Moon in Rohini channels emotional pattern, mental rhythm, and security need.",
+                    "nakshatra_profile": {
+                        "nakshatra": "Rohini",
+                        "core_action": "synchronizes and performs",
+                        "dependency": "Choose value over comfort.",
+                        "output": "Pressure increases.",
+                        "risk_pattern": "Mars drives urgency.",
+                        "evolution_path": "Choose value over comfort.",
+                    },
+                }
+            ]
+        }
+
+        result = agent_pipeline.localize_signal_explanations(context, "tr")
+
+        self.assertIn("Moon – Rohini", result["dominant_signals"][0]["explanation"])
+        self.assertIn("Temel eylem: senkronize olur ve icra eder", result["dominant_signals"][0]["explanation"])
+        self.assertEqual(result["dominant_signals"][0]["summary"], result["dominant_signals"][0]["explanation"])
+
+    def test_localize_signal_explanations_rebuilds_atmakaraka_explanation(self):
+        context = {
+            "atmakaraka_signals": {
+                "signals": [
+                    {
+                        "planet": "Venus",
+                        "desire_pattern": "desire pattern, obsession vector, and unconventional growth",
+                        "soul_lesson": "Choose value over comfort.",
+                        "house_domain": "identity and embodied direction",
+                    }
+                ]
+            }
+        }
+
+        result = agent_pipeline.localize_signal_explanations(context, "tr")
+
+        self.assertEqual(
+            result["atmakaraka_signals"]["signals"][0]["explanation"],
+            "Venus Atmakaraka'dır; haritanın ruh yönü arzu örüntüsü, takıntı vektörü ve alışılmadık büyüme üzerinden şekillenir. "
+            "Temel ders Konfor yerine degeri sec. — özellikle kimlik ve bedensel yön alanında.",
+        )
+        self.assertEqual(
+            result["atmakaraka_signals"]["signals"][0]["summary"],
+            result["atmakaraka_signals"]["signals"][0]["explanation"],
+        )
+
+    def test_localize_signal_explanations_handles_empty_input_safely(self):
+        self.assertIsNone(agent_pipeline.localize_signal_explanations(None, "tr"))
+        self.assertEqual(agent_pipeline.localize_signal_explanations({}, "tr"), {})
+
+    def test_build_structured_payload_uses_localized_signal_context_for_turkish(self):
+        result = agent_pipeline.build_structured_payload(
+            {"language": "tr", "astro_signal_context": {"dominant_signals": [{"explanation": "synchronizes and performs"}]}}
+        )
+
+        self.assertIn("astro_signal_context", result)
+        self.assertIsInstance(result["astro_signal_context"], dict)
+        self.assertEqual(
+            result["astro_signal_context"]["dominant_signals"][0]["explanation"],
+            "senkronize olur ve icra eder",
+        )
+
+    def test_build_structured_payload_localizes_interpretation_context_for_turkish(self):
+        result = agent_pipeline.build_structured_payload(
+            {
+                "language": "tr",
+                "interpretation_context": {
+                    "summary": "The chart is currently led by money and nodes.",
+                    "timing_notes": [{"label": "Current phase", "description": "Mars period emphasis"}],
+                    "parenting_guidance": {"best_approach": "Lead with calm, specific communication"},
+                },
+            }
+        )
+
+        summary = result["interpretation_context"]["summary"]
+        self.assertIn("Haritada su anda", summary)
+        self.assertNotIn("nodes", summary)
+        self.assertEqual(result["interpretation_context"]["timing_notes"][0]["label"], "Mevcut donem")
+        self.assertEqual(result["interpretation_context"]["timing_notes"][0]["description"], "Mars donemi vurgusu")
+        self.assertEqual(
+            result["interpretation_context"]["parenting_guidance"]["best_approach"],
+            "Sakin ve net iletisimle ilerleyin",
+        )
+
     def test_pipeline_returns_final_text_and_intermediate_outputs(self):
         fake_client = _FakeClient()
         payload = {

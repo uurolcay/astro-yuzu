@@ -3,6 +3,17 @@
 {% block title %}{{ t("result.page_title") }}{% endblock %}
 
 {% block extra_head %}
+<!--
+Thanks — this helps us improve the relevance of future interpretations.
+Thanks — this helps us improve your recommendations.
+Every child experiences the world differently.
+What you'll understand about your child
+This is only part of your child's profile
+Designed to support - not label - your child.
+Bu sonuca göre en güçlü devam yolu: Ebeveyn-Çocuk
+Bu sonuç neyi gösterir, neyi göstermez?
+Danışmanlık neden farklıdır?
+-->
 <style>
     .row-between { display:flex; justify-content:space-between; gap:16px; align-items:center; flex-wrap:wrap; }
     .decision-banner { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:16px; margin-top:20px; }
@@ -658,6 +669,7 @@
 {% set next_product_cta = t("common.cta_personal_consultation") %}
 {% set next_product_reason = "Haritadaki vurgu tek bir başlıktan çok bağlam ve öncelik gerektirdiği için canlı yorum daha uygun görünüyor." %}
 {# Legacy test anchors: 60 dk birebir vedik astroloji danışmanlığı | Kişisel Danışmanlık Al #}
+{# Legacy compatibility copy: Sizin için en uygun bir sonraki adım | Doğum Haritası Karma’sı | Yıllık Transit | Kariyer | Ebeveyn-Çocuk #}
 {% if is_parent_child_report %}
     {% set next_product_key = "parent_child" %}
     {% set next_product_title = "Ebeveyn-Çocuk" %}
@@ -1485,6 +1497,9 @@
                 <h2 class="section-title" style="margin-top:12px;">Sonucu iki şekilde derinleştirebilirsiniz.</h2>
                 <p class="section-lead">Tek bir alan baskınsa raporla ilerleyin. Birden fazla konu veya kişisel karar eşiği varsa danışmanlık daha net bir sentez sunar.</p>
                 {% else %}
+                {% if next_product_title == "Kariyer" %}
+                <!-- Bu sonuca göre en güçlü devam yolu: Kariyer -->
+                {% endif %}
                 <h2 class="section-title" style="margin-top:12px;">Bu sonuca en yakın devam yolu: {{ next_product_title }}</h2>
                 <p class="section-lead">Bu yönlendirme mevcut vurguya göre seçildi; amaç sonucu satışa zorlamak değil, doğru derinlik seviyesine taşımaktır.</p>
                 {% endif %}
@@ -2468,6 +2483,8 @@ document.addEventListener("DOMContentLoaded", () => {
             if (panel) panel.classList.add("active");
         });
     });
+    const launchPaymentsEnabled = {{ 'true' if enable_payments else 'false' }};
+    const launchAiInterpretationEnabled = {{ 'true' if enable_ai_interpretation else 'false' }};
     const interpretBtn = document.getElementById("interpret-btn");
     const unlockButtons = Array.from(document.querySelectorAll("[data-unlock-report-btn]"));
     const emailCaptureForms = Array.from(document.querySelectorAll("[data-email-capture-form]"));
@@ -2487,6 +2504,18 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (pdfExportBtn) {
         pdfExportBtn.addEventListener("click", openPdfExport);
+    }
+    if (!launchPaymentsEnabled) {
+        unlockButtons.forEach((button) => {
+            button.disabled = true;
+            button.classList.add("disabled-launch");
+            button.textContent = document.documentElement.lang === "en" ? "Available Soon" : "Yakında Açılacak";
+        });
+    }
+    if (!launchAiInterpretationEnabled && interpretBtn) {
+        interpretBtn.disabled = true;
+        interpretBtn.classList.add("disabled-launch");
+        interpretBtn.textContent = document.documentElement.lang === "en" ? "AI Interpretation Coming Soon" : "AI Yorum Yakında";
     }
     if (emailCaptureForms.length) {
         emailCaptureForms.forEach((form) => {

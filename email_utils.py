@@ -1,20 +1,35 @@
 import logging
 import os
 import smtplib
+import ssl
 from dataclasses import dataclass
+from email import encoders
 from email.message import EmailMessage
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from pathlib import Path
 
-from jinja2 import Environment, FileSystemLoader, TemplateNotFound, select_autoescape
+from jinja2 import ChoiceLoader, Environment, FileSystemLoader, TemplateNotFound, select_autoescape
 
 logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent
 EMAIL_TEMPLATES_DIR = BASE_DIR / "templates" / "emails"
 
 email_env = Environment(
-    loader=FileSystemLoader(str(EMAIL_TEMPLATES_DIR)),
+    loader=ChoiceLoader([
+        FileSystemLoader(str(BASE_DIR / "templates")),
+        FileSystemLoader(str(EMAIL_TEMPLATES_DIR)),
+    ]),
     autoescape=select_autoescape(["html", "xml"]),
 )
+
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587") or "587")
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASS = os.getenv("SMTP_PASS", "")
+FROM_NAME = os.getenv("FROM_NAME", "Focus Astrology")
+FROM_EMAIL = os.getenv("FROM_EMAIL", SMTP_USER)
 
 
 @dataclass
@@ -63,6 +78,53 @@ def render_email_template(template_name, **context):
     except TemplateNotFound as exc:
         raise RuntimeError(f"Email template missing: {template_name}") from exc
     return html_template.render(**context), text_template.render(**context)
+
+
+def render_email(template_name: str, **kwargs) -> str:
+    return email_env.get_template(template_name).render(**kwargs)
+
+
+def send_email(
+    to_email: str,
+    subject: str,
+    html_body: str,
+    plain_body: str = "",
+    attachment_path: str | None = None,
+    attachment_filename: str | None = None,
+) -> bool:
+    if not SMTP_USER or not SMTP_PASS:
+        print(f"[EMAIL STUB] To: {to_email} | Subject: {subject}")
+        return True
+    try:
+        msg = MIMEMultipart("mixed")
+        msg["Subject"] = subject
+        msg["From"] = f"{FROM_NAME} <{FROM_EMAIL}>"
+        msg["To"] = to_email
+
+        alt = MIMEMultipart("alternative")
+        alt.attach(MIMEText(plain_body or "", "plain", "utf-8"))
+        alt.attach(MIMEText(html_body, "html", "utf-8"))
+        msg.attach(alt)
+
+        if attachment_path and os.path.exists(attachment_path):
+            with open(attachment_path, "rb") as f:
+                part = MIMEBase("application", "octet-stream")
+                part.set_payload(f.read())
+            encoders.encode_base64(part)
+            fname = attachment_filename or os.path.basename(attachment_path)
+            part.add_header("Content-Disposition", f'attachment; filename="{fname}"')
+            msg.attach(part)
+
+        ctx = ssl.create_default_context()
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.ehlo()
+            server.starttls(context=ctx)
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(FROM_EMAIL, to_email, msg.as_string())
+        return True
+    except Exception as exc:
+        print(f"[EMAIL ERROR] {exc}")
+        return False
 
 
 def _attach_files(message, attachments=None):

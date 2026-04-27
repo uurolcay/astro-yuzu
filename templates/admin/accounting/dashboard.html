@@ -1,0 +1,249 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Accounting{% endblock %}
+{% block admin_content %}
+<style>
+  .finance-section { display:grid; gap:12px; }
+  .finance-section-title { font-size:.78rem; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+  .finance-primary-grid { display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:12px; }
+  .finance-secondary-grid { display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:10px; }
+  .finance-kpi-primary { padding:20px; border-color:rgba(223,192,112,.18); background:linear-gradient(180deg, rgba(223,192,112,.06), rgba(22,27,34,1)); }
+  .finance-kpi-primary .admin-stat-value { font-size:1.85rem; }
+  .finance-kpi-warning { border-color:rgba(210,153,34,.3); }
+  .finance-kpi-danger { border-color:rgba(248,81,73,.34); }
+  .finance-kpi-secondary { padding:14px 16px; }
+  .finance-kpi-secondary .admin-stat-value { font-size:1.18rem; }
+  .finance-action-grid { display:grid; grid-template-columns:minmax(0, 1.35fr) minmax(280px, .65fr); gap:16px; align-items:start; }
+  .finance-detail-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:16px; align-items:start; }
+  @media (max-width: 1180px) {
+    .finance-primary-grid, .finance-secondary-grid { grid-template-columns:repeat(3, minmax(0, 1fr)); }
+    .finance-detail-grid { grid-template-columns:1fr; }
+  }
+  @media (max-width: 760px) {
+    .finance-primary-grid, .finance-secondary-grid, .finance-action-grid { grid-template-columns:1fr; }
+  }
+</style>
+
+<div class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Accounting & Finance</h1>
+    <p class="admin-page-sub">{{ accounting_disclaimer }}</p>
+  </div>
+  <div class="admin-page-actions">
+    <a class="btn-admin" href="/admin/accounting/transactions">Transactions</a>
+    <a class="btn-admin" href="/admin/accounting/invoices">Invoices</a>
+    <a class="btn-admin" href="/admin/accounting/month-close">Month-End Review</a>
+    <a class="btn-admin" href="/admin/accounting/documents">Documents</a>
+    <a class="btn-admin btn-admin-primary" href="/admin/accounting/exports">Exports</a>
+  </div>
+</div>
+
+<section class="finance-section">
+  <div class="finance-section-title">Money, Tax Pressure & Workload</div>
+  <div class="finance-primary-grid">
+    <div class="admin-stat finance-kpi-primary">
+      <div class="admin-stat-label">This Month Revenue</div>
+      <div class="admin-stat-value">{{ monthly_revenue }}</div>
+      <div class="admin-stat-delta up">Net sales after refunds</div>
+    </div>
+    <div class="admin-stat finance-kpi-primary">
+      <div class="admin-stat-label">Net Retained</div>
+      <div class="admin-stat-value">{{ net_retained_amount }}</div>
+      <div class="admin-stat-delta up">After commission estimate</div>
+    </div>
+    <div class="admin-stat finance-kpi-primary {% if uninvoiced_paid_transactions > 0 %}finance-kpi-warning{% endif %}">
+      <div class="admin-stat-label">Invoices To Be Issued</div>
+      <div class="admin-stat-value">{{ uninvoiced_paid_transactions }}</div>
+      <div class="admin-stat-delta" style="color:var(--warning);">Paid but uninvoiced</div>
+    </div>
+    <div class="admin-stat finance-kpi-primary {% if pending_invoices > 0 %}finance-kpi-warning{% endif %}">
+      <div class="admin-stat-label">Pending Invoices</div>
+      <div class="admin-stat-value">{{ pending_invoices }}</div>
+      <div class="admin-stat-delta" style="color:var(--warning);">Draft or issued</div>
+    </div>
+    <div class="admin-stat finance-kpi-primary finance-kpi-warning">
+      <div class="admin-stat-label">Estimated VAT</div>
+      <div class="admin-stat-value">{{ estimated_vat }}</div>
+      <div class="admin-stat-delta" style="color:var(--warning);">Operational estimate</div>
+    </div>
+    <div class="admin-stat finance-kpi-primary {% if open_reminders > 0 %}finance-kpi-danger{% endif %}">
+      <div class="admin-stat-label">Open Reminders</div>
+      <div class="admin-stat-value">{{ open_reminders }}</div>
+      <div class="admin-stat-delta {% if open_reminders > 0 %}down{% endif %}">Needs review</div>
+    </div>
+  </div>
+</section>
+
+<section class="finance-section">
+  <div class="finance-section-title">Operational Quality</div>
+  <div class="finance-secondary-grid">
+    <div class="admin-stat finance-kpi-secondary"><div class="admin-stat-label">Successful Transactions</div><div class="admin-stat-value">{{ successful_transactions }}</div></div>
+    <div class="admin-stat finance-kpi-secondary"><div class="admin-stat-label">Refunded Transactions</div><div class="admin-stat-value">{{ refunded_transactions }}</div></div>
+    <div class="admin-stat finance-kpi-secondary"><div class="admin-stat-label">Issued Invoices</div><div class="admin-stat-value">{{ issued_invoices }}</div></div>
+    <div class="admin-stat finance-kpi-secondary"><div class="admin-stat-label">Invoice Coverage</div><div class="admin-stat-value">{{ invoice_coverage }}%</div></div>
+    <div class="admin-stat finance-kpi-secondary"><div class="admin-stat-label">Collection Ratio</div><div class="admin-stat-value">{{ collection_ratio }}%</div></div>
+    <div class="admin-stat finance-kpi-secondary"><div class="admin-stat-label">Awaiting Send</div><div class="admin-stat-value">{{ invoices_awaiting_send }}</div></div>
+  </div>
+</section>
+
+<section class="finance-section">
+  <div class="finance-section-title">Month-End Review State</div>
+  <div class="admin-card" style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+    <div>
+      <div style="font-size:.95rem;">Current month: {% if current_month_review %}<span class="badge {% if current_month_review.status == 'reviewed' %}badge-success{% elif current_month_review.status == 'reviewed_with_warnings' %}badge-warning{% else %}badge-muted{% endif %}">{{ current_month_review.status }}</span>{% else %}<span class="badge badge-muted">open</span>{% endif %}</div>
+      <div style="font-size:.82rem; color:var(--muted); margin-top:6px;">Previous month: {% if previous_month_review %}{{ previous_month_review.status }}{% else %}open{% endif %} · {{ current_month_blockers }} current blockers before clean close</div>
+    </div>
+    <a class="btn-admin btn-admin-primary" href="/admin/accounting/month-close">Open Month-End Review</a>
+  </div>
+</section>
+
+<section class="finance-section">
+  <div class="finance-section-title">30-Day Movement</div>
+  <div class="admin-table-wrap">
+    <div class="admin-table-header">
+      <span class="admin-table-title">Revenue, Transaction Count & Refund Trend</span>
+      <span class="admin-muted" style="font-size:.8rem;">Last 30 days</span>
+    </div>
+    <table class="admin-table">
+      <thead><tr><th>Date</th><th>Revenue</th><th>Transactions</th><th>Refunds</th></tr></thead>
+      <tbody>
+        {% for row in trend_rows %}
+        <tr>
+          <td style="white-space:nowrap;">{{ row.date }}</td>
+          <td>{{ row.revenue }}</td>
+          <td>{{ row.transactions }}</td>
+          <td>{% if row.refunds > 0 %}<span class="badge badge-danger">{{ row.refunds }}</span>{% else %}<span class="badge badge-muted">0.00</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="finance-section">
+  <div class="finance-section-title">What Needs Action Today</div>
+  <div class="finance-action-grid">
+    <div class="admin-table-wrap">
+      <div class="admin-table-header">
+        <span class="admin-table-title">Invoices To Issue</span>
+        <a class="btn-admin" href="/admin/accounting/invoices">Open Invoice Queue</a>
+      </div>
+      <table class="admin-table">
+        <thead><tr><th>Transaction</th><th>Customer</th><th>Product</th><th>Net</th><th>Paid At</th><th></th></tr></thead>
+        <tbody>
+          {% for row in invoice_queue %}
+          {% set t = row.transaction %}
+          <tr>
+            <td>#{{ t.id }}</td>
+            <td>{{ t.customer.email if t.customer else "—" }}</td>
+            <td>{{ t.product_type or "—" }}</td>
+            <td>{{ t.net_amount }}</td>
+            <td class="admin-muted">{{ t.paid_at }}</td>
+            <td><a class="btn-admin" href="/admin/accounting/transactions/{{ t.id }}">Open</a></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6"><div class="admin-empty-state"><div class="admin-empty-title">No paid uninvoiced transactions</div><div class="admin-empty-text">The invoice queue is clear for the current dashboard view.</div></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div style="display:grid; gap:16px;">
+      <div class="admin-card">
+        <div class="admin-card-title">Missing Billing Info</div>
+        {% for c in missing_billing_customers %}
+        <div style="padding:8px 0; border-bottom:1px solid var(--border);">
+          <div>{{ c.email }}</div>
+          <div class="admin-muted" style="font-size:.78rem;">Tax ID or billing address missing</div>
+        </div>
+        {% else %}
+        <div class="admin-empty-state"><div class="admin-empty-title">No billing warnings</div><div class="admin-empty-text">Customer invoice data looks complete for the visible queue.</div></div>
+        {% endfor %}
+      </div>
+      <div class="admin-card">
+        <div class="admin-card-title">Upcoming Reminders</div>
+        {% for r in reminders %}
+        <div style="padding:8px 0; border-bottom:1px solid var(--border);">
+          <div>{{ r.title }} {% if r.reminder_type in ['pending_invoice', 'uninvoiced_transaction'] %}<span class="badge badge-warning">Action</span>{% endif %}</div>
+          <div class="admin-muted" style="font-size:.78rem;">{{ r.due_date or "No due date" }}</div>
+        </div>
+        {% else %}
+        <div class="admin-empty-state"><div class="admin-empty-title">No open reminders</div><div class="admin-empty-text">There are no active finance reminders requiring attention.</div></div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="finance-section">
+  <div class="finance-section-title">Supporting Detail</div>
+  <div class="finance-detail-grid">
+    <div class="admin-table-wrap">
+      <div class="admin-table-header"><span class="admin-table-title">Product Performance</span></div>
+      <table class="admin-table">
+        <thead><tr><th>Product</th><th>Count</th><th>Gross</th><th>Net</th></tr></thead>
+        <tbody>
+          {% for p in product_performance %}
+          <tr><td>{{ p.product_type }}</td><td>{{ p.count }}</td><td>{{ p.gross }}</td><td>{{ p.net }}</td></tr>
+          {% else %}<tr><td colspan="4"><div class="admin-empty-state"><div class="admin-empty-title">No product data</div><div class="admin-empty-text">Monthly sales activity will appear here once transactions sync.</div></div></td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="admin-table-wrap">
+      <div class="admin-table-header"><span class="admin-table-title">Recent Transactions</span></div>
+      <table class="admin-table">
+        <thead><tr><th>ID</th><th>Customer</th><th>Net</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for t in recent_transactions %}
+          <tr><td>#{{ t.id }}</td><td>{{ t.customer.email if t.customer else "—" }}</td><td>{{ t.net_amount }}</td><td><span class="badge badge-muted">{{ t.payment_status }}</span></td></tr>
+          {% else %}<tr><td colspan="4"><div class="admin-empty-state"><div class="admin-empty-title">No recent transactions</div><div class="admin-empty-text">Paid orders will appear after accounting sync.</div></div></td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="admin-table-wrap">
+      <div class="admin-table-header"><span class="admin-table-title">Recent Expenses</span></div>
+      <table class="admin-table">
+        <thead><tr><th>Date</th><th>Supplier</th><th>Amount</th></tr></thead>
+        <tbody>
+          {% for e in recent_expenses %}
+          <tr><td>{{ e.expense_date }}</td><td>{{ e.supplier or "—" }}</td><td>{{ e.amount }}</td></tr>
+          {% else %}<tr><td colspan="3"><div class="admin-empty-state"><div class="admin-empty-title">No recent expenses</div><div class="admin-empty-text">Record expenses to track operating costs and monthly review readiness.</div></div></td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block admin_context %}
+<div class="admin-context-card">
+  <div class="admin-context-title">Finance Command</div>
+  <div class="admin-context-list">
+    <a class="admin-context-link" href="/admin/accounting/invoices?tab=ready"><span>Ready to invoice</span><strong>{{ uninvoiced_paid_transactions }}</strong></a>
+    <a class="admin-context-link" href="/admin/accounting/invoices?invoice_view=awaiting_send"><span>Awaiting send</span><strong>{{ invoices_awaiting_send }}</strong></a>
+    <a class="admin-context-link" href="/admin/accounting/month-close"><span>Month blockers</span><strong>{{ current_month_blockers }}</strong></a>
+    <a class="admin-context-link" href="/admin/accounting/documents?status=missing"><span>Missing documents</span><span>Check</span></a>
+  </div>
+</div>
+<div class="admin-context-card">
+  <div class="admin-context-title">Month-End State</div>
+  <p style="font-size:.84rem; color:var(--muted); line-height:1.65; margin:0 0 12px;">
+    Current month is
+    {% if current_month_review %}<strong style="color:var(--text);">{{ current_month_review.status }}</strong>{% else %}<strong style="color:var(--text);">open</strong>{% endif %}.
+    Use month-end review before sending files to your accountant.
+  </p>
+  <a class="btn-admin btn-admin-primary" href="/admin/accounting/month-close" style="width:100%;">Open Review</a>
+</div>
+<div class="admin-context-card">
+  <div class="admin-context-title">Reminder Feed</div>
+  <div style="display:grid; gap:10px;">
+    {% for r in reminders[:4] %}
+    <div style="padding-bottom:10px; border-bottom:1px solid var(--border-soft);">
+      <div style="font-size:.84rem;">{{ r.title }}</div>
+      <div style="font-size:.74rem; color:var(--muted); margin-top:3px;">{{ r.due_date or "No due date" }}</div>
+    </div>
+    {% else %}
+    <p style="color:var(--muted); font-size:.84rem; margin:0;">No open reminders.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

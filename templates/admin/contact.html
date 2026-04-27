@@ -1,0 +1,46 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}İletişim Mesajları{% endblock %}
+
+{% block admin_content %}
+<div class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">İletişim Mesajları</h1>
+    <p class="admin-page-sub">{{ unread }} okunmamış mesaj</p>
+  </div>
+</div>
+
+<div class="admin-table-wrap">
+  <table class="admin-table">
+    <thead><tr>
+      <th>Gönderen</th><th>Konu</th><th>Mesaj</th><th>Tarih</th><th>Durum</th><th></th>
+    </tr></thead>
+    <tbody>
+      {% for m in messages %}
+      <tr style="{% if not m.is_read %}background:rgba(223,192,112,.04);{% endif %}">
+        <td>
+          <div style="{% if not m.is_read %}font-weight:500;{% endif %}">{{ m.name }}</div>
+          <div style="font-size:.75rem; color:var(--muted);">{{ m.email }}</div>
+        </td>
+        <td><span class="badge badge-muted">{{ m.subject }}</span></td>
+        <td style="font-size:.82rem; color:var(--muted); max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ m.message }}</td>
+        <td style="font-size:.78rem; color:var(--muted); white-space:nowrap;">{{ m.created_at }}</td>
+        <td>
+          {% if m.is_read %}<span class="badge badge-muted">Okundu</span>
+          {% else %}<span class="badge badge-warning">Yeni</span>{% endif %}
+        </td>
+        <td>
+          {% if not m.is_read %}
+          <form method="post" action="/admin/contact/{{ m.id }}/read">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="btn-admin" type="submit">Okundu İşaretle</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" style="color:var(--muted); text-align:center; padding:32px;">Mesaj yok</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

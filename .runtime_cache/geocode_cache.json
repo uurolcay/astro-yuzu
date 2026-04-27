@@ -328,5 +328,645 @@
         "location_source": "provider:nominatim"
       }
     ]
+  },
+  "search::kad::5": {
+    "results": [
+      {
+        "display_name": "Orhaneli, Turkey",
+        "normalized_place": "Kadı, Orhaneli, Bursa, Marmara Region, Turkey",
+        "latitude": 39.805321,
+        "longitude": 28.991793,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "kadı",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Yıldızeli, Turkey",
+        "normalized_place": "Kadı, Yıldızeli, Sivas, Central Anatolia Region, Turkey",
+        "latitude": 39.750628,
+        "longitude": 36.320745,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "kadı",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Karabük, Turkey",
+        "normalized_place": "Kadıköy, Karabük, Black Sea Region, 78000, Turkey",
+        "latitude": 41.106815,
+        "longitude": 32.565617,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "kadı",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Kastamonu, Turkey",
+        "normalized_place": "Kadı, Dengel, Çakıllı, Kastamonu, Black Sea Region, Turkey",
+        "latitude": 41.235688,
+        "longitude": 33.681743,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "kadı",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Amasra, Turkey",
+        "normalized_place": "Kadı, Cumayanı, Amasra, Bartın, Black Sea Region, Turkey",
+        "latitude": 41.777665,
+        "longitude": 32.568004,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "kadı",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      }
+    ]
+  },
+  "search::kadi::5": {
+    "results": [
+      {
+        "display_name": "Kadi, Gujarat, India",
+        "normalized_place": "Kadi, Kadi Taluka, Mahesana, Gujarat, 382715, India",
+        "latitude": 23.296945,
+        "longitude": 72.330638,
+        "timezone": "Asia/Kolkata",
+        "provider": "nominatim",
+        "confidence": 0.65,
+        "raw_input": "kadi",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Nassarawa, Kaduna State, Nigeria",
+        "normalized_place": "Kadi, Nassarawa, Chikun, Kaduna State, Nigeria",
+        "latitude": 10.452578,
+        "longitude": 7.25413,
+        "timezone": "Africa/Lagos",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "kadi",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "West Nusa Tenggara, Indonesia",
+        "normalized_place": "Kadi, Bima, West Nusa Tenggara, Lesser Sunda Islands, Indonesia",
+        "latitude": -8.556272,
+        "longitude": 118.808665,
+        "timezone": "Asia/Makassar",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "kadi",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Senator Ninoy Aquino, Sultan Kudarat, Philippines",
+        "normalized_place": "Kadi, Senator Ninoy Aquino, Sultan Kudarat, Soccsksargen, 9811, Philippines",
+        "latitude": 6.465688,
+        "longitude": 124.353551,
+        "timezone": "Asia/Manila",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "kadi",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Ouham, Central African Republic",
+        "normalized_place": "Kadi, Ouham, Central African Republic",
+        "latitude": 7.090653,
+        "longitude": 18.351482,
+        "timezone": "Africa/Bangui",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "kadi",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      }
+    ]
+  },
+  "search::kadk::5": {
+    "results": []
+  },
+  "search::kadkoy::5": {
+    "results": [
+      {
+        "display_name": "Kadıköy, Turkey",
+        "normalized_place": "Kadıköy, Istanbul, Marmara Region, Turkey",
+        "latitude": 40.991295,
+        "longitude": 29.024563,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.55,
+        "raw_input": "kadıköy",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Refahiye, Turkey",
+        "normalized_place": "Kadıköy, Refahiye, Erzincan, Eastern Anatolia Region, Turkey",
+        "latitude": 39.947201,
+        "longitude": 38.453792,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "kadıköy",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Taşköprü, Turkey",
+        "normalized_place": "Kadıköy, Taşköprü, Kastamonu, Black Sea Region, Turkey",
+        "latitude": 41.481445,
+        "longitude": 34.162911,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "kadıköy",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Haymana, Turkey",
+        "normalized_place": "Kadıköy, Haymana, Ankara, Central Anatolia Region, 06860, Turkey",
+        "latitude": 39.472138,
+        "longitude": 32.484181,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "kadıköy",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Bergama, Turkey",
+        "normalized_place": "Kadıköy Mahallesi, Bergama, Aegean Region, Turkey",
+        "latitude": 39.180672,
+        "longitude": 27.367924,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "kadıköy",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      }
+    ]
+  },
+  "search::besiktas::5": {
+    "results": [
+      {
+        "display_name": "Beşiktaş, Turkey",
+        "normalized_place": "Beşiktaş, Istanbul, Marmara Region, Turkey",
+        "latitude": 41.042847,
+        "longitude": 29.007528,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.55,
+        "raw_input": "beşiktaş",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Ardahan, Turkey",
+        "normalized_place": "Beşiktaş, Ardahan, Eastern Anatolia Region, Turkey",
+        "latitude": 40.910815,
+        "longitude": 42.87255,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "beşiktaş",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      }
+    ]
+  },
+  "search::be::5": {
+    "results": [
+      {
+        "display_name": "Berlin, Germany",
+        "normalized_place": "Berlin, Germany",
+        "latitude": 52.517389,
+        "longitude": 13.395131,
+        "timezone": "Europe/Berlin",
+        "provider": "nominatim",
+        "confidence": 0.55,
+        "raw_input": "be",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Bern, Switzerland",
+        "normalized_place": "Bern, Switzerland",
+        "latitude": 46.838235,
+        "longitude": 7.60045,
+        "timezone": "Europe/Zurich",
+        "provider": "nominatim",
+        "confidence": 0.55,
+        "raw_input": "be",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Belgium",
+        "normalized_place": "Belgium",
+        "latitude": 50.640281,
+        "longitude": 4.666715,
+        "timezone": "Europe/Brussels",
+        "provider": "nominatim",
+        "confidence": 0.55,
+        "raw_input": "be",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Benue State, Nigeria",
+        "normalized_place": "Benue State, Nigeria",
+        "latitude": 7.350575,
+        "longitude": 8.777288,
+        "timezone": "Africa/Lagos",
+        "provider": "nominatim",
+        "confidence": 0.55,
+        "raw_input": "be",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      }
+    ]
+  },
+  "search::bes::5": {
+    "results": [
+      {
+        "display_name": "Belluno, Veneto, Italy",
+        "normalized_place": "Bes, Belluno, Veneto, 32100, Italy",
+        "latitude": 46.124149,
+        "longitude": 12.15233,
+        "timezone": "Europe/Rome",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "bes",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Jharkhand, India",
+        "normalized_place": "Bes, Katamdag, Hazaribagh, Jharkhand, India",
+        "latitude": 23.895429,
+        "longitude": 85.325277,
+        "timezone": "Asia/Kolkata",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "bes",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Region of Košice, Slovakia",
+        "normalized_place": "Beša, District of Michalovce, Region of Košice, Eastern Slovakia, Slovakia",
+        "latitude": 48.533944,
+        "longitude": 21.950123,
+        "timezone": "Europe/Bratislava",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "bes",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      }
+    ]
+  },
+  "search::besil::5": {
+    "results": [
+      {
+        "display_name": "Gilgit-Baltistan, Pakistan",
+        "normalized_place": "Girls Middle School Chamanabad Besil, Bisil, Gulabpur Tehsil, Shigar District, Baltistan Division, Gilgit-Baltistan, Pakistan",
+        "latitude": 35.87405,
+        "longitude": 75.40012,
+        "timezone": "Asia/Karachi",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "besil",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Gilgit-Baltistan, Pakistan",
+        "normalized_place": "Boys Middle School Gulshanabad Besil, Bisil, Gulabpur Tehsil, Shigar District, Baltistan Division, Gilgit-Baltistan, Pakistan",
+        "latitude": 35.86992,
+        "longitude": 75.40559,
+        "timezone": "Asia/Karachi",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "besil",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      }
+    ]
+  },
+  "search::besikta::5": {
+    "results": [
+      {
+        "display_name": "Sweden",
+        "normalized_place": "Besikta Bilprovning, 6, Bolshedens Industriväg, Bångsbo, Brattås, Kungsbacka kommun, Halland County, 429 32, Sweden",
+        "latitude": 57.561262,
+        "longitude": 11.959343,
+        "timezone": "Europe/Stockholm",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "besikta",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Grimmered, Sydväst, Gothenburg, Sweden",
+        "normalized_place": "Besikta Bilprovning, Klangfärgsgatan, Rud, Grimmered, Sydväst, Gothenburg, Göteborgs Stad, Västra Götaland County, 426 52, Sweden",
+        "latitude": 57.662989,
+        "longitude": 11.894838,
+        "timezone": "Europe/Stockholm",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "besikta",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Grimmered, Sydväst, Gothenburg, Sweden",
+        "normalized_place": "Besikta, Klangfärgsgatan, Rud, Grimmered, Sydväst, Gothenburg, Göteborgs Stad, Västra Götaland County, 426 52, Sweden",
+        "latitude": 57.662511,
+        "longitude": 11.892735,
+        "timezone": "Europe/Stockholm",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "besikta",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Åby, Mölndal, Sweden",
+        "normalized_place": "Besikta Bilprovning, Aminogatan, Åbro industriområde, Åby, Mölndal, Mölndals kommun, Västra Götaland County, 431 53, Sweden",
+        "latitude": 57.642347,
+        "longitude": 12.017056,
+        "timezone": "Europe/Stockholm",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "besikta",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Emilstorp, Öster, Malmö, Sweden",
+        "normalized_place": "Besikta Bilprovning, Volframgatan, Emilstorp, Öster, Malmö, Malmö kommun, Skåne County, 213 64, Sweden",
+        "latitude": 55.589964,
+        "longitude": 13.036157,
+        "timezone": "Europe/Stockholm",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "besikta",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      }
+    ]
+  },
+  "search::besiktas, turkey/::5": {
+    "results": [
+      {
+        "display_name": "Beşiktaş, Turkey",
+        "normalized_place": "Beşiktaş, Istanbul, Marmara Region, Turkey",
+        "latitude": 41.042847,
+        "longitude": 29.007528,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.55,
+        "raw_input": "Beşiktaş, Turkey/",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Ardahan, Turkey",
+        "normalized_place": "Beşiktaş, Ardahan, Eastern Anatolia Region, Turkey",
+        "latitude": 40.910815,
+        "longitude": 42.87255,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "Beşiktaş, Turkey/",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      }
+    ]
+  },
+  "search::besiktas, turkey::5": {
+    "results": [
+      {
+        "display_name": "Beşiktaş, Turkey",
+        "normalized_place": "Beşiktaş, Istanbul, Marmara Region, Turkey",
+        "latitude": 41.042847,
+        "longitude": 29.007528,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.9,
+        "raw_input": "Beşiktaş, Turkey",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Ardahan, Turkey",
+        "normalized_place": "Beşiktaş, Ardahan, Eastern Anatolia Region, Turkey",
+        "latitude": 40.910815,
+        "longitude": 42.87255,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.65,
+        "raw_input": "Beşiktaş, Turkey",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Silopi, Turkey",
+        "normalized_place": "Damlaca, Silopi, Şırnak, Southeastern Anatolia Region, Turkey",
+        "latitude": 37.31667,
+        "longitude": 42.706698,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.35,
+        "raw_input": "Beşiktaş, Turkey",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      }
+    ]
+  },
+  "search::kad.::5": {
+    "results": []
+  },
+  "search::besk::5": {
+    "results": []
+  },
+  "search::besktas::5": {
+    "results": []
+  },
+  "search::besik::5": {
+    "results": [
+      {
+        "display_name": "Kızıltepe, Turkey",
+        "normalized_place": "Beşik, Kızıltepe, Mardin, Southeastern Anatolia Region, Turkey",
+        "latitude": 36.96995,
+        "longitude": 40.267314,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "beşik",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Bayramiç, Turkey",
+        "normalized_place": "Beşik, Bayramiç, Canakkale, Marmara Region, Turkey",
+        "latitude": 39.738007,
+        "longitude": 26.692804,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "beşik",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Ayvalık, Turkey",
+        "normalized_place": "Beşiktepe, Ayvalık, Balıkesir, Marmara Region, Turkey",
+        "latitude": 39.251868,
+        "longitude": 26.852108,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "beşik",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Kocasinan, Turkey",
+        "normalized_place": "Beşik, Kocasinan, Kayseri, Central Anatolia Region, Turkey",
+        "latitude": 38.848139,
+        "longitude": 35.502716,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "beşik",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Altınyayla, Turkey",
+        "normalized_place": "Beşik, Altınyayla, Sivas, Central Anatolia Region, Turkey",
+        "latitude": 39.190439,
+        "longitude": 36.75446,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "beşik",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      }
+    ]
+  },
+  "istanbul, turkey": {
+    "display_name": "Fatih, Istanbul, Turkey",
+    "normalized_place": "Istanbul, Fatih, Istanbul, Marmara Region, 34122, Turkey",
+    "latitude": 41.006381,
+    "longitude": 28.975872,
+    "timezone": "Europe/Istanbul",
+    "provider": "nominatim",
+    "confidence": 1.0,
+    "raw_input": "Istanbul, Turkey",
+    "cache_hit": false,
+    "location_source": "provider:nominatim"
+  },
+  "search::kadik::5": {
+    "results": [
+      {
+        "display_name": "Padang, West Sumatra, Indonesia",
+        "normalized_place": "Bukit Kadik, Padang, West Sumatra, Sumatra, 25175, Indonesia",
+        "latitude": -0.862366,
+        "longitude": 100.41465,
+        "timezone": "Asia/Jakarta",
+        "provider": "nominatim",
+        "confidence": 0.3,
+        "raw_input": "kadik",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      }
+    ]
+  },
+  "search::kar::5": {
+    "results": [
+      {
+        "display_name": "Kari, Lago, Bauchi State, Nigeria",
+        "normalized_place": "Kari, Lago, Darazo, Bauchi State, Nigeria",
+        "latitude": 11.243472,
+        "longitude": 10.559009,
+        "timezone": "Africa/Lagos",
+        "provider": "nominatim",
+        "confidence": 0.65,
+        "raw_input": "Karı",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Karayazı, Turkey",
+        "normalized_place": "Dörtpınar, Karayazı, Erzurum, Eastern Anatolia Region, Turkey",
+        "latitude": 39.630074,
+        "longitude": 42.463295,
+        "timezone": "Europe/Istanbul",
+        "provider": "nominatim",
+        "confidence": 0.55,
+        "raw_input": "Karı",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Kari, Madhya Pradesh, India",
+        "normalized_place": "Kari, Barwani Tahsil, Barwani, Madhya Pradesh, India",
+        "latitude": 22.036094,
+        "longitude": 74.946217,
+        "timezone": "Asia/Kolkata",
+        "provider": "nominatim",
+        "confidence": 0.55,
+        "raw_input": "Karı",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Kari, Madhya Pradesh, India",
+        "normalized_place": "Kari, Tikamgarh Tahsil, Tikamgarh, Madhya Pradesh, India",
+        "latitude": 24.831617,
+        "longitude": 78.860462,
+        "timezone": "Asia/Kolkata",
+        "provider": "nominatim",
+        "confidence": 0.55,
+        "raw_input": "Karı",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      },
+      {
+        "display_name": "Kari, Madhya Pradesh, India",
+        "normalized_place": "Kari, Mauganj Tahsil, Mauganj, Madhya Pradesh, India",
+        "latitude": 24.533086,
+        "longitude": 81.768344,
+        "timezone": "Asia/Kolkata",
+        "provider": "nominatim",
+        "confidence": 0.55,
+        "raw_input": "Karı",
+        "cache_hit": false,
+        "location_source": "provider:nominatim"
+      }
+    ]
   }
 }

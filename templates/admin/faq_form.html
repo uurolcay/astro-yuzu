@@ -1,0 +1,51 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}{{ 'Soruyu Düzenle' if item else 'Yeni Soru' }}{% endblock %}
+
+{% block admin_content %}
+<div class="admin-page-header">
+  <div><h1 class="admin-page-title">{{ 'Soruyu Düzenle' if item else 'Yeni Soru' }}</h1></div>
+  <a class="btn-admin" href="/admin/faq">← Geri</a>
+</div>
+
+<form class="admin-form" method="post" style="max-width:720px;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="admin-field">
+    <label>Kategori</label>
+    <select name="category">
+      <option value="Genel" {% if item and item.category == 'Genel' %}selected{% endif %}>Genel</option>
+      <option value="Raporlar" {% if item and item.category == 'Raporlar' %}selected{% endif %}>Raporlar</option>
+      <option value="Danışmanlık" {% if item and item.category == 'Danışmanlık' %}selected{% endif %}>Danışmanlık</option>
+    </select>
+  </div>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+    <div class="admin-field">
+      <label>Soru (Türkçe)</label>
+      <textarea name="question_tr" rows="3">{{ item.question_tr if item else '' }}</textarea>
+    </div>
+    <div class="admin-field">
+      <label>Soru (İngilizce)</label>
+      <textarea name="question_en" rows="3">{{ item.question_en if item else '' }}</textarea>
+    </div>
+    <div class="admin-field">
+      <label>Cevap (Türkçe)</label>
+      <textarea name="answer_tr" rows="6">{{ item.answer_tr if item else '' }}</textarea>
+    </div>
+    <div class="admin-field">
+      <label>Cevap (İngilizce)</label>
+      <textarea name="answer_en" rows="6">{{ item.answer_en if item else '' }}</textarea>
+    </div>
+  </div>
+  <div class="admin-field">
+    <label>Sıralama (küçük = önce)</label>
+    <input type="number" name="sort_order" value="{{ item.sort_order if item else 10 }}" min="1" max="999" style="max-width:120px;">
+  </div>
+  <div class="admin-field" style="display:flex; align-items:center; gap:10px;">
+    <input type="checkbox" name="is_published" id="is_pub" {% if not item or item.is_published %}checked{% endif %} style="width:18px; height:18px;">
+    <label for="is_pub" style="margin:0; cursor:pointer;">Yayınla</label>
+  </div>
+  <div style="display:flex; gap:10px;">
+    <button class="btn-admin btn-admin-primary" type="submit">{{ 'Güncelle' if item else 'Oluştur' }}</button>
+    <a class="btn-admin" href="/admin/faq">İptal</a>
+  </div>
+</form>
+{% endblock %}

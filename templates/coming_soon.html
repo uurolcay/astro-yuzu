@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% set coming_soon_lang = language if language is defined and language in ["tr", "en"] else (request.state.lang if request is defined and request.state is defined and request.state.lang in ["tr", "en"] else "tr") %}
+{% block title %}{{ coming_soon.title if coming_soon else ("Coming Soon" if coming_soon_lang == "en" else "Yakında Yayında") }} | Focus Astrology{% endblock %}
+
+{% block content %}
+<section class="page-section" style="padding-top: max(32px, 4vh); padding-bottom: max(40px, 6vh);">
+    <div class="container">
+        {% include "components/coming_soon_panel.html" %}
+    </div>
+</section>
+{% endblock %}

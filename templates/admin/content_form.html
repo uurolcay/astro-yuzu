@@ -17,6 +17,7 @@
             {% if error %}<div class="metric-card" style="margin-top:18px; border-color:rgba(224,108,117,.45); color:#f1b5b5;">{{ error }}</div>{% endif %}
 
             <form method="post" style="display:grid; gap:14px; margin-top:24px;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <label>
                     <span class="muted">Title</span>
                     <input type="text" name="title" value="{{ article.title }}" required style="width:100%; margin-top:6px;">

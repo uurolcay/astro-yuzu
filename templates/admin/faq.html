@@ -1,0 +1,40 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}SSS Yönetimi{% endblock %}
+
+{% block admin_content %}
+<div class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">SSS Yönetimi</h1>
+    <p class="admin-page-sub">{{ total }} soru</p>
+  </div>
+  <a class="btn-admin btn-admin-primary" href="/admin/faq/new">+ Yeni Soru</a>
+</div>
+
+{% for category_name, items in faq_by_category.items() %}
+<div class="admin-table-wrap" style="margin-bottom:0;">
+  <div class="admin-table-header">
+    <span class="admin-table-title">{{ category_name }}</span>
+    <span style="font-size:.8rem; color:var(--muted);">{{ items|length }} soru</span>
+  </div>
+  <table class="admin-table">
+    <thead><tr><th>#</th><th>Soru (TR)</th><th>Durum</th><th></th></tr></thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td style="color:var(--muted); width:40px;">{{ item.sort_order }}</td>
+        <td>{{ item.question_tr }}</td>
+        <td>{% if item.is_published %}<span class="badge badge-success">Yayında</span>{% else %}<span class="badge badge-warning">Gizli</span>{% endif %}</td>
+        <td style="display:flex; gap:6px;">
+          <a class="btn-admin" href="/admin/faq/{{ item.id }}/edit">Düzenle</a>
+          <form method="post" action="/admin/faq/{{ item.id }}/delete" onsubmit="return confirm('Soruyu silmek istediğinizden emin misiniz?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="btn-admin btn-admin-danger" type="submit">Sil</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endfor %}
+{% endblock %}

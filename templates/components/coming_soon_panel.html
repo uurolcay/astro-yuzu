@@ -1,0 +1,130 @@
+<style>
+    .coming-soon-shell {
+        position: relative;
+        z-index: 1;
+    }
+
+    .coming-soon-shell--page {
+        max-width: 1080px;
+        margin: 0 auto;
+    }
+
+    .coming-soon-shell--notice {
+        max-width: none;
+        margin: 0;
+    }
+
+    .coming-soon-page-panel,
+    .launch-notice-panel {
+        display: grid;
+        gap: 28px;
+        border: 1px solid rgba(223, 192, 112, 0.18);
+        background:
+            radial-gradient(circle at 82% 18%, rgba(223, 192, 112, 0.16), transparent 30%),
+            radial-gradient(circle at 18% 82%, rgba(54, 82, 126, 0.15), transparent 30%),
+            linear-gradient(180deg, rgba(18, 28, 52, 0.9), rgba(10, 18, 36, 0.92));
+        backdrop-filter: blur(18px);
+    }
+
+    .coming-soon-page-panel {
+        padding: clamp(38px, 6vw, 64px);
+        min-height: min(68vh, 760px);
+        align-content: center;
+        border-radius: calc(var(--radius) + 4px);
+        box-shadow: 0 26px 58px rgba(0, 0, 0, 0.28);
+    }
+
+    .launch-notice-panel {
+        max-width: 560px;
+        padding: 32px;
+        border-radius: 28px;
+        align-content: start;
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+    }
+
+    .coming-soon-copy {
+        display: grid;
+        gap: 14px;
+    }
+
+    .coming-soon-page-panel .coming-soon-copy {
+        max-width: 760px;
+    }
+
+    .launch-notice-panel .hero-title {
+        font-size: clamp(2.2rem, 4vw, 4.2rem);
+        line-height: 1.05;
+    }
+
+    .launch-notice-panel .hero-text {
+        max-width: 52ch;
+        line-height: 1.75;
+    }
+
+    .coming-soon-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .coming-soon-note {
+        color: var(--text-soft);
+        line-height: 1.75;
+    }
+
+    @media (max-width: 900px) {
+        .launch-notice-panel {
+            max-width: 100%;
+        }
+    }
+
+    @media (max-width: 760px) {
+        .coming-soon-page-panel,
+        .launch-notice-panel {
+            min-height: auto;
+            padding: clamp(28px, 8vw, 40px);
+        }
+
+        .coming-soon-actions,
+        .coming-soon-actions .btn {
+            width: 100%;
+            justify-content: center;
+        }
+    }
+</style>
+
+{% set coming_soon_copy = coming_soon if coming_soon is defined and coming_soon else {} %}
+{% set coming_soon_lang = lang if lang is defined and lang in ["tr", "en"] else (language if language is defined and language in ["tr", "en"] else (request.state.lang if request is defined and request.state is defined and request.state.lang in ["tr", "en"] else "tr")) %}
+{% set coming_soon_variant = coming_soon_variant if coming_soon_variant is defined and coming_soon_variant in ["page", "notice"] else "page" %}
+<div class="coming-soon-shell {{ 'coming-soon-shell--notice' if coming_soon_variant == 'notice' else 'coming-soon-shell--page' }}">
+    <section class="{{ 'launch-notice-panel' if coming_soon_variant == 'notice' else 'coming-soon-page-panel' }}">
+        <div class="coming-soon-copy">
+            <div class="chip-row">
+                <span class="chip">Focus Astrology</span>
+                <span class="chip">{{ coming_soon_copy.title or ("Coming Soon" if coming_soon_lang == "en" else "Yakında Yayında") }}</span>
+            </div>
+            <div class="section-kicker">
+                {% if coming_soon_variant == "notice" %}
+                    {{ "Official Launch Preparation" if coming_soon_lang == "en" else "Resmi Lansman Hazırlığı" }}
+                {% else %}
+                    {{ "Launch Mode" if coming_soon_lang == "en" else "Lansman Modu" }}
+                {% endif %}
+            </div>
+            <h1 class="hero-title">{{ coming_soon_copy.title or ("Coming Soon" if coming_soon_lang == "en" else "Yakında Yayında") }}</h1>
+            <p class="hero-text">
+                {{ coming_soon_copy.message or ("Focus Astrology is currently in the final preparation phase for personal reports, consultation services, and payment infrastructure. To give you a secure, professional, and high-standard experience, we are keeping this area temporarily closed." if coming_soon_lang == "en" else "Focus Astrology şu anda kişisel raporlar, danışmanlık hizmetleri ve ödeme altyapısı için son hazırlık sürecindedir. Size güvenli, profesyonel ve yüksek standartlarda bir deneyim sunabilmek için bu alanı geçici olarak kapalı tutuyoruz.") }}
+            </p>
+            <p class="coming-soon-note">
+                {% if coming_soon_lang == "en" %}
+                The site remains live so you can explore the brand and service scope while launch-only features stay safely paused.
+                {% else %}
+                Marka ve hizmet kapsamını incelemeye devam edebilirsiniz; yalnızca lansman sonrasında açılacak işlem alanları güvenli biçimde beklemede tutulmaktadır.
+                {% endif %}
+            </p>
+        </div>
+        <div class="coming-soon-actions">
+            <a class="btn btn-primary" href="/">{{ coming_soon_copy.home_label or ("Back to Home" if coming_soon_lang == "en" else "Ana Sayfaya Dön") }}</a>
+            <a class="btn btn-secondary" href="mailto:info@focusastrology.com">{{ coming_soon_copy.info_label or ("Get Information" if coming_soon_lang == "en" else "Bilgi Al") }}</a>
+        </div>
+    </section>
+</div>

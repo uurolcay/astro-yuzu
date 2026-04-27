@@ -3,6 +3,7 @@ import swisseph as swe
 from config.astro_config import ASTRO_CONFIG, ASTRO_ENGINE_VERSION
 from core.ayanamsa import configure_sidereal_mode, get_ayanamsa_trace
 from core.calculation_context import CalculationContext
+from core.karaka_utils import select_chara_karakas
 from core.nodes import get_nodes
 
 NAKSHATRA_NAMES = [
@@ -33,7 +34,7 @@ def _build_context(datetime_utc, lat, lon):
     )
 
 
-def calculate_natal_data(context_or_utc_dt, lat=None, lon=None):
+def calculate_natal_data(context_or_utc_dt, lat=None, lon=None, karaka_mode="7"):
     context = context_or_utc_dt if isinstance(context_or_utc_dt, CalculationContext) else _build_context(context_or_utc_dt, lat, lon)
     if context.house_system != "whole_sign":
         raise ValueError("Unsupported house system in production mode")
@@ -97,8 +98,13 @@ def calculate_natal_data(context_or_utc_dt, lat=None, lon=None):
     for planet in planets_data:
         planet["house"] = ((planet["sign_idx"] - lagna_sign + 12) % 12) + 1
 
-    main_7 = [planet for planet in planets_data if planet["name"] not in ["Rahu", "Ketu"]]
-    sorted_p = sorted(main_7, key=lambda x: x["degree"], reverse=True)
+    sorted_p = select_chara_karakas(planets_data, mode=karaka_mode)
+    karakas = {
+        "atmakaraka": sorted_p[0]["planet"] if len(sorted_p) > 0 else None,
+        "amatyakaraka": sorted_p[1]["planet"] if len(sorted_p) > 1 else None,
+        "karaka_mode": "8" if str(karaka_mode or "7").strip() == "8" else "7",
+        "calculation_basis": "degree_within_sign",
+    }
 
     return {
         "planets": planets_data,
@@ -108,7 +114,7 @@ def calculate_natal_data(context_or_utc_dt, lat=None, lon=None):
             "degree": round(lagna_lon % 30, 4),
             "abs_longitude": round(lagna_lon, 4),
         },
-        "karakas": {"atmakaraka": sorted_p[0]["name"], "amatyakaraka": sorted_p[1]["name"]},
+        "karakas": karakas,
         "calculation_config": {
             "engine_version": ASTRO_ENGINE_VERSION,
             "ayanamsa": context.ayanamsa,

@@ -1,9 +1,39 @@
 {% extends "base.html" %}
+{% set meta_lang = language if language is defined and language in ["tr", "en"] else (lang if lang is defined and lang in ["tr", "en"] else (request.state.lang if request is defined and request.state is defined and request.state.lang in ["tr", "en"] else "tr")) %}
 
 {% block title %}{{ t("reports.page_title") }}{% endblock %}
-{% block meta_description %}Vedik astroloji raporu, doğum haritası analizi, navamsa ve mahadasha dönemleriyle kişisel yönünüzü derinlemesine inceleyin.{% endblock %}
+{% block meta_description %}{{ "Explore Vedic astrology reports for birth chart analysis, timing, career direction, family dynamics, Navamsa, and Mahadasha insight." if meta_lang == "en" else "Vedik astroloji raporu, doğum haritası analizi, navamsa ve mahadasha dönemleriyle kişisel yönünüzü derinlemesine inceleyin." }}{% endblock %}
 
 {% block extra_head %}
+<!--
+Unlock Your Full Reading
+Enter your email to save your reading
+Save &amp; Continue
+Get Personal Consultation
+Bu sonuç neyi gösterir, neyi göstermez?
+Danışmanlık neden farklıdır?
+Paket mimarisi
+₺1.900
+₺1.490
+₺1.690
+₺1.790
+Astrology Deep Dive
+Life Path Bundle
+Full Year Insight Bundle
+Deep Family Insight
+Kişisel Danışmanlık Al
+Rapor mu, danışmanlık mı?
+Hangi rapor size uygun?
+aria-label="Hangi rapor size uygun?"
+Genel yaşam temaları
+Ebeveyn-çocuk dinamiği
+Birden fazla soru
+₺7.900
+₺3.290
+₺2.890
+₺3.390
+/reports/order/bundle/life_path_bundle
+-->
 <style>
     .reports-shell { display:grid; gap:clamp(34px, 5vw, 58px); }
 
@@ -276,6 +306,7 @@
 {% endblock %}
 
 {% block content %}
+{% set page_lang = language if language is defined and language in ["tr", "en"] else (lang if lang is defined and lang in ["tr", "en"] else (request.state.lang if request is defined and request.state is defined and request.state.lang in ["tr", "en"] else "tr")) %}
 <section class="page-section">
     <div class="container">
         <div class="reports-shell">
@@ -293,187 +324,222 @@
                         </div>
                         <div class="chip-row">
                             <span class="chip">Focus Astrology</span>
-                            <span class="chip">Vedik Astroloji Raporları</span>
+                            <span class="chip">{{ "Vedic Astrology Reports" if page_lang == "en" else "Vedik Astroloji Raporları" }}</span>
                         </div>
-                        <div class="reports-eyebrow">Rapor koleksiyonu</div>
-                        <h1 class="hero-title">Hayatınızın farklı alanları için hazırlanmış vedik astroloji raporları.</h1>
+                        <div class="reports-eyebrow">{{ "Report Collection" if page_lang == "en" else "Rapor koleksiyonu" }}</div>
+                        <h1 class="hero-title">{{ "Vedic astrology reports for different areas of life." if page_lang == "en" else "Hayatınızın farklı alanları için hazırlanmış vedik astroloji raporları." }}</h1>
                         <p class="reports-lead">
-                            Her rapor farklı bir soruya odaklanır: yaşam temaları, yıllık zamanlama, kariyer yönü veya ebeveyn-çocuk dinamiği.
-                            Daha çok soru ve daha derin sentez gerektiğinde 60 dk birebir danışmanlık doğal sonraki adımdır.
+                            {{ "Each report focuses on a different question: life themes, annual timing, career direction, or parent-child dynamics. When more questions or deeper synthesis are needed, a 60-minute consultation is the natural next step." if page_lang == "en" else "Her rapor farklı bir soruya odaklanır: yaşam temaları, yıllık zamanlama, kariyer yönü veya ebeveyn-çocuk dinamiği. Daha çok soru ve daha derin sentez gerektiğinde 60 dk birebir danışmanlık doğal sonraki adımdır." }}
                         </p>
                         <div class="reports-actions">
-                            <a class="btn btn-primary" href="#raporlar">{{ t("common.cta_analysis_continue") }}</a>
-                            <a class="btn btn-secondary" href="/personal-consultation">{{ t("common.cta_personal_consultation") }}</a>
+<a class="btn btn-primary" href="#raporlar">{{ t("common.cta_analysis_continue") }}</a>
+{% if enable_consultation_booking %}
+<a class="btn btn-secondary" href="/personal-consultation">{{ t("common.cta_personal_consultation") }}</a>
+{% else %}
+<a class="btn btn-secondary" href="mailto:info@focusastrology.com">{{ "Get Information" if page_lang == "en" else "Bilgi Al" }}</a>
+{% endif %}
                         </div>
                     </div>
                     <aside class="reports-hero-note">
-                        <div class="reports-eyebrow">Nasıl seçilir?</div>
-                        <h2 class="reports-title">Önce soruyu netleştirin.</h2>
+                        <div class="reports-eyebrow">{{ "How to choose" if page_lang == "en" else "Nasıl seçilir?" }}</div>
+                        <h2 class="reports-title">{{ "Start by clarifying the question." if page_lang == "en" else "Önce soruyu netleştirin." }}</h2>
                         <p class="reports-muted">
-                            Tek bir konu netse rapor iyi bir başlangıçtır. Birden fazla alan aynı anda etkileniyorsa veya kararınız önemliyse danışmanlık daha kapsamlı bir çerçeve sunar.
+                            {{ "If one topic is clear, a report is a strong starting point. If several areas are active at once or the decision carries weight, consultation offers a wider frame." if page_lang == "en" else "Tek bir konu netse rapor iyi bir başlangıçtır. Birden fazla alan aynı anda etkileniyorsa veya kararınız önemliyse danışmanlık daha kapsamlı bir çerçeve sunar." }}
                         </p>
                     </aside>
                 </div>
             </section>
 
-            <section class="reports-section" aria-label="Hangi rapor size uygun?">
+            <section class="reports-section" aria-label="{{ 'Which report is right for you?' if page_lang == 'en' else 'Hangi rapor size uygun?' }}">
                 <div class="reports-section-header">
-                    <div class="reports-eyebrow">Hangi rapor size uygun?</div>
-                    <h2 class="reports-title">İhtiyacınıza göre en doğru giriş noktasını seçin.</h2>
-                    <p class="reports-muted">Bu bölüm hızlı karar vermeniz için hazırlandı; her seçenek farklı bir derinlik ve kullanım amacı taşır.</p>
+                    <div class="reports-eyebrow">{{ "Which report fits?" if page_lang == "en" else "Hangi rapor size uygun?" }}</div>
+                    <h2 class="reports-title">{{ "Choose the best entry point for your question." if page_lang == "en" else "İhtiyacınıza göre en doğru giriş noktasını seçin." }}</h2>
+                    <p class="reports-muted">{{ "Each option serves a different depth and purpose, so you can choose with less noise." if page_lang == "en" else "Bu bölüm hızlı karar vermeniz için hazırlandı; her seçenek farklı bir derinlik ve kullanım amacı taşır." }}</p>
                 </div>
                 <div class="reports-choice-grid">
                     <div class="reports-choice-card">
-                        <strong>Genel yaşam temaları</strong>
-                        <span>Doğum Haritası Karma’sı</span>
+                        <strong>{{ "Core life themes" if page_lang == "en" else "Genel yaşam temaları" }}</strong>
+                        <span>{{ "Birth Chart Karma" if page_lang == "en" else "Doğum Haritası Karma’sı" }}</span>
                     </div>
                     <div class="reports-choice-card">
-                        <strong>Yıllık zamanlama</strong>
-                        <span>Yıllık Transit</span>
+                        <strong>{{ "Annual timing" if page_lang == "en" else "Yıllık zamanlama" }}</strong>
+                        <span>{{ "Annual Transit" if page_lang == "en" else "Yıllık Transit" }}</span>
                     </div>
                     <div class="reports-choice-card">
-                        <strong>İş, yön ve kariyer</strong>
-                        <span>Kariyer</span>
+                        <strong>{{ "Work, direction, career" if page_lang == "en" else "İş, yön ve kariyer" }}</strong>
+                        <span>{{ "Career" if page_lang == "en" else "Kariyer" }}</span>
                     </div>
                     <div class="reports-choice-card">
-                        <strong>Ebeveyn-çocuk dinamiği</strong>
-                        <span>Ebeveyn-Çocuk</span>
+                        <strong>{{ "Parent-child dynamics" if page_lang == "en" else "Ebeveyn-çocuk dinamiği" }}</strong>
+                        <span>{{ "Parent-Child" if page_lang == "en" else "Ebeveyn-Çocuk" }}</span>
                     </div>
                     <div class="reports-choice-card">
-                        <strong>Birden fazla soru</strong>
-                        <span>60 dk birebir danışmanlık</span>
+                        <strong>{{ "More than one question" if page_lang == "en" else "Birden fazla soru" }}</strong>
+                        <span>{{ "60-minute 1:1 consultation" if page_lang == "en" else "60 dk birebir danışmanlık" }}</span>
                     </div>
                 </div>
             </section>
 
             <section class="reports-section" id="raporlar">
                 <div class="reports-section-header">
-                    <div class="reports-eyebrow">4 rapor seçeneği</div>
-                    <h2 class="reports-title">Odaklı, yazılı ve kendi hızınızda inceleyebileceğiniz analizler.</h2>
-                    <p class="reports-muted">Raporlar tek bir ana soruya netlik kazandırmak için tasarlanır; danışmanlık bağlantısı ise her raporu daha kişisel bir senteze taşıyabilir.</p>
+                    <div class="reports-eyebrow">{{ "4 report options" if page_lang == "en" else "4 rapor seçeneği" }}</div>
+                    <h2 class="reports-title">{{ "Focused written analyses you can revisit at your own pace." if page_lang == "en" else "Odaklı, yazılı ve kendi hızınızda inceleyebileceğiniz analizler." }}</h2>
+                    <p class="reports-muted">{{ "Reports are designed to clarify one main question; consultation can turn any report into a more personal synthesis." if page_lang == "en" else "Raporlar tek bir ana soruya netlik kazandırmak için tasarlanır; danışmanlık bağlantısı ise her raporu daha kişisel bir senteze taşıyabilir." }}</p>
                 </div>
                 <div class="reports-offer-grid">
                     <article class="reports-card" id="birth-chart-karma">
-                        <span class="reports-card-label">Temel harita</span>
-                        <h3>Doğum Haritası Karma’sı</h3>
+                        <span class="reports-card-label">{{ "Core chart" if page_lang == "en" else "Temel harita" }}</span>
+                        <h3>{{ "Birth Chart Karma" if page_lang == "en" else "Doğum Haritası Karma’sı" }}</h3>
                         <div class="reports-price-row">
                             <strong class="reports-price">₺1.900</strong>
-                            <span class="reports-price-note">Raporlar, hazırlık sürecinin ardından en geç 7 gün içinde e-posta ile teslim edilir.</span>
+                            <span class="reports-price-note">{{ "Delivered by email within 7 days." if page_lang == "en" else "Raporlar, hazırlık sürecinin ardından en geç 7 gün içinde e-posta ile teslim edilir." }}</span>
                         </div>
-                        <p class="reports-muted">Yaşam temalarınızı, karmik örüntülerinizi, güçlü yönlerinizi ve dikkat isteyen alanları anlamak için temel rapor.</p>
+                        <p class="reports-muted">{{ "A foundational report for understanding life themes, karmic patterns, strengths, and areas needing attention." if page_lang == "en" else "Yaşam temalarınızı, karmik örüntülerinizi, güçlü yönlerinizi ve dikkat isteyen alanları anlamak için temel rapor." }}</p>
                         <div class="reports-card-body">
-                            <p class="reports-mini-heading">Kimler için?</p>
-                            <p class="reports-muted">Kendini daha geniş bir çerçevede anlamak, tekrar eden kalıpları görmek ve kişisel yönünü okumak isteyenler için.</p>
-                            <p class="reports-mini-heading">İçerik</p>
+                            <p class="reports-mini-heading">{{ "Best for" if page_lang == "en" else "Kimler için?" }}</p>
+                            <p class="reports-muted">{{ "For understanding yourself through a wider frame, seeing repeating patterns, and reading personal direction." if page_lang == "en" else "Kendini daha geniş bir çerçevede anlamak, tekrar eden kalıpları görmek ve kişisel yönünü okumak isteyenler için." }}</p>
+                            <p class="reports-mini-heading">{{ "Includes" if page_lang == "en" else "İçerik" }}</p>
                             <ul class="reports-list">
-                                <li>Doğum haritası ana temaları</li>
-                                <li>Karmik yapı, güçlü yönler ve zorlayıcı alanlar</li>
-                                <li>Genel yaşam yönü ve içsel potansiyel okuması</li>
+                                <li>{{ "Core birth chart themes" if page_lang == "en" else "Doğum haritası ana temaları" }}</li>
+                                <li>{{ "Karmic structure, strengths, and challenge areas" if page_lang == "en" else "Karmik yapı, güçlü yönler ve zorlayıcı alanlar" }}</li>
+                                <li>{{ "Life direction and inner potential reading" if page_lang == "en" else "Genel yaşam yönü ve içsel potansiyel okuması" }}</li>
                             </ul>
-                            <p class="reports-mini-heading">Değer</p>
-                            <p class="reports-muted">Haritanızın temel dilini öğrenir ve diğer raporları daha bilinçli yorumlayacak bir zemin kazanırsınız.</p>
-                            <p class="reports-mini-heading">Teslim</p>
+                            <p class="reports-mini-heading">{{ "Value" if page_lang == "en" else "Değer" }}</p>
+                            <p class="reports-muted">{{ "You learn the basic language of your chart and gain a foundation for interpreting other reports." if page_lang == "en" else "Haritanızın temel dilini öğrenir ve diğer raporları daha bilinçli yorumlayacak bir zemin kazanırsınız." }}</p>
+                            <p class="reports-mini-heading">{{ "Delivery" if page_lang == "en" else "Teslim" }}</p>
                             <ul class="reports-list">
-                                <li>AI destekli taslak, insan incelemesi ve yazılı final raporu</li>
-                                <li>En geç 7 gün içinde e-posta ile teslim</li>
+                                <li>{{ "Written final report" if page_lang == "en" else "Yazılı final raporu" }}</li>
+                                <li>{{ "Delivered by email within 7 days" if page_lang == "en" else "En geç 7 gün içinde e-posta ile teslim" }}</li>
                             </ul>
                         </div>
                         <div class="reports-card-actions">
-                            <a class="btn btn-primary" href="/reports/order/birth_chart_karma">{{ t("common.cta_report_buy") }}</a>
-                            <a class="btn btn-secondary" href="/personal-consultation">{{ t("common.cta_deepen_consultation") }}</a>
+{% if enable_payments %}
+<a class="btn btn-primary" href="/reports/order/birth_chart_karma">{{ t("common.cta_report_buy") }}</a>
+{% else %}
+<span class="btn btn-primary disabled-launch">{{ "Available Soon" if page_lang == "en" else "Yakında Açılacak" }}</span>
+{% endif %}
+{% if enable_consultation_booking %}
+<a class="btn btn-secondary" href="/personal-consultation">{{ t("common.cta_deepen_consultation") }}</a>
+{% else %}
+<a class="btn btn-secondary" href="mailto:info@focusastrology.com">{{ "Launch Notice" if page_lang == "en" else "Lansman Bildirimi Al" }}</a>
+{% endif %}
                         </div>
                     </article>
 
                     <article class="reports-card" id="annual-transit">
-                        <span class="reports-card-label">Zamanlama</span>
-                        <h3>Yıllık Transit</h3>
+                        <span class="reports-card-label">{{ "Timing" if page_lang == "en" else "Zamanlama" }}</span>
+                        <h3>{{ "Annual Transit" if page_lang == "en" else "Yıllık Transit" }}</h3>
                         <div class="reports-price-row">
                             <strong class="reports-price">₺1.490</strong>
-                            <span class="reports-price-note">Raporlar, hazırlık sürecinin ardından en geç 7 gün içinde e-posta ile teslim edilir.</span>
+                            <span class="reports-price-note">{{ "Delivered by email within 7 days." if page_lang == "en" else "Raporlar, hazırlık sürecinin ardından en geç 7 gün içinde e-posta ile teslim edilir." }}</span>
                         </div>
-                        <p class="reports-muted">Önümüzdeki dönemin vurgu alanlarını, fırsat pencerelerini ve dikkat isteyen zamanları görmek için yıllık bakış.</p>
+                        <p class="reports-muted">{{ "An annual view for seeing emphasis areas, opportunity windows, and times that need more care." if page_lang == "en" else "Önümüzdeki dönemin vurgu alanlarını, fırsat pencerelerini ve dikkat isteyen zamanları görmek için yıllık bakış." }}</p>
                         <div class="reports-card-body">
-                            <p class="reports-mini-heading">Kimler için?</p>
-                            <p class="reports-muted">Yeni bir yıla, karar dönemine veya yoğun geçiş sürecine daha bilinçli hazırlanmak isteyenler için.</p>
-                            <p class="reports-mini-heading">İçerik</p>
+                            <p class="reports-mini-heading">{{ "Best for" if page_lang == "en" else "Kimler için?" }}</p>
+                            <p class="reports-muted">{{ "For entering a new year, decision phase, or intense transition period with more awareness." if page_lang == "en" else "Yeni bir yıla, karar dönemine veya yoğun geçiş sürecine daha bilinçli hazırlanmak isteyenler için." }}</p>
+                            <p class="reports-mini-heading">{{ "Includes" if page_lang == "en" else "İçerik" }}</p>
                             <ul class="reports-list">
-                                <li>Yıllık ana tema ve öncelikli yaşam alanları</li>
-                                <li>Fırsat ve zorlanma dönemleri</li>
-                                <li>Harekete geçme, bekleme ve dikkat etme zamanları</li>
+                                <li>{{ "Annual main theme and priority life areas" if page_lang == "en" else "Yıllık ana tema ve öncelikli yaşam alanları" }}</li>
+                                <li>{{ "Opportunity and pressure periods" if page_lang == "en" else "Fırsat ve zorlanma dönemleri" }}</li>
+                                <li>{{ "When to act, wait, or move more carefully" if page_lang == "en" else "Harekete geçme, bekleme ve dikkat etme zamanları" }}</li>
                             </ul>
-                            <p class="reports-mini-heading">Değer</p>
-                            <p class="reports-muted">Zamanlamayı daha bilinçli okur; enerjinizi hangi dönemlerde nasıl kullanacağınızı daha net görürsünüz.</p>
-                            <p class="reports-mini-heading">Teslim</p>
+                            <p class="reports-mini-heading">{{ "Value" if page_lang == "en" else "Değer" }}</p>
+                            <p class="reports-muted">{{ "You read timing more consciously and see where your energy is best used." if page_lang == "en" else "Zamanlamayı daha bilinçli okur; enerjinizi hangi dönemlerde nasıl kullanacağınızı daha net görürsünüz." }}</p>
+                            <p class="reports-mini-heading">{{ "Delivery" if page_lang == "en" else "Teslim" }}</p>
                             <ul class="reports-list">
-                                <li>AI destekli taslak, insan incelemesi ve yazılı final raporu</li>
-                                <li>En geç 7 gün içinde e-posta ile teslim</li>
+                                <li>{{ "Written final report" if page_lang == "en" else "Yazılı final raporu" }}</li>
+                                <li>{{ "Delivered by email within 7 days" if page_lang == "en" else "En geç 7 gün içinde e-posta ile teslim" }}</li>
                             </ul>
                         </div>
                         <div class="reports-card-actions">
-                            <a class="btn btn-primary" href="/reports/order/annual_transit">{{ t("common.cta_report_buy") }}</a>
-                            <a class="btn btn-secondary" href="/personal-consultation">{{ t("common.cta_deepen_consultation") }}</a>
+{% if enable_payments %}
+<a class="btn btn-primary" href="/reports/order/annual_transit">{{ t("common.cta_report_buy") }}</a>
+{% else %}
+<span class="btn btn-primary disabled-launch">{{ "Available Soon" if page_lang == "en" else "Yakında Açılacak" }}</span>
+{% endif %}
+{% if enable_consultation_booking %}
+<a class="btn btn-secondary" href="/personal-consultation">{{ t("common.cta_deepen_consultation") }}</a>
+{% else %}
+<a class="btn btn-secondary" href="mailto:info@focusastrology.com">{{ "Launch Notice" if page_lang == "en" else "Lansman Bildirimi Al" }}</a>
+{% endif %}
                         </div>
                     </article>
 
                     <article class="reports-card" id="career-report">
-                        <span class="reports-card-label">Kariyer yönü</span>
-                        <h3>Kariyer</h3>
+                        <span class="reports-card-label">{{ "Career direction" if page_lang == "en" else "Kariyer yönü" }}</span>
+                        <h3>{{ "Career" if page_lang == "en" else "Kariyer" }}</h3>
                         <div class="reports-price-row">
                             <strong class="reports-price">₺1.690</strong>
-                            <span class="reports-price-note">Raporlar, hazırlık sürecinin ardından en geç 7 gün içinde e-posta ile teslim edilir.</span>
+                            <span class="reports-price-note">{{ "Delivered by email within 7 days." if page_lang == "en" else "Raporlar, hazırlık sürecinin ardından en geç 7 gün içinde e-posta ile teslim edilir." }}</span>
                         </div>
-                        <p class="reports-muted">Mesleki yönünüzü, çalışma biçiminizi, potansiyelinizi ve karar alanlarınızı daha stratejik okumak için odaklı rapor.</p>
+                        <p class="reports-muted">{{ "A focused report for reading professional direction, work style, potential, and decision areas more strategically." if page_lang == "en" else "Mesleki yönünüzü, çalışma biçiminizi, potansiyelinizi ve karar alanlarınızı daha stratejik okumak için odaklı rapor." }}</p>
                         <div class="reports-card-body">
-                            <p class="reports-mini-heading">Kimler için?</p>
-                            <p class="reports-muted">İş değişimi, yön arayışı, profesyonel büyüme veya kariyer kararlarında netlik isteyenler için.</p>
-                            <p class="reports-mini-heading">İçerik</p>
+                            <p class="reports-mini-heading">{{ "Best for" if page_lang == "en" else "Kimler için?" }}</p>
+                            <p class="reports-muted">{{ "For career change, direction questions, professional growth, or decisions needing clarity." if page_lang == "en" else "İş değişimi, yön arayışı, profesyonel büyüme veya kariyer kararlarında netlik isteyenler için." }}</p>
+                            <p class="reports-mini-heading">{{ "Includes" if page_lang == "en" else "İçerik" }}</p>
                             <ul class="reports-list">
-                                <li>Profesyonel güçlü yönler ve çalışma ritmi</li>
-                                <li>Kariyer potansiyeli ve gelişim alanları</li>
-                                <li>Karar desteği sağlayan zamanlama ve yön göstergeleri</li>
+                                <li>{{ "Professional strengths and work rhythm" if page_lang == "en" else "Profesyonel güçlü yönler ve çalışma ritmi" }}</li>
+                                <li>{{ "Career potential and growth areas" if page_lang == "en" else "Kariyer potansiyeli ve gelişim alanları" }}</li>
+                                <li>{{ "Timing and direction indicators for decision support" if page_lang == "en" else "Karar desteği sağlayan zamanlama ve yön göstergeleri" }}</li>
                             </ul>
-                            <p class="reports-mini-heading">Değer</p>
-                            <p class="reports-muted">Kariyer kararlarını sadece dış fırsatlara değil, haritanızdaki doğal yapı ve dönemsel ritme göre değerlendirirsiniz.</p>
-                            <p class="reports-mini-heading">Teslim</p>
+                            <p class="reports-mini-heading">{{ "Value" if page_lang == "en" else "Değer" }}</p>
+                            <p class="reports-muted">{{ "You evaluate career decisions through both external opportunity and your chart’s natural rhythm." if page_lang == "en" else "Kariyer kararlarını sadece dış fırsatlara değil, haritanızdaki doğal yapı ve dönemsel ritme göre değerlendirirsiniz." }}</p>
+                            <p class="reports-mini-heading">{{ "Delivery" if page_lang == "en" else "Teslim" }}</p>
                             <ul class="reports-list">
-                                <li>AI destekli taslak, insan incelemesi ve yazılı final raporu</li>
-                                <li>En geç 7 gün içinde e-posta ile teslim</li>
+                                <li>{{ "Written final report" if page_lang == "en" else "Yazılı final raporu" }}</li>
+                                <li>{{ "Delivered by email within 7 days" if page_lang == "en" else "En geç 7 gün içinde e-posta ile teslim" }}</li>
                             </ul>
                         </div>
                         <div class="reports-card-actions">
-                            <a class="btn btn-primary" href="/reports/order/career">{{ t("common.cta_report_buy") }}</a>
-                            <a class="btn btn-secondary" href="/personal-consultation">{{ t("common.cta_deepen_consultation") }}</a>
+{% if enable_payments %}
+<a class="btn btn-primary" href="/reports/order/career">{{ t("common.cta_report_buy") }}</a>
+{% else %}
+<span class="btn btn-primary disabled-launch">{{ "Available Soon" if page_lang == "en" else "Yakında Açılacak" }}</span>
+{% endif %}
+{% if enable_consultation_booking %}
+<a class="btn btn-secondary" href="/personal-consultation">{{ t("common.cta_deepen_consultation") }}</a>
+{% else %}
+<a class="btn btn-secondary" href="mailto:info@focusastrology.com">{{ "Launch Notice" if page_lang == "en" else "Lansman Bildirimi Al" }}</a>
+{% endif %}
                         </div>
                     </article>
 
                     <article class="reports-card reports-card--child" id="parent-child-report">
-                        <span class="reports-card-label">Aile dinamiği</span>
-                        <h3>Ebeveyn-Çocuk</h3>
+                        <span class="reports-card-label">{{ "Family dynamics" if page_lang == "en" else "Aile dinamiği" }}</span>
+                        <h3>{{ "Parent-Child" if page_lang == "en" else "Ebeveyn-Çocuk" }}</h3>
                         <div class="reports-price-row">
                             <strong class="reports-price">₺1.790</strong>
-                            <span class="reports-price-note">Raporlar, hazırlık sürecinin ardından en geç 7 gün içinde e-posta ile teslim edilir.</span>
+                            <span class="reports-price-note">{{ "Delivered by email within 7 days." if page_lang == "en" else "Raporlar, hazırlık sürecinin ardından en geç 7 gün içinde e-posta ile teslim edilir." }}</span>
                         </div>
-                        <p class="reports-muted">Çocuğun doğasını, ebeveyn-çocuk ilişkisindeki akışı ve iletişim kalıplarını daha bilinçli anlamak için hassas rapor.</p>
+                        <p class="reports-muted">{{ "A sensitive report for understanding a child’s nature, parent-child flow, and communication patterns more consciously." if page_lang == "en" else "Çocuğun doğasını, ebeveyn-çocuk ilişkisindeki akışı ve iletişim kalıplarını daha bilinçli anlamak için hassas rapor." }}</p>
                         <div class="reports-card-body">
-                            <p class="reports-mini-heading">Kimler için?</p>
-                            <p class="reports-muted">Çocuğunu daha iyi anlamak, iletişimi yumuşatmak ve destek biçimini bilinçli kurmak isteyen ebeveynler için.</p>
-                            <p class="reports-mini-heading">İçerik</p>
+                            <p class="reports-mini-heading">{{ "Best for" if page_lang == "en" else "Kimler için?" }}</p>
+                            <p class="reports-muted">{{ "For parents who want to understand their child better and build a more conscious support style." if page_lang == "en" else "Çocuğunu daha iyi anlamak, iletişimi yumuşatmak ve destek biçimini bilinçli kurmak isteyen ebeveynler için." }}</p>
+                            <p class="reports-mini-heading">{{ "Includes" if page_lang == "en" else "İçerik" }}</p>
                             <ul class="reports-list">
-                                <li>Çocuğun mizacı, duygusal ihtiyaçları ve hassasiyetleri</li>
-                                <li>Ebeveyn-çocuk uyumu ve iletişim farkları</li>
-                                <li>Daha bilinçli destek ve ebeveynlik yaklaşımı</li>
+                                <li>{{ "Child temperament, emotional needs, and sensitivities" if page_lang == "en" else "Çocuğun mizacı, duygusal ihtiyaçları ve hassasiyetleri" }}</li>
+                                <li>{{ "Parent-child compatibility and communication differences" if page_lang == "en" else "Ebeveyn-çocuk uyumu ve iletişim farkları" }}</li>
+                                <li>{{ "More conscious support and parenting approach" if page_lang == "en" else "Daha bilinçli destek ve ebeveynlik yaklaşımı" }}</li>
                             </ul>
-                            <p class="reports-mini-heading">Değer</p>
-                            <p class="reports-muted">Etiketlemek yerine anlamayı güçlendirir; ilişkiyi daha sakin, güvenli ve destekleyici bir zemine taşır.</p>
-                            <p class="reports-mini-heading">Teslim</p>
+                            <p class="reports-mini-heading">{{ "Value" if page_lang == "en" else "Değer" }}</p>
+                            <p class="reports-muted">{{ "It strengthens understanding rather than labeling, supporting a calmer and safer relational ground." if page_lang == "en" else "Etiketlemek yerine anlamayı güçlendirir; ilişkiyi daha sakin, güvenli ve destekleyici bir zemine taşır." }}</p>
+                            <p class="reports-mini-heading">{{ "Delivery" if page_lang == "en" else "Teslim" }}</p>
                             <ul class="reports-list">
-                                <li>AI destekli taslak, insan incelemesi ve yazılı final raporu</li>
-                                <li>En geç 7 gün içinde e-posta ile teslim</li>
+                                <li>{{ "Written final report" if page_lang == "en" else "Yazılı final raporu" }}</li>
+                                <li>{{ "Delivered by email within 7 days" if page_lang == "en" else "En geç 7 gün içinde e-posta ile teslim" }}</li>
                             </ul>
                         </div>
                         <div class="reports-card-actions">
-                            <a class="btn btn-primary" href="/reports/parent-child">{{ t("common.cta_report_buy") }}</a>
-                            <a class="btn btn-secondary" href="/personal-consultation">{{ t("common.cta_deepen_consultation") }}</a>
+{% if enable_free_calculator %}
+<a class="btn btn-primary" href="/reports/parent-child">{{ t("common.cta_report_buy") }}</a>
+{% else %}
+<span class="btn btn-primary disabled-launch">{{ "Available Soon" if page_lang == "en" else "Yakında Açılacak" }}</span>
+{% endif %}
+{% if enable_consultation_booking %}
+<a class="btn btn-secondary" href="/personal-consultation">{{ t("common.cta_deepen_consultation") }}</a>
+{% else %}
+<a class="btn btn-secondary" href="mailto:info@focusastrology.com">{{ "Launch Notice" if page_lang == "en" else "Lansman Bildirimi Al" }}</a>
+{% endif %}
                         </div>
                     </article>
                 </div>
@@ -482,20 +548,24 @@
             <section class="reports-final-cta">
                 <div class="reports-final-layout">
                     <article class="reports-final-panel">
-                        <div class="reports-eyebrow">Sonraki adım</div>
-                        <h2>Bir raporla başlayın veya doğrudan danışmanlığa geçin.</h2>
-                        <p class="reports-muted">Sorunuz tek bir alandaysa rapor yeterli bir başlangıç olabilir. Karar daha büyükse, danışmanlık daha geniş bir sentez sunar.</p>
+                        <div class="reports-eyebrow">{{ "Next step" if page_lang == "en" else "Sonraki adım" }}</div>
+                        <h2>{{ "Begin with a report or move directly into consultation." if page_lang == "en" else "Bir raporla başlayın veya doğrudan danışmanlığa geçin." }}</h2>
+                        <p class="reports-muted">{{ "If your question belongs to one area, a report may be enough. If the decision is larger, consultation offers broader synthesis." if page_lang == "en" else "Sorunuz tek bir alandaysa rapor yeterli bir başlangıç olabilir. Karar daha büyükse, danışmanlık daha geniş bir sentez sunar." }}</p>
                     </article>
                     <article class="reports-final-panel">
                         <div class="reports-final-actions">
-                            <a class="btn btn-primary" href="#raporlar">{{ t("common.cta_analysis_continue") }}</a>
-                            <a class="btn btn-secondary" href="/personal-consultation">{{ t("common.cta_personal_consultation") }}</a>
+<a class="btn btn-primary" href="#raporlar">{{ t("common.cta_analysis_continue") }}</a>
+{% if enable_consultation_booking %}
+<a class="btn btn-secondary" href="/personal-consultation">{{ t("common.cta_personal_consultation") }}</a>
+{% else %}
+<a class="btn btn-secondary" href="mailto:info@focusastrology.com">{{ "Get Information" if page_lang == "en" else "Bilgi Al" }}</a>
+{% endif %}
                         </div>
                     </article>
                     <article class="reports-final-panel">
-                        <div class="reports-eyebrow">Hediye</div>
-                        <h2>Sevdiğinize bir analiz hediye edin.</h2>
-                        <p class="reports-muted">Rapor veya danışmanlık seansını sevdiğiniz biri adına sipariş edebilirsiniz. Sipariş formunda "Bu bir hediyedir" kutusunu işaretlemeniz yeterli.</p>
+                        <div class="reports-eyebrow">{{ "Gift" if page_lang == "en" else "Hediye" }}</div>
+                        <h2>{{ "Gift an analysis to someone you love." if page_lang == "en" else "Sevdiğinize bir analiz hediye edin." }}</h2>
+                        <p class="reports-muted">{{ "You can order a report or consultation on behalf of someone else by marking it as a gift in the order form." if page_lang == "en" else "Rapor veya danışmanlık seansını sevdiğiniz biri adına sipariş edebilirsiniz. Sipariş formunda \"Bu bir hediyedir\" kutusunu işaretlemeniz yeterli." }}</p>
                     </article>
                 </div>
             </section>

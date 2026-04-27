@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -37,6 +38,13 @@ class BirthLocationPipelineTests(unittest.TestCase):
         self.cache_patch.stop()
         geocoding._MEMORY_CACHE.clear()
         self.cache_dir.cleanup()
+
+    def _csrf_token(self, client, path="/calculator"):
+        response = client.get(path)
+        self.assertEqual(response.status_code, 200)
+        match = re.search(r'name="csrf_token"\s+value="([^"]+)"', response.text)
+        self.assertIsNotNone(match)
+        return match.group(1)
 
     def test_district_level_input_resolves_correctly(self):
         district_result = MockLocation(
@@ -237,9 +245,11 @@ class BirthLocationPipelineTests(unittest.TestCase):
 
     def test_calculator_result_respects_turkish_language_for_preview_unlock_copy(self):
         client = TestClient(app.app)
+        csrf_token = self._csrf_token(client)
         response = client.post(
             "/calculate",
             data={
+                "csrf_token": csrf_token,
                 "full_name": "Test User",
                 "birth_date": "1990-01-01",
                 "birth_time": "12:00",
@@ -524,10 +534,12 @@ class BirthLocationPipelineTests(unittest.TestCase):
 
     def test_ambiguous_or_failed_geocoding_returns_user_facing_validation_failure(self):
         client = TestClient(app.app)
+        csrf_token = self._csrf_token(client)
         with patch.object(app, "_build_birth_context", side_effect=geocoding.BirthPlaceResolutionError("ambiguous", code="ambiguous_place")):
             response = client.post(
                 "/calculate",
                 data={
+                    "csrf_token": csrf_token,
                     "full_name": "Test User",
                     "birth_date": "2024-01-01",
                     "birth_time": "10:30",

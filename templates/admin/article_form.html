@@ -1,0 +1,102 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}{{ 'Makale Düzenle' if article else 'Yeni Makale' }}{% endblock %}
+
+{% block admin_content %}
+<div class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">{{ 'Makale Düzenle' if article else 'Yeni Makale' }}</h1>
+  </div>
+  <a class="btn-admin" href="/admin/articles">← Geri</a>
+</div>
+
+<form class="admin-form" method="post" style="max-width:800px;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+    <div class="admin-field">
+      <label>Başlık (TR)</label>
+      <input type="text" name="title" value="{{ article.title if article else '' }}" required id="title-input">
+    </div>
+    <div class="admin-field">
+      <label>Slug (URL)</label>
+      <input type="text" name="slug" value="{{ article.slug if article else '' }}" id="slug-input" required>
+    </div>
+  </div>
+  <div class="admin-field">
+    <label>Özet (Excerpt)</label>
+    <textarea name="excerpt" rows="2">{{ article.excerpt if article else '' }}</textarea>
+  </div>
+  <div class="admin-field">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+      <label>İçerik</label>
+      <button type="button" class="btn-admin" id="preview-toggle" onclick="togglePreview()">Önizleme</button>
+    </div>
+    <textarea name="content" id="content-editor" rows="16" style="font-family:monospace; font-size:.82rem; width:100%;">{{ article.body if article else '' }}</textarea>
+    <div id="content-preview" style="display:none; min-height:300px; padding:20px; background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); font-size:.9rem; line-height:1.8; color:var(--text);"></div>
+  </div>
+  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px;">
+    <div class="admin-field">
+      <label>Kategori</label>
+      <select name="category_id">
+        {% for cat in categories %}
+        <option value="{{ cat.id or cat.slug }}" {% if article and article.category == (cat.id or cat.slug) %}selected{% endif %}>{{ cat.slug }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="admin-field">
+      <label>Okuma Süresi (dakika)</label>
+      <input type="number" name="reading_time" value="{{ article.reading_time if article else '' }}" min="1" max="60">
+    </div>
+    <div class="admin-field">
+      <label>Kapak Görsel (dosya adı)</label>
+      <input type="text" name="cover_image" value="{{ article.cover_image if article else '' }}" placeholder="ornek.jpg">
+    </div>
+  </div>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+    <div class="admin-field">
+      <label>Meta Başlık (SEO)</label>
+      <input type="text" name="meta_title" value="{{ article.meta_title if article else '' }}" maxlength="60">
+    </div>
+    <div class="admin-field">
+      <label>Meta Açıklama (SEO)</label>
+      <input type="text" name="meta_description" value="{{ article.meta_description if article else '' }}" maxlength="160">
+    </div>
+  </div>
+  <div class="admin-field" style="display:flex; align-items:center; gap:10px;">
+    <input type="checkbox" name="is_published" id="is_published" {% if article and article.is_published %}checked{% endif %} style="width:18px; height:18px;">
+    <label for="is_published" style="margin:0; cursor:pointer;">Yayınla</label>
+  </div>
+  <div style="display:flex; gap:10px;">
+    <button class="btn-admin btn-admin-primary" type="submit">{{ 'Güncelle' if article else 'Oluştur' }}</button>
+    <a class="btn-admin" href="/admin/articles">İptal</a>
+  </div>
+</form>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<script>
+function togglePreview() {
+  var editor = document.getElementById('content-editor');
+  var preview = document.getElementById('content-preview');
+  var btn = document.getElementById('preview-toggle');
+  if (preview.style.display === 'none') {
+    preview.innerHTML = marked.parse(editor.value || '');
+    preview.style.display = 'block';
+    editor.style.display = 'none';
+    btn.textContent = 'Düzenle';
+  } else {
+    editor.style.display = 'block';
+    preview.style.display = 'none';
+    btn.textContent = 'Önizleme';
+  }
+}
+const titleInput = document.getElementById('title-input');
+const slugInput = document.getElementById('slug-input');
+{% if not article %}
+titleInput.addEventListener('input', function() {
+  slugInput.value = this.value
+    .toLowerCase()
+    .replace(/ğ/g,'g').replace(/ü/g,'u').replace(/ş/g,'s').replace(/ı/g,'i').replace(/ö/g,'o').replace(/ç/g,'c')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+});
+{% endif %}
+</script>
+{% endblock %}

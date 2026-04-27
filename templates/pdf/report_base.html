@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="{{ lang or 'tr' }}">
+<head>
+<meta charset="UTF-8">
+<style>
+  @page { size: A4; margin: 0; }
+  @page :first { margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Georgia', 'Times New Roman', serif; font-size: 11pt; color: #1a1a2e; background: #fff; line-height: 1.65; }
+  .cover { width: 210mm; height: 297mm; background: #0d1117; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 60pt; page-break-after: always; }
+  .cover-brand { font-size: 10pt; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(223,192,112,0.7); margin-bottom: 48pt; }
+  .cover-accent { width: 40pt; height: 0.8pt; background: rgba(223,192,112,0.4); margin: 0 auto 24pt; }
+  .cover-type { font-size: 8.5pt; letter-spacing: 0.16em; text-transform: uppercase; color: rgba(223,192,112,0.5); margin-bottom: 14pt; }
+  .cover-name { font-size: 28pt; font-weight: 400; color: #f0ede8; line-height: 1.2; margin-bottom: 44pt; }
+  .cover-table { border: 1pt solid rgba(223,192,112,0.15); border-radius: 6pt; padding: 16pt 24pt; text-align: left; min-width: 240pt; margin-bottom: 44pt; }
+  .cover-row { display: flex; justify-content: space-between; padding: 4pt 0; border-bottom: 0.5pt solid rgba(255,255,255,0.06); }
+  .cover-row:last-child { border-bottom: none; }
+  .cover-label { font-size: 8pt; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.32); font-family: Arial, sans-serif; }
+  .cover-value { font-size: 10pt; color: rgba(255,255,255,0.78); }
+  .cover-footer { font-size: 7.5pt; color: rgba(255,255,255,0.2); letter-spacing: 0.06em; margin-top: auto; padding-top: 32pt; }
+  .page { width: 210mm; min-height: 297mm; padding: 24mm 20mm 28mm 20mm; page-break-after: always; position: relative; }
+  .page:last-child { page-break-after: avoid; }
+  .page-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 7pt; border-bottom: 0.5pt solid #d4cfc8; margin-bottom: 22pt; }
+  .page-header-brand { font-size: 7.5pt; letter-spacing: 0.14em; text-transform: uppercase; color: #b0a898; font-family: Arial, sans-serif; }
+  .page-header-name { font-size: 8pt; color: #b0a898; }
+  .page-footer { position: absolute; bottom: 14mm; left: 20mm; right: 20mm; display: flex; justify-content: space-between; font-size: 7.5pt; color: #c0bab0; border-top: 0.5pt solid #e8e4de; padding-top: 5pt; font-family: Arial, sans-serif; }
+  .kicker { font-size: 7.5pt; letter-spacing: 0.16em; text-transform: uppercase; color: #b8952a; margin-bottom: 5pt; font-family: Arial, sans-serif; }
+  h1.section-title { font-size: 20pt; font-weight: 400; color: #1a1a2e; margin-bottom: 14pt; line-height: 1.15; }
+  h2.sub-title { font-size: 13.5pt; font-weight: 400; color: #2a2a42; margin: 18pt 0 9pt; padding-bottom: 4pt; border-bottom: 0.5pt solid #e0dbd4; }
+  h3.item-title { font-size: 10.5pt; font-weight: 600; color: #1a1a2e; margin: 13pt 0 4pt; }
+  p.lead { font-size: 12pt; font-style: italic; color: #3a3a4a; line-height: 1.8; margin-bottom: 14pt; }
+  p.body { font-size: 10.5pt; color: #2d2d3a; line-height: 1.75; margin-bottom: 10pt; }
+  table.summary { width: 100%; border-collapse: collapse; margin: 12pt 0; }
+  table.summary th { font-size: 7.5pt; letter-spacing: 0.1em; text-transform: uppercase; color: #8a8478; border-bottom: 1pt solid #d4cfc8; padding: 5pt 8pt; text-align: left; font-family: Arial, sans-serif; font-weight: 600; }
+  table.summary td { font-size: 10pt; padding: 7pt 8pt; border-bottom: 0.5pt solid #eceae6; color: #1a1a2e; }
+  table.summary td.lbl { color: #8a8478; font-size: 9pt; }
+  table.summary tr:last-child td { border-bottom: none; }
+  .planet-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7pt; margin: 11pt 0; }
+  .planet-card { border: 0.5pt solid #ddd8d0; border-radius: 4pt; padding: 7pt 9pt; }
+  .planet-nm { font-size: 7.5pt; letter-spacing: 0.1em; text-transform: uppercase; color: #8a8478; font-family: Arial, sans-serif; margin-bottom: 2pt; }
+  .planet-sign { font-size: 11pt; color: #1a1a2e; }
+  .planet-house { font-size: 8pt; color: #a09890; margin-top: 2pt; }
+  .highlight { background: #faf8f4; border-left: 2.5pt solid #c8a030; padding: 11pt 14pt; margin: 12pt 0; border-radius: 0 4pt 4pt 0; }
+  .highlight p { margin: 0; font-size: 10.5pt; color: #2d2d3a; line-height: 1.7; }
+  .disclaimer { background: #f5f3ef; border-radius: 4pt; padding: 10pt 14pt; margin: 12pt 0; }
+  .disclaimer p { margin: 0; font-size: 8.5pt; color: #7a7468; line-height: 1.65; }
+  .closing { background: #0d1117; border-radius: 7pt; padding: 18pt 22pt; margin-top: 18pt; text-align: center; }
+  .closing h2 { font-size: 15pt; font-weight: 400; color: #f0ede8; margin-bottom: 9pt; }
+  .closing p { font-size: 10pt; color: rgba(255,255,255,0.58); line-height: 1.7; margin-bottom: 12pt; }
+  .closing-url { font-size: 9pt; color: #dfc070; letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="cover">
+  <div class="cover-brand">Focus Astrology</div>
+  <div class="cover-accent"></div>
+  <div class="cover-type">{{ report_label }}</div>
+  <div class="cover-name">{{ person_name }}</div>
+  <div class="cover-table">
+    <div class="cover-row"><span class="cover-label">{% if lang == 'en' %}Birth Date{% else %}Doğum Tarihi{% endif %}</span><span class="cover-value">{{ birth_date }}</span></div>
+    <div class="cover-row"><span class="cover-label">{% if lang == 'en' %}Birth Time{% else %}Doğum Saati{% endif %}</span><span class="cover-value">{{ birth_time or ('Not specified' if lang == 'en' else 'Belirtilmemiş') }}</span></div>
+    <div class="cover-row"><span class="cover-label">{% if lang == 'en' %}Birth Place{% else %}Doğum Yeri{% endif %}</span><span class="cover-value">{{ birth_city }}</span></div>
+    <div class="cover-row"><span class="cover-label">{% if lang == 'en' %}Prepared{% else %}Hazırlanma{% endif %}</span><span class="cover-value">{{ prepared_date }}</span></div>
+  </div>
+  <div class="cover-footer">focusastrology.com &nbsp;·&nbsp; {% if lang == 'en' %}This report is personal and confidential.{% else %}Bu rapor kişiye özeldir ve paylaşılamaz.{% endif %}</div>
+</div>
+<div class="page">
+  <div class="page-header"><span class="page-header-brand">Focus Astrology</span><span class="page-header-name">{{ person_name }}</span></div>
+  <div class="kicker">{% if lang == 'en' %}Introduction{% else %}Giriş{% endif %}</div>
+  <h1 class="section-title">{% if lang == 'en' %}About This Report{% else %}Bu Rapor Hakkında{% endif %}</h1>
+  <p class="lead">{% if lang == 'en' %}Vedic astrology (Jyotisha) is an ancient system from India's Vedic tradition with over five thousand years of accumulated knowledge.{% else %}Vedik astroloji (Jyotisha), Hindistan'ın kadim Vedik geleneğinden gelen ve beş binden fazla yıllık birikimi olan bir sistemdir.{% endif %}</p>
+  <h2 class="sub-title">{% if lang == 'en' %}How to Read This Report{% else %}Bu Raporu Nasıl Okumalısın?{% endif %}</h2>
+  <p class="body">{% if lang == 'en' %}This report offers an in-depth examination of your birth chart through a specific lens. Each section complements the others — reading the complete report before focusing on any one area will give you a fuller picture.{% else %}Bu rapor, doğum haritanın belirli bir mercekten derinlemesine incelenmesini sunar. Her bölüm birbirini tamamlar; tüm raporu okuduktan sonra genel bir çerçeve oluşacaktır.{% endif %}</p>
+  <div class="disclaimer"><p>{% if lang == 'en' %}This report is interpretive and for guidance purposes only. It does not constitute medical, legal, or financial advice. Analyses do not guarantee outcomes. Some content may have been prepared with AI-assisted processes and reviewed by a human expert.{% else %}Bu rapor yorumlayıcı ve rehberlik amaçlıdır. Tıbbi, hukuki veya finansal tavsiye yerine geçmez. Analizler kesin sonuç veya garanti içermez. Bazı içerikler yapay zeka destekli süreçlerle hazırlanmış ve insan incelemesinden geçirilmiştir.{% endif %}</p></div>
+  <div class="page-footer"><span>Focus Astrology · focusastrology.com</span><span>2</span></div>
+</div>
+<div class="page">
+  <div class="page-header"><span class="page-header-brand">Focus Astrology</span><span class="page-header-name">{{ person_name }}</span></div>
+  <div class="kicker">{% if lang == 'en' %}Chart Overview{% else %}Harita Özeti{% endif %}</div>
+  <h1 class="section-title">{% if lang == 'en' %}Key Positions{% else %}Temel Konumlar{% endif %}</h1>
+  <table class="summary">
+    <thead><tr><th>{% if lang == 'en' %}Factor{% else %}Faktör{% endif %}</th><th>{% if lang == 'en' %}Position{% else %}Konum{% endif %}</th><th>{% if lang == 'en' %}House{% else %}Ev{% endif %}</th></tr></thead>
+    <tbody>
+      <tr><td class="lbl">Lagna ({% if lang == 'en' %}Ascendant{% else %}Yükselen{% endif %})</td><td>{{ chart.lagna }}</td><td>{% if lang == 'en' %}1st House{% else %}1. Ev{% endif %}</td></tr>
+      <tr><td class="lbl">{% if lang == 'en' %}Moon{% else %}Ay{% endif %}</td><td>{{ chart.moon_sign }}</td><td>{{ chart.moon_house }}{% if lang == 'en' %}th House{% else %}. Ev{% endif %}</td></tr>
+      <tr><td class="lbl">{% if lang == 'en' %}Sun{% else %}Güneş{% endif %}</td><td>{{ chart.sun_sign }}</td><td>{{ chart.sun_house }}{% if lang == 'en' %}th House{% else %}. Ev{% endif %}</td></tr>
+      <tr><td class="lbl">Atmakaraka</td><td>{{ chart.atmakaraka }}</td><td>—</td></tr>
+      <tr><td class="lbl">Mahadasha</td><td>{{ chart.mahadasha }}</td><td>{{ chart.mahadasha_end }}</td></tr>
+      <tr><td class="lbl">Antardasha</td><td>{{ chart.antardasha }}</td><td>—</td></tr>
+    </tbody>
+  </table>
+  <h2 class="sub-title">{% if lang == 'en' %}Planetary Positions{% else %}Gezegen Konumları{% endif %}</h2>
+  <div class="planet-grid">
+    {% for planet in chart.planets %}
+    <div class="planet-card"><div class="planet-nm">{{ planet.name }}</div><div class="planet-sign">{{ planet.sign }}</div><div class="planet-house">{{ planet.house }}{% if lang == 'en' %}th House{% else %}. Ev{% endif %}{% if planet.retrograde %} · R{% endif %}</div></div>
+    {% endfor %}
+  </div>
+  <div class="page-footer"><span>Focus Astrology · focusastrology.com</span><span>3</span></div>
+</div>
+{% for section in report_sections %}
+<div class="page">
+  <div class="page-header"><span class="page-header-brand">Focus Astrology</span><span class="page-header-name">{{ person_name }}</span></div>
+  <div class="kicker">{{ section.kicker }}</div>
+  <h1 class="section-title">{{ section.title }}</h1>
+  {% if section.lead %}<p class="lead">{{ section.lead }}</p>{% endif %}
+  {% for block in section.blocks %}
+    {% if block.type == 'heading' %}<h2 class="sub-title">{{ block.text }}</h2>
+    {% elif block.type == 'subheading' %}<h3 class="item-title">{{ block.text }}</h3>
+    {% elif block.type == 'paragraph' %}<p class="body">{{ block.text }}</p>
+    {% elif block.type == 'highlight' %}<div class="highlight"><p>{{ block.text }}</p></div>{% endif %}
+  {% endfor %}
+  <div class="page-footer"><span>Focus Astrology · focusastrology.com</span><span>{{ loop.index + 3 }}</span></div>
+</div>
+{% endfor %}
+<div class="page">
+  <div class="page-header"><span class="page-header-brand">Focus Astrology</span><span class="page-header-name">{{ person_name }}</span></div>
+  <div class="kicker">{% if lang == 'en' %}Closing{% else %}Kapanış{% endif %}</div>
+  <h1 class="section-title">{% if lang == 'en' %}Next Steps{% else %}Sonraki Adımlar{% endif %}</h1>
+  {% if closing_summary %}<p class="body">{{ closing_summary }}</p>{% endif %}
+  {% if key_points %}
+  <h2 class="sub-title">{% if lang == 'en' %}3 Areas to Focus On{% else %}Dikkat Edilmesi Önerilen 3 Alan{% endif %}</h2>
+  {% for point in key_points %}<div class="highlight"><p><strong>{{ loop.index }}.</strong> {{ point }}</p></div>{% endfor %}
+  {% endif %}
+  <div class="closing">
+    <h2>{% if lang == 'en' %}Let's go deeper.{% else %}Derinlemesine konuşalım.{% endif %}</h2>
+    <p>{% if lang == 'en' %}To discuss what you've seen in this report, ask your questions, or examine a specific period in more detail, you can book a one-on-one consultation.{% else %}Bu raporda gördüklerini birlikte ele almak, sorularını sormak veya belirli bir dönemi daha ayrıntılı incelemek için birebir danışmanlık seansı alabilirsin.{% endif %}</p>
+    <div class="closing-url">focusastrology.com/personal-consultation</div>
+  </div>
+  <div class="page-footer"><span>Focus Astrology · focusastrology.com</span><span>{{ report_sections|length + 4 }}</span></div>
+</div>
+</body>
+</html>

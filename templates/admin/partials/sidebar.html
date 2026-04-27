@@ -1,0 +1,72 @@
+<aside class="admin-sidebar">
+  <div class="admin-brand">
+    <div class="admin-brand-mark">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.2"/><circle cx="9" cy="9" r="2.2" fill="currentColor"/></svg>
+    </div>
+    <div>
+      <div class="admin-brand-title">Focus Admin</div>
+      <div class="admin-brand-sub">Operations Console</div>
+    </div>
+  </div>
+
+  <nav class="admin-nav">
+    <div class="admin-nav-section">Command</div>
+    <a class="admin-nav-link {% if active_page == 'dashboard' %}active{% endif %}" href="/admin">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
+      Dashboard
+    </a>
+
+    <div class="admin-nav-section">Operations</div>
+    <a class="admin-nav-link {% if active_page == 'reports' %}active{% endif %}" href="/admin/reports">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3 2h10v12H3z"/><path d="M5 6h6M5 9h4"/></svg>
+      Reports
+    </a>
+    <a class="admin-nav-link {% if active_page == 'consultations' %}active{% endif %}" href="/admin/consultations">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M5 1v4M11 1v4M2 7h12"/></svg>
+      Consultations
+    </a>
+    <a class="admin-nav-link {% if active_page == 'gifts' %}active{% endif %}" href="/admin/gifts">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="7" width="12" height="7" rx="1"/><path d="M8 7V3M5.5 4.5h5"/></svg>
+      Gifts
+    </a>
+    <a class="admin-nav-link {% if active_page == 'astro_workspace' %}active{% endif %}" href="/admin/astro-workspace">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="5"/><path d="M8 1v3M8 12v3M1 8h3M12 8h3M4.5 4.5l2 2M9.5 9.5l2 2"/></svg>
+      Astro Workspace
+    </a>
+
+    <div class="admin-nav-section">Finance</div>
+    <a class="admin-nav-link {% if active_page == 'accounting' and path == '/admin/accounting' %}active{% endif %}" href="/admin/accounting">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 13h12M4 11V6M8 11V3M12 11V8"/></svg>
+      Accounting & Finance
+    </a>
+    <a class="admin-nav-link admin-nav-child {% if path.startswith('/admin/accounting/transactions') %}active{% endif %}" href="/admin/accounting/transactions">Transactions</a>
+    <a class="admin-nav-link admin-nav-child {% if path.startswith('/admin/accounting/invoices') %}active{% endif %}" href="/admin/accounting/invoices">Invoices</a>
+    <a class="admin-nav-link admin-nav-child {% if path.startswith('/admin/accounting/taxes') %}active{% endif %}" href="/admin/accounting/taxes">Taxes</a>
+    <a class="admin-nav-link admin-nav-child {% if path.startswith('/admin/accounting/expenses') %}active{% endif %}" href="/admin/accounting/expenses">Expenses</a>
+    <a class="admin-nav-link admin-nav-child {% if path.startswith('/admin/accounting/month-close') %}active{% endif %}" href="/admin/accounting/month-close">Month-End Review</a>
+    <a class="admin-nav-link admin-nav-child {% if path.startswith('/admin/accounting/documents') %}active{% endif %}" href="/admin/accounting/documents">Documents & Archive</a>
+
+    <div class="admin-nav-section">Customers & Content</div>
+    <a class="admin-nav-link {% if active_page == 'users' %}active{% endif %}" href="/admin/users">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3 2.7-5.5 6-5.5S14 11 14 14"/></svg>
+      Customers
+    </a>
+    <a class="admin-nav-link {% if active_page == 'articles' %}active{% endif %}" href="/admin/articles">Articles</a>
+    <a class="admin-nav-link {% if active_page == 'faq' %}active{% endif %}" href="/admin/faq">FAQ</a>
+    <a class="admin-nav-link {% if active_page == 'contact' %}active{% endif %}" href="/admin/contact">
+      Contact{% if unread_contact > 0 %}<span style="margin-left:auto; background:var(--warning); color:#0d1117; font-size:.68rem; padding:1px 6px; border-radius:10px; font-weight:700;">{{ unread_contact }}</span>{% endif %}
+    </a>
+
+    <div class="admin-nav-section">System</div>
+    <a class="admin-nav-link {% if active_page == 'translations' %}active{% endif %}" href="/admin/translations">Translations</a>
+    <a class="admin-nav-link {% if active_page == 'media' %}active{% endif %}" href="/admin/media">Media</a>
+    <a class="admin-nav-link {% if active_page == 'logs' %}active{% endif %}" href="/admin/logs">Logs</a>
+    <a class="admin-nav-link {% if active_page == 'settings' %}active{% endif %}" href="/admin/settings">Settings</a>
+    <a class="admin-nav-link {% if active_page == 'ai_rules' %}active{% endif %}" href="/admin/ai-rules">AI Rules</a>
+  </nav>
+
+  <div class="admin-sidebar-footer">
+    <span>{{ current_user.email if current_user else "Admin" }}</span>
+    <a href="/" target="_blank" style="color:var(--muted); text-decoration:none;">Open public site</a>
+  </div>
+</aside>

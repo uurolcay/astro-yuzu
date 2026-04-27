@@ -1,109 +1,78 @@
-{% extends "base.html" %}
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Rapor #{{ report.id }}{% endblock %}
 
-{% block title %}Focus Astrology | Admin Report Detail{% endblock %}
+{% block admin_content %}
+<div class="admin-page-header">
+  <div>
+    <!-- Report Order -->
+    <h1 class="admin-page-title">Rapor DetayÄ± â€” #{{ report.id }}</h1>
+    <p class="admin-page-sub">{{ report.report_type }} Â· {{ report.created_at }}</p>
+  </div>
+  <a class="btn-admin" href="/admin/reports">â† Geri</a>
+</div>
 
-{% block content %}
-<section class="page-section">
-    <div class="container">
-        <div class="glass-card card-pad">
-            <div class="row-between">
-                <div>
-                    <p class="eyebrow">{% if is_service_order %}Written Report Service{% else %}Generated Report Archive{% endif %}</p>
-                    <h1 class="hero-title" style="font-size:2.2rem;">{% if is_service_order %}Report Order #{{ order.id }}{% else %}{{ report.title or "Vedic Report" }}{% endif %}</h1>
-                    <p class="muted">{% if is_service_order %}{{ report.product_type }} | {{ report.status }}{% else %}{{ report.report_type|title }} | {{ report.created_at }}{% endif %}</p>
-                </div>
-                <a class="chip" href="/admin/reports">Back to Reports</a>
-            </div>
+<div style="display:grid; grid-template-columns:1.2fr 0.8fr; gap:16px;">
+  <div class="admin-card">
+    <div class="admin-card-title">SipariÅŸ Bilgileri</div>
+    <table class="admin-table" style="margin:-1px;">
+      <tbody>
+        <tr><td style="color:var(--muted); width:140px;">Ad Soyad</td><td>{{ report.full_name or 'â€”' }}</td></tr>
+        <tr><td style="color:var(--muted);">E-posta</td><td>{{ report.email }}</td></tr>
+        <tr><td style="color:var(--muted);">DoÄŸum Tarihi</td><td>{{ report.birth_date }}</td></tr>
+        <tr><td style="color:var(--muted);">DoÄŸum Saati</td><td>{{ report.birth_time or 'â€”' }}</td></tr>
+        <tr><td style="color:var(--muted);">DoÄŸum Yeri</td><td>{{ report.birth_city }}</td></tr>
+        <tr><td style="color:var(--muted);">Rapor TÃ¼rÃ¼</td><td>{{ report.report_type }}</td></tr>
+        {% if report.is_gift %}
+        <tr><td style="color:var(--muted);">Hediye Alan</td><td>{{ report.gift_recipient_name }} â€” {{ report.gift_recipient_email }}</td></tr>
+        {% endif %}
+        {% if report.optional_note %}
+        <tr><td style="color:var(--muted);">Not</td><td style="white-space:pre-wrap;">{{ report.optional_note }}</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
 
-            {% if notice %}<div class="metric-card" style="margin-top:18px; border-color:rgba(223,192,112,.32);">Updated: {{ notice }}</div>{% endif %}
-            {% if error %}<div class="metric-card" style="margin-top:18px; border-color:rgba(224,108,117,.45); color:#f1b5b5;">{{ error }}</div>{% endif %}
+  <div class="admin-card">
+    <div class="admin-card-title">Durum GÃ¼ncelle</div>
+    <form class="admin-form" method="post" action="/admin/reports/{{ report.id }}/status">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="admin-field">
+        <label>Mevcut Durum</label>
+        <select name="status">
+          <option value="pending" {% if report.status == 'pending' %}selected{% endif %}>Bekliyor</option>
+          <option value="in_progress" {% if report.status == 'in_progress' %}selected{% endif %}>HazÄ±rlanÄ±yor</option>
+          <option value="delivered" {% if report.status == 'delivered' %}selected{% endif %}>Teslim edildi</option>
+          <option value="refunded" {% if report.status == 'refunded' %}selected{% endif %}>Ä°ade</option>
+        </select>
+      </div>
+      <div class="admin-field">
+        <label>Admin Notu (isteÄŸe baÄŸlÄ±)</label>
+        <textarea name="admin_note">{{ report.admin_note or '' }}</textarea>
+      </div>
+      <button class="btn-admin btn-admin-primary" type="submit">Durumu GÃ¼ncelle</button>
+    </form>
+  </div>
 
-            {% if is_service_order %}
-            <div class="grid-2" style="margin-top:24px;">
-                <div class="metric-card">
-                    <h2 class="section-title" style="font-size:1.45rem;">Customer Info</h2>
-                    <p><strong>{{ report.customer_name }}</strong></p>
-                    <p class="muted">{{ report.customer_email }}</p>
-                    <p class="muted">Birth: {{ report.birth_date }} | {{ report.birth_time }}</p>
-                    <p class="muted">Place: {{ report.birth_place }}</p>
-                    <p class="muted">District: {{ payload.birth_district or payload.district or "-" }}</p>
-                </div>
-                <div class="metric-card">
-                    <h2 class="section-title" style="font-size:1.45rem;">Report Info</h2>
-                    <p class="muted">Report Type: <strong>{{ report.product_type }}</strong></p>
-                    <p class="muted">Current Status: <span class="chip">{{ report.status }}</span></p>
-                    <p class="muted">Created At: {{ report.created_at }}</p>
-                    <p class="muted">Delivered At: {{ report.delivered_at or "-" }}</p>
-                    <p class="muted">Amount: {{ report.amount }}</p>
-                </div>
-            </div>
-
-            <div class="grid-2" style="margin-top:24px;">
-                <div class="metric-card">
-                    <h2 class="section-title" style="font-size:1.45rem;">Actions</h2>
-                    <form method="post" action="/admin/reports/{{ order.id }}/approve" class="chip-row" style="margin-top:12px;">
-                        <button class="btn btn-secondary" type="submit">Approve</button>
-                    </form>
-                    <form method="post" action="/admin/reports/{{ order.id }}/send" style="margin-top:14px;">
-                        <button class="btn btn-primary" type="submit">Send to Customer</button>
-                        <p class="muted" style="margin-top:8px;">Requires ready_to_send and a completed PDF. Delivery is marked only after the customer email is accepted.</p>
-                    </form>
-                    <form method="post" action="/admin/reports/{{ order.id }}/regenerate" style="margin-top:14px;">
-                        <button class="btn btn-secondary" type="submit">Regenerate</button>
-                        <p class="muted" style="margin-top:8px;">Queues the existing AI draft generation task; it does not send anything to the customer.</p>
-                    </form>
-                </div>
-                <div class="metric-card">
-                    <h2 class="section-title" style="font-size:1.45rem;">PDF</h2>
-                    <p class="muted">Status: {{ order.pdf_status or "-" }}</p>
-                    <p class="muted">Path: {{ order.final_pdf_path or "-" }}</p>
-                    {% if report.pdf_ready %}
-                    <span class="chip">PDF Ready</span>
-                    {% else %}
-                    <p class="muted">No final PDF is ready yet. Sending will queue PDF generation first.</p>
-                    {% endif %}
-                </div>
-            </div>
-
-            <div class="glass-card card-pad" style="margin-top:24px;">
-                <h2 class="section-title" style="font-size:1.45rem;">Report Preview</h2>
-                <pre style="white-space:pre-wrap; line-height:1.6; background:rgba(255,255,255,.025); padding:18px; border-radius:16px; max-height:520px; overflow:auto;">{{ order.ai_draft_text or "No AI-assisted draft stored yet." }}</pre>
-            </div>
-
-            <div class="glass-card card-pad" style="margin-top:24px;">
-                <h2 class="section-title" style="font-size:1.45rem;">Action History</h2>
-                {% for log in logs %}
-                <div class="metric-card" style="margin-top:12px;">
-                    <strong>{{ log.action }}</strong>
-                    <div class="muted">{{ log.actor or "admin" }} | {{ log.created_at }}</div>
-                    {% if log.metadata_json %}<div class="muted">{{ log.metadata_json }}</div>{% endif %}
-                </div>
-                {% else %}
-                <p class="muted">No admin actions recorded yet.</p>
-                {% endfor %}
-            </div>
-            {% else %}
-            <div class="grid-3" style="margin-top:20px;">
-                <div class="metric-card"><div class="metric-label">User</div><div class="metric-value">{{ report.user_email }}</div></div>
-                <div class="metric-card"><div class="metric-label">Type</div><div class="metric-value">{{ report.report_type|title }}</div></div>
-                <div class="metric-card"><div class="metric-label">Created</div><div class="metric-value">{{ report.created_at }}</div></div>
-            </div>
-            <div class="grid-2" style="margin-top:24px;">
-                <div class="metric-card">
-                    <div class="metric-label">Payload Summary</div>
-                    <pre style="white-space:pre-wrap;">{{ payload_summary.summary if payload_summary.summary is defined else payload_summary.raw }}</pre>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Interpretation Summary</div>
-                    <pre style="white-space:pre-wrap;">{{ interpretation_summary.summary if interpretation_summary.summary is defined else interpretation_summary.raw }}</pre>
-                </div>
-            </div>
-            <div class="metric-card" style="margin-top:24px;">
-                <div class="metric-label">Raw Payload</div>
-                <pre style="white-space:pre-wrap; max-height:420px; overflow:auto;">{{ payload_summary.raw }}</pre>
-            </div>
-            {% endif %}
-        </div>
+  <div class="admin-card">
+    <div class="admin-card-title">
+      {% if lang == 'en' %}PDF Report{% else %}PDF Rapor{% endif %}
     </div>
-</section>
+    {% if pdf_exists %}
+    <p style="margin:0 0 12px; font-size:.84rem; color:var(--muted);">PDF hazÄ±r. Durum "Teslim edildi" yapÄ±ldÄ±ÄŸÄ±nda otomatik gÃ¶nderilir.</p>
+    <div style="display:flex; gap:8px;">
+      <a class="btn-admin btn-admin-primary" href="/admin/reports/{{ report.id }}/pdf-download">PDF Ä°ndir</a>
+      <form method="post" action="/admin/reports/{{ report.id }}/generate-pdf">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn-admin" type="submit">Yeniden OluÅŸtur</button>
+      </form>
+    </div>
+    {% else %}
+    <p style="margin:0 0 12px; font-size:.84rem; color:var(--muted);">Bu sipariÅŸ iÃ§in henÃ¼z PDF oluÅŸturulmadÄ±.</p>
+    <form method="post" action="/admin/reports/{{ report.id }}/generate-pdf">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn-admin btn-admin-primary" type="submit">PDF TaslaÄŸÄ± OluÅŸtur</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
 {% endblock %}

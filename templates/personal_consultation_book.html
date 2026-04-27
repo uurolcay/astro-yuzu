@@ -43,6 +43,36 @@
         color:var(--gold-light);
     }
     .booking-actions { display:flex; flex-wrap:wrap; gap:14px; align-items:center; }
+    .calendly-frame {
+        position:relative;
+        z-index:1;
+        padding:40px;
+        border-radius:24px;
+        background:radial-gradient(circle at top, rgba(201,168,76,.08), transparent);
+    }
+    .calendly-frame::before {
+        content:"";
+        position:absolute;
+        inset:-20px;
+        z-index:-1;
+        pointer-events:none;
+        background:radial-gradient(circle, rgba(201,168,76,.15), transparent);
+        filter:blur(40px);
+    }
+    .calendly-inner {
+        max-width:900px;
+        margin:0 auto;
+        overflow:hidden;
+        border-radius:18px;
+        background:#ffffff;
+        box-shadow:
+            0 10px 40px rgba(0,0,0,.4),
+            0 0 0 1px rgba(201,168,76,.15);
+    }
+    .calendly-inline-widget {
+        min-width:320px;
+        height:720px;
+    }
     @media (max-width: 960px) {
         .booking-hero,
         .booking-details { grid-template-columns:1fr; }
@@ -51,6 +81,9 @@
         .booking-hero { padding:clamp(24px, 7vw, 34px); }
         .booking-actions,
         .booking-actions .btn { width:100%; justify-content:center; }
+        .calendly-frame { padding:14px; border-radius:18px; }
+        .calendly-inner { border-radius:14px; }
+        .calendly-inline-widget { height:700px; }
     }
 </style>
 {% endblock %}
@@ -70,11 +103,7 @@
                         Bu adım önce uygun zamanı seçmeniz için hazırlanmıştır. Calendly üzerinden randevu saatini belirledikten sonra ödeme adımına geçerek 60 dakikalık birebir danışmanlığı kesinleştirebilirsiniz.
                     </p>
                     <div class="booking-actions">
-                        {% if calendly_url %}
-                        <a class="btn btn-primary" href="{{ calendly_url }}" target="_blank" rel="noopener">Uygun Zamanı Seç</a>
-                        {% else %}
-                        <a class="btn btn-primary" href="mailto:{{ booking_contact_email }}?subject=60 dk danışmanlık randevu talebi">Randevu Talebi Gönder</a>
-                        {% endif %}
+                        <a class="btn btn-primary" href="#calendly-section">Uygun Zamanı Seç</a>
                         <a class="btn btn-secondary" href="/checkout/consultation">Randevumu Seçtim, Ödemeye Geç</a>
                     </div>
                 </div>
@@ -85,6 +114,12 @@
                         Randevudan önce doğum bilgileriniz ve varsa ana sorunuz alınır. Görüşmede haritanız zamanlama, yön ve karar bağlamında birlikte değerlendirilir.
                     </p>
                 </aside>
+            </section>
+
+            <section id="calendly-section" class="calendly-frame" aria-label="Calendly randevu seçimi">
+                <div class="calendly-inner">
+                    <div class="calendly-inline-widget" data-url="{{ calendly_url }}"></div>
+                </div>
             </section>
 
             <section class="booking-details" aria-label="Randevu bilgileri">
@@ -104,4 +139,9 @@
         </div>
     </div>
 </section>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="https://assets.calendly.com/assets/external/widget.js" async></script>
 {% endblock %}

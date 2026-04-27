@@ -123,7 +123,10 @@ class ParentChildReportTests(unittest.TestCase):
         response = self.client.get("/reports/parent-child")
         self.assertEqual(response.status_code, 200)
         self.assertIn("Parent-Child Guidance", response.text)
-        self.assertIn("Generate Parent-Child Report", response.text)
+        self.assertTrue(
+            "Generate Parent-Child Report" in response.text
+            or "Chart Analysis Coming Soon" in response.text
+        )
 
     def test_reports_page_shows_parent_child_product_card(self):
         user = db_mod.AppUser(email="parent@example.com", password_hash="hash", name="Parent", plan_code="premium", is_active=True)
@@ -133,11 +136,11 @@ class ParentChildReportTests(unittest.TestCase):
         with patch.object(app, "get_request_user", return_value=user):
             response = self.client.get("/reports")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Ebeveyn-Çocuk", response.text)
+        self.assertIn("Parent-Child", response.text)
         self.assertIn("/reports/parent-child", response.text)
-        self.assertIn("Etiketlemek yerine anlamayı güçlendirir", response.text)
-        self.assertIn("Bu Raporu Al", response.text)
-        self.assertIn("Danışmanlıkla Derinleştir", response.text)
+        self.assertIn("It strengthens understanding rather than labeling", response.text)
+        self.assertIn("Get This Report", response.text)
+        self.assertIn("Deepen with Consultation", response.text)
 
     def test_reports_page_shows_turkish_order_cta_for_parent_child_card(self):
         user = db_mod.AppUser(email="parent-tr@example.com", password_hash="hash", name="Parent", plan_code="premium", is_active=True)
@@ -190,6 +193,8 @@ class ParentChildReportTests(unittest.TestCase):
             "report_type_label": "Parent-Child",
             "client_name": "Child",
             "birth_summary": "2018-04-01 | 08:30 | Istanbul, Turkey",
+            "parent_profile": {"full_name": "Parent", "birth_summary": "1986-02-12 | 09:15 | Ankara, Turkey"},
+            "child_profile_meta": {"full_name": "Child", "birth_summary": "2018-04-01 | 08:30 | Istanbul, Turkey"},
             "top_anchors": interpretation["top_anchors"],
             "top_recommendations": [
                 {
@@ -220,7 +225,7 @@ class ParentChildReportTests(unittest.TestCase):
         html = app.templates.env.get_template("report_pdf.html").render(context)
         self.assertIn("Parent-Child Guidance", html)
         self.assertIn("Child Core Nature", html)
-        self.assertIn("Calculation Notes", html)
+        self.assertIn("Technical Notes", html)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,276 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Invoices{% endblock %}
+{% block admin_content %}
+<div class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Invoices</h1>
+    <p class="admin-page-sub">{{ total }} invoices · {{ accounting_disclaimer }}</p>
+  </div>
+  <div class="admin-page-actions">
+    <a class="btn-admin" href="/admin/accounting">Dashboard</a>
+    <a class="btn-admin" href="/admin/accounting/documents">Documents</a>
+  </div>
+</div>
+
+<div class="admin-stats">
+  <div class="admin-stat"><div class="admin-stat-label">Awaiting Send</div><div class="admin-stat-value">{{ awaiting_send_count }}</div><div class="admin-stat-delta" style="color:var(--warning);">Issued + PDF ready</div></div>
+  <div class="admin-stat"><div class="admin-stat-label">Send Failed</div><div class="admin-stat-value">{{ send_failed_count }}</div><div class="admin-stat-delta down">Needs retry</div></div>
+</div>
+
+<div class="admin-stats">
+  <div class="admin-stat"><div class="admin-stat-label">Queue Total</div><div class="admin-stat-value">{{ queue_summary.total }}</div></div>
+  <div class="admin-stat"><div class="admin-stat-label">Ready To Invoice</div><div class="admin-stat-value">{{ queue_summary.ready }}</div><div class="admin-stat-delta up">Can create draft</div></div>
+  <div class="admin-stat"><div class="admin-stat-label">Blocked / Missing</div><div class="admin-stat-value">{{ queue_summary.missing_info + queue_summary.blocked }}</div><div class="admin-stat-delta down">Needs customer data</div></div>
+  <div class="admin-stat"><div class="admin-stat-label">Draft Exists</div><div class="admin-stat-value">{{ queue_summary.draft_exists }}</div><div class="admin-stat-delta" style="color:var(--warning);">Open workflow</div></div>
+</div>
+
+<div class="admin-card">
+  <div class="admin-card-title">Invoice Queue Controls</div>
+  <div class="admin-tabs" style="margin-bottom:14px;">
+    <a class="btn-admin {% if tab == 'all' %}btn-admin-primary{% endif %}" href="/admin/accounting/invoices?tab=all">All</a>
+    <a class="btn-admin {% if tab == 'ready' %}btn-admin-primary{% endif %}" href="/admin/accounting/invoices?tab=ready">Ready to invoice</a>
+    <a class="btn-admin {% if tab == 'missing_info' %}btn-admin-primary{% endif %}" href="/admin/accounting/invoices?tab=missing_info">Missing info</a>
+    <a class="btn-admin {% if tab == 'draft_exists' %}btn-admin-primary{% endif %}" href="/admin/accounting/invoices?tab=draft_exists">Draft exists</a>
+    <a class="btn-admin {% if tab == 'blocked' %}btn-admin-primary{% endif %}" href="/admin/accounting/invoices?tab=blocked">Blocked</a>
+    <a class="btn-admin {% if tab == 'issued_already' %}btn-admin-primary{% endif %}" href="/admin/accounting/invoices?tab=issued_already">Issued already</a>
+  </div>
+  <form class="admin-filter-bar" method="get">
+    <input type="hidden" name="tab" value="{{ tab }}">
+    <input type="date" name="start_date" value="{{ start_date }}">
+    <input type="date" name="end_date" value="{{ end_date }}">
+    <input type="text" name="q" value="{{ q }}" placeholder="Customer search">
+    <input type="text" name="product_type" value="{{ product_type }}" placeholder="Product type">
+    <button class="btn-admin btn-admin-primary" type="submit">Filter</button>
+    {% if start_date or end_date or q or product_type %}<a class="btn-admin" href="/admin/accounting/invoices?tab={{ tab }}">Clear</a>{% endif %}
+  </form>
+</div>
+
+<form id="bulk-form" method="post" action="/admin/accounting/invoices/bulk">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+</form>
+
+<div class="admin-table-wrap">
+  <div class="admin-table-header">
+    <span class="admin-table-title">Invoices To Be Issued / Operational Queue</span>
+    <div class="admin-table-actions">
+      <select name="bulk_action" form="bulk-form">
+        <option value="">Bulk action...</option>
+        <option value="create_drafts">Create drafts for ready rows</option>
+      </select>
+      <button class="btn-admin btn-admin-primary" type="submit" form="bulk-form">Apply</button>
+    </div>
+  </div>
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th style="width:34px;"><input type="checkbox" onchange="document.querySelectorAll('.queue-check').forEach(c=>c.checked=this.checked)"></th>
+        <th>Transaction</th><th>Order</th><th>Customer</th><th>Product</th><th>Gross</th><th>Readiness</th><th>Missing Info</th><th>Paid Date</th><th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in queue_rows %}
+      {% set t = row.transaction %}
+      {% set readiness = row.readiness %}
+      {% set customer = t.customer %}
+      <tr>
+        <td>{% if readiness.can_create %}<input class="queue-check" type="checkbox" name="transaction_ids" value="{{ t.id }}" form="bulk-form">{% endif %}</td>
+        <td>#{{ t.id }}</td>
+        <td>{{ t.service_order_id or "—" }}</td>
+        <td>
+          <div>{{ t.customer.name if t.customer and t.customer.name else "—" }}</div>
+          <div style="font-size:.75rem; color:var(--muted);">{{ t.customer.email if t.customer else "—" }}</div>
+        </td>
+        <td>
+          <div>{{ t.product_type or "—" }}</div>
+          <div style="font-size:.75rem; color:var(--muted);">{{ t.service_type or "" }}</div>
+        </td>
+        <td>{{ t.gross_amount }}</td>
+        <td>
+          {% if readiness.status == 'ready' %}<span class="badge badge-success">Ready</span>
+          {% elif readiness.status == 'missing_info' %}<span class="badge badge-warning">Missing info</span>
+          {% elif readiness.status == 'draft_exists' %}<span class="badge badge-info">Draft exists</span>
+          {% elif readiness.status == 'issued_already' %}<span class="badge badge-success">Issued</span>
+          {% else %}<span class="badge badge-danger">Blocked</span>{% endif %}
+          {% if row.invoice %}<div style="font-size:.75rem; color:var(--muted); margin-top:4px;">Invoice {{ row.invoice.invoice_number or row.invoice.id }} · {{ row.invoice.status }}</div>{% endif %}
+        </td>
+        <td style="max-width:220px;">
+          {% if readiness.missing_fields %}
+          <span class="badge badge-warning">Needs data</span>
+          <div style="font-size:.75rem; color:var(--muted); margin-top:4px;">{{ readiness.missing_fields|join(", ") }}</div>
+          {% elif readiness.reason %}
+          <span class="badge badge-danger">{{ readiness.reason }}</span>
+          {% else %}
+          <span class="badge badge-muted">None</span>
+          {% endif %}
+        </td>
+        <td style="font-size:.8rem; color:var(--muted);">{{ t.paid_at }}</td>
+        <td>
+          <div class="admin-table-actions">
+            {% if readiness.can_create %}
+            <form method="post" action="/admin/accounting/invoices/create-draft">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="transaction_id" value="{{ t.id }}">
+              <button class="btn-admin btn-admin-primary" type="submit">Create Draft</button>
+            </form>
+            {% elif row.invoice %}
+            <a class="btn-admin btn-admin-primary" href="/admin/accounting/invoices/{{ row.invoice.id }}">Open Draft</a>
+            {% endif %}
+            {% if readiness.status in ['missing_info', 'blocked'] %}
+            <a class="btn-admin btn-admin-primary" href="#billing-info-{{ t.id }}">Fix Billing Info</a>
+            {% endif %}
+            <a class="btn-admin" href="/admin/accounting/transactions/{{ t.id }}">Transaction</a>
+            {% if t.customer %}
+            <a class="btn-admin" href="#billing-info-{{ t.id }}">Customer Info</a>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% if readiness.status in ['missing_info', 'blocked'] %}
+      <tr id="billing-info-{{ t.id }}">
+        <td></td>
+        <td colspan="9">
+          <div class="admin-warning-card">
+            <div class="admin-card-title" style="display:flex; justify-content:space-between; gap:12px; align-items:center;">
+              <span>Complete Customer Billing Info</span>
+              <span class="badge badge-warning">Missing: {{ readiness.missing_fields|join(", ") if readiness.missing_fields else readiness.reason }}</span>
+            </div>
+            <form class="admin-form" method="post" action="/admin/accounting/transactions/{{ t.id }}/billing-info" style="max-width:none;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="return_to" value="{{ request.url.path }}?{{ request.url.query }}">
+              <div style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px;">
+                <div class="admin-field">
+                  <label>Customer Type</label>
+                  <select name="customer_type">
+                    <option value="individual" {% if not customer or customer.customer_type != 'company' %}selected{% endif %}>Individual</option>
+                    <option value="company" {% if customer and customer.customer_type == 'company' %}selected{% endif %}>Company</option>
+                  </select>
+                </div>
+                <div class="admin-field">
+                  <label>Full Name</label>
+                  <input name="full_name" value="{{ customer.name if customer else '' }}">
+                </div>
+                <div class="admin-field">
+                  <label>Email</label>
+                  <input name="email" value="{{ customer.email if customer else '' }}">
+                </div>
+                <div class="admin-field">
+                  <label>Identity Number / TCKN</label>
+                  <input name="identity_number" value="{{ customer.identity_number if customer and customer.identity_number else '' }}">
+                </div>
+                <div class="admin-field">
+                  <label>Company Name</label>
+                  <input name="company_name" value="{{ customer.company_name if customer and customer.company_name else '' }}">
+                </div>
+                <div class="admin-field">
+                  <label>Tax Number / VKN</label>
+                  <input name="tax_number" value="{{ customer.tax_id if customer and customer.tax_id else '' }}">
+                </div>
+                <div class="admin-field">
+                  <label>Tax Office</label>
+                  <input name="tax_office" value="{{ customer.tax_office if customer and customer.tax_office else '' }}">
+                </div>
+                <div class="admin-field">
+                  <label>City</label>
+                  <input name="city" value="{{ customer.city if customer and customer.city else '' }}">
+                </div>
+                <div class="admin-field">
+                  <label>Country</label>
+                  <input name="country" value="{{ customer.country if customer and customer.country else 'TR' }}">
+                </div>
+              </div>
+              <div class="admin-field">
+                <label>Billing Address</label>
+                <textarea name="address_line">{{ customer.billing_address if customer and customer.billing_address else '' }}</textarea>
+              </div>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <button class="btn-admin btn-admin-primary" type="submit">Save Billing Info</button>
+                <span class="admin-muted" style="font-size:.82rem;">After save, readiness is recalculated and ready rows can create drafts immediately.</span>
+              </div>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endif %}
+      {% else %}
+      <tr><td colspan="10"><div class="admin-empty-state"><div class="admin-empty-title">No queue rows match this view</div><div class="admin-empty-text">Try another queue tab or clear filters to review paid transactions.</div></div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="admin-table-wrap">
+  <div class="admin-table-header">
+    <span class="admin-table-title">Invoice Workflow</span>
+    <span class="admin-muted" style="font-size:.8rem;">PDF and send status are tracked separately.</span>
+  </div>
+  <div class="admin-card" style="border-radius:0; border-left:0; border-right:0; border-top:0;">
+    <div class="admin-tabs" style="margin-bottom:12px;">
+      <a class="btn-admin {% if invoice_view == 'all' %}btn-admin-primary{% endif %}" href="/admin/accounting/invoices?invoice_view=all">All</a>
+      <a class="btn-admin {% if invoice_view == 'draft' %}btn-admin-primary{% endif %}" href="/admin/accounting/invoices?invoice_view=draft">Draft</a>
+      <a class="btn-admin {% if invoice_view == 'issued' %}btn-admin-primary{% endif %}" href="/admin/accounting/invoices?invoice_view=issued">Issued</a>
+      <a class="btn-admin {% if invoice_view == 'pdf_ready' %}btn-admin-primary{% endif %}" href="/admin/accounting/invoices?invoice_view=pdf_ready">PDF Ready</a>
+      <a class="btn-admin {% if invoice_view == 'awaiting_send' %}btn-admin-primary{% endif %}" href="/admin/accounting/invoices?invoice_view=awaiting_send">Awaiting Send</a>
+      <a class="btn-admin {% if invoice_view == 'send_failed' %}btn-admin-primary{% endif %}" href="/admin/accounting/invoices?invoice_view=send_failed">Send Failed</a>
+      <a class="btn-admin {% if invoice_view == 'cancelled' %}btn-admin-primary{% endif %}" href="/admin/accounting/invoices?invoice_view=cancelled">Cancelled</a>
+    </div>
+    <form class="admin-filter-bar" method="get">
+      <input type="hidden" name="invoice_view" value="{{ invoice_view }}">
+      <input type="date" name="invoice_start_date" value="{{ invoice_start_date }}">
+      <input type="date" name="invoice_end_date" value="{{ invoice_end_date }}">
+      <input type="text" name="invoice_q" value="{{ invoice_q }}" placeholder="Invoice/customer search">
+      <button class="btn-admin btn-admin-primary" type="submit">Filter invoices</button>
+    </form>
+  </div>
+  <table class="admin-table">
+    <thead><tr><th>Invoice</th><th>Customer</th><th>Transaction</th><th>Lifecycle</th><th>PDF</th><th>Send</th><th>Issue Date</th><th>Total</th><th>Last Error</th><th>Actions</th></tr></thead>
+    <tbody>
+    {% for i in invoices %}
+    <tr>
+      <td>{{ i.invoice_number or i.id }}</td>
+      <td>{{ i.customer.email if i.customer else "—" }}</td>
+      <td>{{ i.transaction_id }}</td>
+      <td>
+        {% if i.status == 'draft' %}<span class="badge badge-warning">Draft</span>
+        {% elif i.status in ['issued', 'sent'] %}<span class="badge badge-success">{{ i.status }}</span>
+        {% elif i.status == 'cancelled' %}<span class="badge badge-danger">Cancelled</span>
+        {% else %}<span class="badge badge-muted">{{ i.status }}</span>{% endif %}
+      </td>
+      <td>
+        {% if i.pdf_status == 'ready' %}<span class="badge badge-success">PDF ready</span>
+        {% elif i.pdf_status == 'generating' %}<span class="badge badge-info">Generating</span>
+        {% elif i.pdf_status == 'failed' %}<span class="badge badge-danger">PDF failed</span>
+        {% else %}<span class="badge badge-muted">Not generated</span>{% endif %}
+      </td>
+      <td>
+        {% if i.send_status == 'sent' %}<span class="badge badge-success">Sent</span>
+        {% elif i.send_status == 'failed' %}<span class="badge badge-danger">Failed</span>
+        {% else %}<span class="badge badge-muted">Not sent</span>{% endif %}
+      </td>
+      <td>{{ i.issue_date or "—" }}</td>
+      <td>{{ i.total_amount }}</td>
+      <td style="max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted);">{{ i.send_error_message or i.pdf_error_message or "—" }}</td>
+      <td>
+        <div class="admin-table-actions">
+          <a class="btn-admin" href="/admin/accounting/invoices/{{ i.id }}">Open</a>
+          {% if i.status == 'draft' %}
+          <form method="post" action="/admin/accounting/invoices/{{ i.id }}/issue"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn-admin btn-admin-primary" type="submit">Issue</button></form>
+          {% endif %}
+          {% if i.pdf_status != 'ready' and i.status != 'cancelled' %}
+          <form method="post" action="/admin/accounting/invoices/{{ i.id }}/generate-pdf"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn-admin" type="submit">Generate PDF</button></form>
+          {% endif %}
+          {% if i.pdf_status == 'ready' %}
+          <a class="btn-admin" href="/admin/accounting/invoices/{{ i.id }}/download">Download PDF</a>
+          {% endif %}
+          {% if i.status in ['issued', 'sent'] and i.pdf_status == 'ready' and i.send_status in ['not_sent', None] %}
+          <form method="post" action="/admin/accounting/invoices/{{ i.id }}/send"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn-admin btn-admin-primary" type="submit">Send Invoice</button></form>
+          {% elif i.send_status == 'failed' %}
+          <form method="post" action="/admin/accounting/invoices/{{ i.id }}/retry-send"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn-admin btn-admin-primary" type="submit">Retry Send</button></form>
+          {% endif %}
+        </div>
+      </td>
+    </tr>
+    {% else %}<tr><td colspan="10"><div class="admin-empty-state"><div class="admin-empty-title">No invoices found</div><div class="admin-empty-text">Drafts and issued invoices will appear here after paid transactions enter the invoice workflow.</div></div></td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

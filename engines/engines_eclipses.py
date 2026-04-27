@@ -59,7 +59,7 @@ def calculate_upcoming_eclipses(context_or_birth_dt, lat=None, lon=None, natal_d
         t_search = t_eclipse + 30 # Bir sonraki ay için kaydır
         
     # 2. AY TUTULMALARI TARAMASI
-    t_search = t_start = tjd_start
+    t_search = tjd_start
     while t_search < swe.julday(end_dt.year, end_dt.month, end_dt.day):
         res = swe.lun_eclipse_when(t_search, swe.FLG_SIDEREAL)
         t_eclipse = res[1][0]

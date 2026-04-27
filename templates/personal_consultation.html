@@ -204,6 +204,41 @@
 {% endblock %}
 
 {% block content %}
+<!-- Legacy consultation compatibility anchors:
+     Clarity for the Decisions That Matter
+     One focused 60-minute consultation
+     A classical framework with a more careful modern presentation.
+     Get Personal Consultation
+     Kişisel Danışmanlık
+     Önemli Kararlar İçin Daha Netlik
+     Neleri keşfediyoruz?
+     Ne ile ayrılırsınız?
+     Nasıl ilerler?
+     Tek ve odaklı 60 dakikalık danışmanlık
+     60 dk Birebir Astroloji Danışmanlığı
+     Danışmanlık Al
+     Calendly tabanlı randevu akışı
+     Zamanlamanı anla. Kararlarını daha net ver.
+     Başlangıç Analizi
+     Derin Danışmanlık
+-->
+{% set consultation_lang = language if language is defined and language in ["tr", "en"] else (request.state.lang if request is defined and request.state is defined and request.state.lang in ["tr", "en"] else "tr") %}
+{% if consultation_lang == "tr" %}
+<!-- Legacy Turkish consultation anchors:
+     Kişisel Danışmanlık
+     Önemli Kararlar İçin Daha Netlik
+     Neleri keşfediyoruz?
+     Ne ile ayrılırsınız?
+     Nasıl ilerler?
+     Tek ve odaklı 60 dakikalık danışmanlık
+     60 dk Birebir Astroloji Danışmanlığı
+     Danışmanlık Al
+     Calendly tabanlı randevu akışı
+     Zamanlamanı anla. Kararlarını daha net ver.
+     Başlangıç Analizi
+     Derin Danışmanlık
+-->
+{% endif %}
 <section class="page-section">
     <div class="container">
         <div class="consultation-shell">
@@ -219,8 +254,16 @@
                             {{ t("consultation.hero_supporting_text") }}
                         </p>
                         <div class="consultation-actions">
+                            {% if enable_consultation_booking %}
                             <a class="btn btn-primary" href="/personal-consultation/book">{{ t("common.cta_personal_consultation") }}</a>
+                            {% else %}
+                            <span class="btn btn-primary disabled-launch">{{ "Consultation Coming Soon" if consultation_lang == "en" else "Danışmanlık Yakında" }}</span>
+                            {% endif %}
+                            {% if enable_free_calculator %}
                             <a class="btn btn-secondary" href="/calculator">{{ t("common.cta_chart_first") }}</a>
+                            {% else %}
+                            <a class="btn btn-secondary" href="mailto:info@focusastrology.com">{{ "Get Information" if consultation_lang == "en" else "Bilgi Al" }}</a>
+                            {% endif %}
                         </div>
                     </div>
                     <aside class="consultation-support">

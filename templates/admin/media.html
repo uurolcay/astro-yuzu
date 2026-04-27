@@ -1,0 +1,41 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Medya{% endblock %}
+
+{% block admin_content %}
+<div class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Medya Kütüphanesi</h1>
+    <p class="admin-page-sub">{{ files|length }} dosya</p>
+  </div>
+</div>
+
+<div class="admin-card" style="max-width:480px;">
+  <div class="admin-card-title">Dosya Yükle</div>
+  <form class="admin-form" method="post" action="/admin/media/upload" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="admin-field">
+      <label>Dosya seç (JPG, PNG, WebP, SVG)</label>
+      <input type="file" name="file" accept=".jpg,.jpeg,.png,.webp,.svg" required>
+    </div>
+    <button class="btn-admin btn-admin-primary" type="submit">Yükle</button>
+  </form>
+</div>
+
+<div class="admin-table-wrap">
+  <table class="admin-table">
+    <thead><tr><th>Dosya Adı</th><th>Boyut</th><th>Tür</th><th>URL</th></tr></thead>
+    <tbody>
+      {% for f in files %}
+      <tr>
+        <td style="font-family:monospace; font-size:.82rem;">{{ f.name }}</td>
+        <td style="font-size:.8rem; color:var(--muted);">{{ f.size_kb }} KB</td>
+        <td><span class="badge badge-muted">{{ f.extension }}</span></td>
+        <td style="font-size:.78rem; color:var(--muted);">/static/articles/{{ f.name }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" style="color:var(--muted); text-align:center; padding:32px;">Dosya yok</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

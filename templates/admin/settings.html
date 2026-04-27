@@ -1,0 +1,45 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Ayarlar{% endblock %}
+
+{% block admin_content %}
+<div class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Site Ayarları</h1>
+    <p class="admin-page-sub">Genel yapılandırma</p>
+  </div>
+</div>
+
+<form class="admin-form" method="post" style="max-width:600px;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="admin-card">
+    <div class="admin-card-title">İletişim & Sosyal Medya</div>
+    <div class="admin-field">
+      <label>Instagram URL</label>
+      <input type="url" name="site_instagram_url" value="{{ settings.get('site_instagram_url', '') }}" placeholder="https://www.instagram.com/kullaniciadiniz/">
+    </div>
+    <div class="admin-field">
+      <label>İletişim E-postası</label>
+      <input type="email" name="site_contact_email" value="{{ settings.get('site_contact_email', '') }}">
+    </div>
+    <div class="admin-field">
+      <label>Astrolog Adı (e-postalarda görünür)</label>
+      <input type="text" name="astrologer_name" value="{{ settings.get('astrologer_name', '') }}" placeholder="Adınız Soyadınız">
+    </div>
+  </div>
+  <div class="admin-card">
+    <div class="admin-card-title">Hizmet Ayarları</div>
+    <div class="admin-field">
+      <label>Rapor Teslim Süresi (gün)</label>
+      <input type="number" name="site_report_delivery_days" value="{{ settings.get('site_report_delivery_days', '7') }}" min="1" max="30" style="max-width:120px;">
+    </div>
+  </div>
+  <div class="admin-card">
+    <div class="admin-card-title">Sistem</div>
+    <div class="admin-field" style="display:flex; align-items:center; gap:10px;">
+      <input type="checkbox" name="site_maintenance_mode" id="maintenance" {% if settings.get('site_maintenance_mode') == 'true' %}checked{% endif %} style="width:18px; height:18px;">
+      <label for="maintenance" style="margin:0; cursor:pointer; color:var(--text);">Bakım modu (site ziyaretçilere kapalı)</label>
+    </div>
+  </div>
+  <button class="btn-admin btn-admin-primary" type="submit">Ayarları Kaydet</button>
+</form>
+{% endblock %}

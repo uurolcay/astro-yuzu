@@ -1,204 +1,131 @@
-{% extends "base.html" %}
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Dashboard{% endblock %}
 
-{% block title %}Jyotish | Business Dashboard{% endblock %}
+{% block admin_content %}
+<div class="admin-page-header">
+  <div>
+    <!-- Business Dashboard -->
+    <h1 class="admin-page-title">Dashboard</h1>
+    <p class="admin-page-sub">Platforma genel bakış — son güncelleme: şimdi</p>
+  </div>
+  <div class="admin-page-actions">
+    <a class="btn-admin" href="/" target="_blank">Siteyi Görüntüle</a>
+  </div>
+</div>
 
-{% block content %}
-<section class="page-section">
-    <div class="container">
-        <div class="glass-card card-pad">
-            <div class="row-between" style="gap:18px;">
-                <div>
-                    <p class="eyebrow">Internal Business Dashboard</p>
-                    <h1 class="hero-title" style="font-size:2.3rem;">Business Dashboard</h1>
-                    <p class="muted">Verified payment revenue, fulfillment load, refunds, and product performance from real order states.</p>
-                </div>
-                <div class="chip-row">
-                    <a class="chip" href="/admin">Admin Home</a>
-                    <a class="chip" href="/admin/orders">Orders</a>
-                    <a class="chip" href="/admin/revenue">Revenue</a>
-                </div>
-            </div>
-
-            <div class="chip-row" style="margin-top:20px;">
-                {% for key, label in dashboard.range_options.items() %}
-                <a class="chip" href="/admin/dashboard?range={{ key }}" {% if dashboard.range.key == key %}style="border-color:rgba(223,192,112,.5); color:var(--accent);"{% endif %}>{{ label }}</a>
-                {% endfor %}
-            </div>
-        </div>
+{% if dashboard is defined %}
+<div class="admin-stats">
+  {% for card in dashboard.kpis %}
+  <div class="admin-stat">
+    <div class="admin-stat-label">{{ card.label }}</div>
+    <div class="admin-stat-value">{{ card.value }}</div>
+    <div class="admin-stat-delta">{{ card.note }}</div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="admin-stats">
+  <div class="admin-stat">
+    <div class="admin-stat-label">Toplam Kullanıcı</div>
+    <div class="admin-stat-value">{{ total_users }}</div>
+    <div class="admin-stat-delta up">+{{ users_this_week }} bu hafta</div>
+  </div>
+  <div class="admin-stat">
+    <div class="admin-stat-label">Bekleyen Rapor</div>
+    <div class="admin-stat-value">{{ pending_reports }}</div>
+    <div class="admin-stat-delta {% if pending_reports > 0 %}warning{% endif %}">
+      {% if pending_reports > 0 %}İşlem bekliyor{% else %}Temiz{% endif %}
     </div>
-</section>
+  </div>
+  <div class="admin-stat">
+    <div class="admin-stat-label">Toplam Danışmanlık</div>
+    <div class="admin-stat-value">{{ total_consultations }}</div>
+  </div>
+  <div class="admin-stat">
+    <div class="admin-stat-label">Toplam Makale</div>
+    <div class="admin-stat-value">{{ total_articles }}</div>
+  </div>
+</div>
+{% endif %}
 
-<section class="page-section">
-    <div class="container">
-        <div class="grid-4">
-            {% for card in dashboard.kpis %}
-            <div class="metric-card">
-                <div class="metric-label">{{ card.label }}</div>
-                <div class="metric-value">{{ card.value }}</div>
-                <div class="muted">{{ card.note }}</div>
-            </div>
-            {% endfor %}
-        </div>
+<div class="admin-stats">
+  <div class="admin-stat">
+    <div class="admin-stat-label">Teslim Edilen Rapor</div>
+    <div class="admin-stat-value">{{ delivered_reports_count }}</div>
+  </div>
+  <div class="admin-stat">
+    <div class="admin-stat-label">Bekleyen Randevu</div>
+    <div class="admin-stat-value">{{ pending_consultations }}</div>
+    {% if pending_consultations > 0 %}
+    <div class="admin-stat-delta warning" style="color:var(--warning);">Yanıt gerekiyor</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="admin-action-bar">
+  <div class="admin-section-sub">Quick operational shortcuts</div>
+  <div class="admin-page-actions">
+  <a class="btn-admin btn-admin-primary" href="/admin/reports?status=pending">
+    {% if pending_reports > 0 %}{{ pending_reports }} Bekleyen Rapor{% else %}Rapor Siparişleri{% endif %}
+  </a>
+  <a class="btn-admin" href="/admin/articles/new">+ Yeni Makale</a>
+  <a class="btn-admin" href="/admin/faq/new">+ SSS Sorusu</a>
+  <a class="btn-admin" href="/admin/consultations?status=pending">Bekleyen Randevular</a>
+  <a class="btn-admin" href="/admin/logs">Son Loglar</a>
+  </div>
+</div>
+
+<div style="display:grid; grid-template-columns: 1.2fr 0.8fr; gap:16px;">
+  <div class="admin-table-wrap">
+    <div class="admin-table-header">
+      <span class="admin-table-title">Son Rapor Siparişleri</span>
+      <a class="btn-admin" href="/admin/reports">Tümünü Gör</a>
     </div>
-</section>
+    <table class="admin-table">
+      <thead><tr>
+        <th>Kullanıcı</th><th>Rapor Türü</th><th>Tarih</th><th>Durum</th>
+      </tr></thead>
+      <tbody>
+        {% for r in recent_reports %}
+        <tr>
+          <td>{{ r.email }}</td>
+          <td>{{ r.report_type }}</td>
+          <td>{{ r.created_at }}</td>
+          <td>
+            {% if r.status == 'pending' %}<span class="badge badge-warning">Bekliyor</span>
+            {% elif r.status == 'in_progress' %}<span class="badge badge-info">Hazırlanıyor</span>
+            {% elif r.status == 'delivered' %}<span class="badge badge-success">Teslim edildi</span>
+            {% else %}<span class="badge badge-muted">{{ r.status }}</span>{% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4"><div class="admin-empty-state"><div class="admin-empty-title">Henüz rapor siparişi yok</div><div class="admin-empty-text">Yeni rapor siparişleri burada operasyon kuyruğu olarak görünecek.</div></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 
-<section class="page-section">
-    <div class="container">
-        <div class="grid-2">
-            <div class="glass-card card-pad">
-                <h2 class="section-title">Revenue Detail</h2>
-                <p class="muted">Range: {{ dashboard.range.label }}. Gross revenue is verified paid orders by paid_at. Refunds are actual refunded orders by refunded_at. Net revenue is gross minus refunds; platform and payment fees are not deducted.</p>
-                <div class="grid-2" style="margin-top:18px;">
-                    <div class="metric-card">
-                        <div class="metric-label">Gross Revenue</div>
-                        <div class="metric-value">{{ dashboard.selected_revenue.gross_revenue_label }}</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-label">Refunded Amount</div>
-                        <div class="metric-value">{{ dashboard.selected_revenue.refunded_amount_label }}</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-label">Net Revenue</div>
-                        <div class="metric-value">{{ dashboard.selected_revenue.net_revenue_label }}</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-label">Average Order Value</div>
-                        <div class="metric-value">{{ dashboard.selected_revenue.average_order_value_label }}</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="glass-card card-pad">
-                <h2 class="section-title">Status Breakdown</h2>
-                <p class="muted">Counts are based on created_at for the selected range, except all time includes the full order table.</p>
-                <div style="overflow:auto; margin-top:18px;">
-                    <table style="width:100%; border-collapse:collapse;">
-                        <thead>
-                            <tr class="muted" style="text-align:left;">
-                                <th style="padding:8px;">Status</th>
-                                <th style="padding:8px;">Count</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for row in dashboard.status_breakdown %}
-                            <tr style="border-top:1px solid rgba(223,192,112,.12);">
-                                <td style="padding:9px;"><span class="chip">{{ row.status }}</span></td>
-                                <td style="padding:9px;">{{ row.count }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
+  <div class="admin-table-wrap">
+    <div class="admin-table-header">
+      <span class="admin-table-title">Son Kayıtlar</span>
+      <a class="btn-admin" href="/admin/users">Tümünü Gör</a>
     </div>
-</section>
-
-<section class="page-section">
-    <div class="container">
-        <div class="glass-card card-pad">
-            <h2 class="section-title">Product Performance</h2>
-            <p class="muted">Revenue is net of recorded refunds on the order, sorted highest first.</p>
-            <div style="overflow:auto; margin-top:18px;">
-                <table style="width:100%; border-collapse:collapse;">
-                    <thead>
-                        <tr class="muted" style="text-align:left;">
-                            <th style="padding:10px;">Product</th>
-                            <th style="padding:10px;">Type</th>
-                            <th style="padding:10px;">Paid Orders</th>
-                            <th style="padding:10px;">Revenue</th>
-                            <th style="padding:10px;">Delivered</th>
-                            <th style="padding:10px;">Completed</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for product in dashboard.product_performance %}
-                        <tr style="border-top:1px solid rgba(223,192,112,.12);">
-                            <td style="padding:12px;"><strong>{{ product.product_name }}</strong></td>
-                            <td style="padding:12px;">{{ product.product_type }}</td>
-                            <td style="padding:12px;">{{ product.paid_order_count }}</td>
-                            <td style="padding:12px;">{{ product.revenue_label }}</td>
-                            <td style="padding:12px;">{{ product.delivered_count }}</td>
-                            <td style="padding:12px;">{{ product.completed_count }}</td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="6" class="muted" style="padding:18px;">No paid product activity in this range.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-</section>
-
-<section class="page-section">
-    <div class="container">
-        <div class="grid-2">
-            <div class="glass-card card-pad">
-                <h2 class="section-title">Recent Activity</h2>
-                <div style="overflow:auto; margin-top:18px;">
-                    <table style="width:100%; border-collapse:collapse;">
-                        <thead>
-                            <tr class="muted" style="text-align:left;">
-                                <th style="padding:8px;">Time</th>
-                                <th style="padding:8px;">Order</th>
-                                <th style="padding:8px;">Customer</th>
-                                <th style="padding:8px;">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for event in dashboard.recent_activity %}
-                            <tr style="border-top:1px solid rgba(223,192,112,.12);">
-                                <td style="padding:9px;">{{ event.timestamp }}</td>
-                                <td style="padding:9px;"><a href="/admin/orders/{{ event.order_id }}">#{{ event.order_id }}</a></td>
-                                <td style="padding:9px;">{{ event.customer }}</td>
-                                <td style="padding:9px;">{{ event.action }}</td>
-                            </tr>
-                            {% else %}
-                            <tr>
-                                <td colspan="4" class="muted" style="padding:18px;">No recent activity yet.</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <div class="glass-card card-pad">
-                <h2 class="section-title">Daily Trend</h2>
-                <p class="muted">Daily paid orders and net revenue for the selected range.</p>
-                <div style="overflow:auto; margin-top:18px; max-height:460px;">
-                    <table style="width:100%; border-collapse:collapse;">
-                        <thead>
-                            <tr class="muted" style="text-align:left;">
-                                <th style="padding:8px;">Date</th>
-                                <th style="padding:8px;">Paid Orders</th>
-                                <th style="padding:8px;">Gross</th>
-                                <th style="padding:8px;">Refunds</th>
-                                <th style="padding:8px;">Net</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for row in dashboard.timeseries %}
-                            <tr style="border-top:1px solid rgba(223,192,112,.12);">
-                                <td style="padding:9px;">{{ row.date }}</td>
-                                <td style="padding:9px;">{{ row.paid_orders }}</td>
-                                <td style="padding:9px;">{{ row.gross_revenue_label }}</td>
-                                <td style="padding:9px;">{{ row.refunded_amount_label }}</td>
-                                <td style="padding:9px;">{{ row.net_revenue_label }}</td>
-                            </tr>
-                            {% else %}
-                            <tr>
-                                <td colspan="5" class="muted" style="padding:18px;">No trend data in this range.</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-</section>
+    <table class="admin-table">
+      <thead><tr><th>Kullanıcı</th><th>Plan</th></tr></thead>
+      <tbody>
+        {% for u in recent_users %}
+        <tr>
+          <td>
+            <div style="font-size:.875rem;">{{ u.name or u.email }}</div>
+            <div style="font-size:.75rem; color:var(--muted);">{{ u.email }}</div>
+          </td>
+          <td><span class="badge badge-muted">{{ u.plan_code or 'free' }}</span></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="2"><div class="admin-empty-state"><div class="admin-empty-title">Kullanıcı yok</div><div class="admin-empty-text">Yeni kayıtlar oluştuğunda bu panel son kullanıcıları gösterecek.</div></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
 {% endblock %}

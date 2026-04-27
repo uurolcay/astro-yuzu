@@ -65,6 +65,12 @@ def get_current_transits(context_or_lat, lon=None):
     return transits
 
 def score_current_impact(natal_data, transits):
+    """
+    Legacy simple conjunction-only scoring helper.
+    Only detects conjunctions within 6° orb.
+    For report-grade timing analysis use transit_trigger_engine
+    and scoring_engine instead.
+    """
     scores = []
     lagna_sign = natal_data['ascendant']['sign_idx']
     
@@ -81,6 +87,7 @@ def score_current_impact(natal_data, transits):
                     scores.append({
                         "event": f"Transit {tp['name']} on Natal {np['name']}",
                         "score": min(impact, 100),
-                        "house": house_num
+                        "house": house_num,
+                        "scoring_model": "legacy_conjunction_only",
                     })
     return sorted(scores, key=lambda x: x['score'], reverse=True)

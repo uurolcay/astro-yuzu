@@ -1,7 +1,8 @@
 {% extends "base.html" %}
+{% set meta_lang = language if language is defined and language in ["tr", "en"] else (lang if lang is defined and lang in ["tr", "en"] else "tr") %}
 
 {% block title %}{{ t("about.page_title") }}{% endblock %}
-{% block meta_description %}Focus Astrology hakkında bilgi alın; vedik astroloji uzmanı yaklaşımıyla profesyonel astroloji danışmanlık ve kişisel raporlar.{% endblock %}
+{% block meta_description %}{{ "Learn about Focus Astrology, Feruze Olcay, and the Vedic astrology approach behind personal reports and private consultations." if meta_lang == "en" else "Focus Astrology hakkında bilgi alın; vedik astroloji uzmanı yaklaşımıyla profesyonel astroloji danışmanlık ve kişisel raporlar." }}{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -96,6 +97,7 @@
 {% endblock %}
 
 {% block content %}
+{% set page_lang = language if language is defined and language in ["tr", "en"] else (lang if lang is defined and lang in ["tr", "en"] else "tr") %}
 <section class="page-section">
     <div class="container">
         <div class="glass-card card-pad about-shell">
@@ -129,9 +131,9 @@
                 <div class="about-visual" id="founder" style="flex-direction:column; gap:24px; padding: clamp(28px, 4vw, 36px); text-align:center;">
                     <img class="about-founder-photo" src="/static/astrologer.jpg" alt="Feruze Olcay">
                     <div style="display:grid; gap:10px;">
-                        <div class="section-kicker" style="justify-content:center;">Kurucu Astrolog</div>
+                        <div class="section-kicker" style="justify-content:center;">{{ "Founder Astrolog" if page_lang == "en" else "Kurucu Astrolog" }}</div>
                         <h3 class="section-title" style="font-size:clamp(1.7rem,2.8vw,2.2rem);">Feruze Olcay</h3>
-                        <p class="muted" style="margin:0; max-width:320px; margin-inline:auto;">Vedik astrolojiyi kariyer, ilişki, yaşam yönü ve zamanlama soruları için sakin, net ve karar odaklı bir dille yorumlar.</p>
+                        <p class="muted" style="margin:0; max-width:320px; margin-inline:auto;">{{ "Feruze reads Vedic astrology with a calm, clear, and decision-oriented lens for career, relationships, life direction, and timing questions." if page_lang == "en" else "Vedik astrolojiyi kariyer, ilişki, yaşam yönü ve zamanlama soruları için sakin, net ve karar odaklı bir dille yorumlar." }}</p>
                     </div>
                 </div>
             </div>

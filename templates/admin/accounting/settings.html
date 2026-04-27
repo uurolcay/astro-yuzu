@@ -1,0 +1,15 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Accounting Settings{% endblock %}
+{% block admin_content %}
+<div class="admin-page-header"><div><h1 class="admin-page-title">Accounting Settings</h1><p class="admin-page-sub">{{ accounting_disclaimer }}</p></div><a class="btn-admin" href="/admin/accounting">← Dashboard</a></div>
+<div class="admin-card">
+  <div class="admin-card-title">Tax Rates</div>
+  <form class="admin-form" method="post" action="/admin/accounting/settings/tax-rate">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="admin-grid-2"><div class="admin-field"><label>Name</label><input name="name" placeholder="VAT 20"></div><div class="admin-field"><label>Type</label><select name="tax_type"><option value="vat">VAT</option><option value="income">Income/Corporate</option></select></div></div>
+    <div class="admin-field"><label>Rate %</label><input name="rate_percent" type="number" step="0.01"></div>
+    <button class="btn-admin btn-admin-primary" type="submit">Save Rate</button>
+  </form>
+</div>
+<div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Name</th><th>Type</th><th>Rate</th><th>Active</th></tr></thead><tbody>{% for r in rates %}<tr><td>{{ r.name }}</td><td>{{ r.tax_type }}</td><td>{{ r.rate_percent }}%</td><td>{{ r.is_active }}</td></tr>{% else %}<tr><td colspan="4" style="text-align:center; color:var(--muted); padding:28px;">No rates configured.</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

@@ -1,0 +1,49 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Internal Profiles{% endblock %}
+{% block admin_content %}
+<section class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Internal Profiles</h1>
+    <p class="admin-page-sub">Private admin-only profiles, separate from customers, reports, orders, and accounting.</p>
+  </div>
+  <a class="btn-admin" href="/admin/astro-workspace/chat">Ask AI</a>
+  <a class="btn-admin btn-admin-primary" href="/admin/astro-workspace">New Workspace Reading</a>
+</section>
+
+<form class="admin-filter-bar" method="get" action="/admin/astro-workspace/profiles">
+  <input style="max-width:360px" name="q" value="{{ q or '' }}" placeholder="Search by name">
+  <button class="btn-admin" type="submit">Search</button>
+</form>
+
+<div class="admin-table-wrap">
+  <div class="admin-table-header">
+    <div class="admin-table-title">Saved profiles</div>
+    <span class="badge badge-muted">{{ profiles|length }} profiles</span>
+  </div>
+  <table class="admin-table">
+    <thead><tr><th>Name</th><th>Birth data</th><th>Last generated</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for profile in profiles %}
+      <tr>
+        <td>{{ "★ " if profile.is_favorite else "" }}<a href="/admin/astro-workspace/profiles/{{ profile.id }}">{{ profile.full_name or "Private profile" }}</a></td>
+        <td>{{ profile.birth_date }} {{ profile.birth_time }} · {{ profile.birth_place_label }}</td>
+        <td>{{ profile.last_generated_at.strftime("%Y-%m-%d %H:%M") if profile.last_generated_at else "-" }}</td>
+        <td class="admin-table-actions">
+          <a class="btn-admin" href="/admin/astro-workspace?profile_id={{ profile.id }}">Reopen</a>
+          <form method="post" action="/admin/astro-workspace/profiles/{{ profile.id }}/favorite">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="btn-admin" type="submit">{{ "Unfavorite" if profile.is_favorite else "Favorite" }}</button>
+          </form>
+          <form method="post" action="/admin/astro-workspace/profiles/{{ profile.id }}/delete">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="btn-admin btn-admin-danger" type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4"><div class="admin-empty-state"><div class="admin-empty-title">No internal profiles yet</div></div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -89,6 +89,9 @@ STRESS_THEMES = {
     "power_struggle",
 }
 
+# Outer planets may appear in transit event data but are not calculated
+# in natal_data by default. Theme signals from these planets apply
+# only when they appear in scored transit events.
 OUTER_PLANETS = {"Uranus", "Neptune", "Pluto"}
 
 
@@ -314,6 +317,7 @@ def _event_house(event: dict[str, Any]) -> int | None:
     return None
 
 
+# _sort_date is duplicated intentionally pending a shared utils module.
 def _sort_date(value: Any) -> datetime:
     if isinstance(value, datetime):
         return value.replace(tzinfo=None)

@@ -1,0 +1,37 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Log Kayıtları{% endblock %}
+
+{% block admin_content %}
+<div class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Log Kayıtları</h1>
+    <p class="admin-page-sub">Son 200 işlem</p>
+  </div>
+</div>
+
+<div class="admin-table-wrap">
+  <table class="admin-table">
+    <thead><tr>
+      <th>Tarih</th><th>Kullanıcı</th><th>İşlem</th><th>Hedef</th><th>Detay</th>
+    </tr></thead>
+    <tbody>
+      {% for log in logs %}
+      <tr>
+        <td style="font-size:.78rem; color:var(--muted); white-space:nowrap;">{{ log.created_at }}</td>
+        <td style="font-size:.82rem;">{{ log.user_email }}</td>
+        <td>
+          {% if 'delete' in log.action %}<span class="badge badge-danger">{{ log.action }}</span>
+          {% elif 'create' in log.action or 'publish' in log.action %}<span class="badge badge-success">{{ log.action }}</span>
+          {% elif 'update' in log.action or 'status' in log.action %}<span class="badge badge-info">{{ log.action }}</span>
+          {% else %}<span class="badge badge-muted">{{ log.action }}</span>{% endif %}
+        </td>
+        <td style="font-size:.82rem; color:var(--muted);">{{ log.target_type }} #{{ log.target_id or '—' }}</td>
+        <td style="font-size:.8rem; color:var(--muted); max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ log.detail or '—' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" style="color:var(--muted); text-align:center; padding:32px;">Log kaydı yok</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

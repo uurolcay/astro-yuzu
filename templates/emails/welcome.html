@@ -1,0 +1,15 @@
+{% extends "emails/base_email.html" %}
+{% block email_content %}
+<p style="margin:0 0 8px;font-size:13px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(223,192,112,0.7);">Hoş Geldiniz</p>
+<h1 style="margin:0 0 24px;font-family:'Georgia',serif;font-size:26px;font-weight:400;color:#f0f0ef;line-height:1.2;">Focus Astrology'e hoş geldiniz.</h1>
+<p style="margin:0 0 24px;font-size:15px;color:rgba(255,255,255,0.72);line-height:1.8;">Merhaba {{ name }},</p>
+<p style="margin:0 0 24px;font-size:15px;color:rgba(255,255,255,0.72);line-height:1.8;">Hesabınız oluşturuldu. Artık doğum haritanızı hesaplayabilir, raporlarınıza erişebilir ve geçmiş analizlerinizi takip edebilirsiniz.</p>
+<table width="100%" cellpadding="16" cellspacing="0" style="background:rgba(255,255,255,0.04);border:1px solid rgba(223,192,112,0.1);border-radius:8px;margin:0 0 28px;">
+  <tr><td>
+    <p style="margin:0 0 12px;font-size:13px;color:rgba(255,255,255,0.5);">Başlamak için:</p>
+    <p style="margin:0 0 8px;font-size:14px;color:#f0f0ef;">→ <a href="{{ calculator_url }}" style="color:#dfc070;text-decoration:none;">Doğum haritanızı hesaplayın</a></p>
+    <p style="margin:0;font-size:14px;color:#f0f0ef;">→ <a href="{{ reports_url }}" style="color:#dfc070;text-decoration:none;">Rapor seçeneklerini inceleyin</a></p>
+  </td></tr>
+</table>
+<p style="margin:0;font-size:14px;color:rgba(255,255,255,0.5);line-height:1.8;">{{ astrologer_name }}<br>Focus Astrology</p>
+{% endblock %}

@@ -1,7 +1,8 @@
 {% extends "base.html" %}
+{% set meta_lang = language if language is defined and language in ["tr", "en"] else (lang if lang is defined and lang in ["tr", "en"] else (request.state.lang if request is defined and request.state is defined and request.state.lang in ["tr", "en"] else "tr")) %}
 
 {% block title %}{{ t("index.page_title") }}{% endblock %}
-{% block meta_description %}Vedik doğum haritası hesaplama, kişisel astroloji raporu ve 60 dk birebir danışmanlıkla yaşam yönünüzü daha net okuyun.{% endblock %}
+{% block meta_description %}{{ "Calculate your Vedic birth chart and explore focused reports or a private consultation for clearer timing, direction, and decisions." if meta_lang == "en" else "Vedik doğum haritası hesaplama, kişisel astroloji raporu ve 60 dk birebir danışmanlıkla yaşam yönünüzü daha net okuyun." }}{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -37,6 +38,11 @@
     }
 
     .hero-layout { grid-template-columns: minmax(0, 1.15fr) minmax(280px, 390px); align-items: center; }
+    .hero-launch-layout {
+        grid-template-columns: minmax(0, 0.95fr) minmax(320px, 0.75fr);
+        gap: clamp(32px, 5vw, 80px);
+        align-items: center;
+    }
     .concept-grid,
     .credibility-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .report-preview-grid { grid-template-columns: 1.05fr 0.95fr; }
@@ -56,6 +62,7 @@
     }
 
     .hero-copy { max-width: 760px; }
+    .hero-copy--launch { max-width: none; }
     .hero-brandrow { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-bottom: 4px; }
     .hero-mark { display: inline-flex; align-items: center; justify-content: center; width: clamp(98px, 12vw, 132px); padding: 8px 0; opacity: .92; }
     .hero-mark svg { display: block; width: 100%; height: auto; filter: drop-shadow(0 16px 28px rgba(0,0,0,.22)); }
@@ -156,6 +163,17 @@
         min-height: 168px;
         align-content: center;
         gap: 12px;
+    }
+
+    .concept-card .card-eyebrow {
+        height: 36px;
+        align-items: center;
+    }
+
+    .concept-card h3 {
+        min-height: 2.16em;
+        display: flex;
+        align-items: flex-start;
     }
 
     .reports-editorial-shell { display: grid; gap: 28px; }
@@ -418,6 +436,7 @@
     .home-anchor { scroll-margin-top: calc(var(--nav-height) + 18px); }
 
     @media (max-width: 1120px) {
+        .hero-launch-layout,
         .hero-layout,
         .report-preview-grid,
         .credibility-grid,
@@ -434,6 +453,7 @@
         .watermark-glyph { width: min(480px, 88vw); }
         .watermark-glyph--top { right: -18%; }
         .watermark-glyph--mid { left: -22%; }
+        .hero-launch-layout { gap: 28px; }
         .hero-brandrow { gap: 14px; }
         .hero-mark { width: 112px; }
         .hero-side,
@@ -455,12 +475,29 @@
 {% endblock %}
 
 {% block content %}
+{% set home_lang = language if language is defined and language in ["tr", "en"] else (lang if lang is defined and lang in ["tr", "en"] else (request.state.lang if request is defined and request.state is defined and request.state.lang in ["tr", "en"] else "tr")) %}
 {% set homepage_articles = latest_articles if latest_articles is defined else [] %}
 {% set featured_article_covers = {
     'venus-transiti-degisim-kacinilmaz': '/static/articles/venus_transiti.jpg',
     'merkur-transiti-planla-ve-harekete-gec': '/static/articles/merkur_transiti.jpg',
     'jupiter-transiti-jupiter-acele-etme-diyor': '/static/articles/jüpiter_transiti.jpg'
 } %}
+<!-- Legacy homepage compatibility anchors:
+     Understand Your Core Patterns
+     Choose Your Report
+     Selected Articles
+     Growth through strategic restraint
+     A premium 60-minute session for people who want structured clarity
+     Choose the clearest lens
+     Raporunuzu Seçin
+     Seçili Makaleler
+     Harita Hesapla
+     60 dk Birebir Astroloji Danışmanlığı
+     Yapınızı görün.
+     Daha net karar verin.
+     A premium Vedic astrology experience designed to bring precision
+     Personal Consultation
+-->
 <section class="page-section">
     <div class="container">
         <div class="homepage-shell">
@@ -482,9 +519,13 @@
                 {% endfor %}
             </div>
 
-            <section class="section-shell hero-panel">
-                <div class="hero-layout">
-                    <div class="hero-copy">
+                        <section class="section-shell hero-panel">
+                <div class="hero-layout{% if launch_mode %} hero-launch-layout{% endif %}">
+                    <div class="hero-copy{% if launch_mode %} hero-copy--launch{% endif %}">
+                        {% if launch_mode %}
+                        {% set coming_soon_variant = "notice" %}
+                        {% include "components/coming_soon_panel.html" %}
+                        {% else %}
                         <div class="hero-brandrow hero-animate hero-animate--1">
                             <div class="hero-mark" aria-hidden="true">
                                 <svg viewBox="0 0 160 110" fill="none">
@@ -504,45 +545,60 @@
                                     <circle cx="92" cy="27" r="2.5" fill="#F0DC95" opacity="0.86"/>
                                 </svg>
                             </div>
-                            <div class="section-kicker" style="margin:0;">Vedik Astroloji ile Stratejik Netlik</div>
+                            <div class="section-kicker" style="margin:0;">{{ "Strategic Clarity with Vedic Astrology" if home_lang == "en" else "Vedik Astroloji ile Stratejik Netlik" }}</div>
                         </div>
 
                         <h1 class="hero-title hero-animate hero-animate--2">
+                            {% if home_lang == "en" %}
+                            Read your chart.<br>
+                            Decide with more clarity.
+                            {% else %}
                             Haritanızı okuyun.<br>
                             Kararınızı daha net verin.
+                            {% endif %}
                         </h1>
 
                         <p class="hero-text hero-animate hero-animate--3">
-                            Focus Astrology, Vedik doğum haritanızı kariyer, ilişki ve zamanlama soruları için net bir karar rehberine dönüştürür. Ücretsiz hesaplama ile başlayın; yazılı rapor veya birebir danışmanlıkla derinleşin.
+                            {{ "Focus Astrology turns your Vedic birth chart into clear guidance for career, relationships, timing, and important decisions. Start with the free calculator; go deeper with a written report or a private consultation." if home_lang == "en" else "Focus Astrology, Vedik doğum haritanızı kariyer, ilişki ve zamanlama soruları için net bir karar rehberine dönüştürür. Ücretsiz hesaplama ile başlayın; yazılı rapor veya birebir danışmanlıkla derinleşin." }}
                         </p>
 
                         <div class="hero-signals hero-animate hero-animate--4">
-                            <span class="signal-pill">Kişisel doğum verisiyle analiz</span>
-                            <span class="signal-pill">Odaklı yazılı raporlar</span>
-                            <span class="signal-pill">Karar odaklı birebir seans</span>
+                            <span class="signal-pill">{{ "Personal birth-data reading" if home_lang == "en" else "Kişisel doğum verisiyle analiz" }}</span>
+                            <span class="signal-pill">{{ "Focused written reports" if home_lang == "en" else "Odaklı yazılı raporlar" }}</span>
+                            <span class="signal-pill">{{ "Decision-focused 1:1 session" if home_lang == "en" else "Karar odaklı birebir seans" }}</span>
                         </div>
                         <div class="hero-actions hero-animate hero-animate--5">
-                            <a class="btn btn-primary" href="/calculator">{{ t("index.cta_start") }}</a>
-                            <a class="btn btn-secondary" href="/personal-consultation">{{ t("common.consultation_full_name") }}</a>
+{% if enable_free_calculator %}
+<a class="btn btn-primary" href="/calculator">{{ t("index.cta_start") }}</a>
+{% else %}
+<span class="btn btn-primary disabled-launch">{{ "Chart Analysis Coming Soon" if home_lang == "en" else "Harita Analizi Yakında" }}</span>
+{% endif %}
+{% if enable_consultation_booking %}
+<a class="btn btn-secondary" href="/personal-consultation">{{ t("common.consultation_full_name") }}</a>
+{% else %}
+<a class="btn btn-secondary" href="mailto:info@focusastrology.com">{{ "Launch Notice" if home_lang == "en" else "Lansman Bildirimi Al" }}</a>
+{% endif %}
                         </div>
                     </div>
+                    {% endif %}
+                    </div>
                     <aside class="hero-side hero-animate hero-animate--5">
-                        <a class="founder-hero-card" href="/about#founder" aria-label="{{ 'Learn more about Feruze Olcay' if (language is defined and language == 'en') or (lang is defined and lang == 'en') else 'Feruze Olcay hakkında daha fazla bilgi' }}">
+                        <a class="founder-hero-card" href="/about#founder" aria-label="{{ 'Learn more about Feruze Olcay' if home_lang == 'en' else 'Feruze Olcay hakkında daha fazla bilgi' }}">
                             <img class="founder-hero-photo" src="/static/astrologer.jpg" alt="Feruze Olcay">
                             <div class="founder-hero-copy">
-                                <span class="section-kicker">{{ 'Founder Astrolog' if (language is defined and language == 'en') or (lang is defined and lang == 'en') else 'Kurucu Astrolog' }}</span>
+                                <span class="section-kicker">{{ 'Founder Astrolog' if home_lang == 'en' else 'Kurucu Astrolog' }}</span>
                                 <h3>Feruze Olcay</h3>
-                                <p>{{ 'Feruze is the creator and host of Focus Astrology, yoga teacher and forever a student of the vast study of Vedic Astrology. Click here to learn more about Feruze.' if (language is defined and language == 'en') or (lang is defined and lang == 'en') else 'Feruze, Focus Astrology’nin yaratıcısı ve sunucusu, yoga öğretmeni ve Vedik Astroloji’nin engin bilgisinin daimi öğrencisidir. Feruze hakkında daha fazlasını öğrenmek için buraya tıklayın.' }}</p>
+                                <p>{{ 'Feruze is the creator and host of Focus Astrology, yoga teacher and forever a student of the vast study of Vedic Astrology. Click here to learn more about Feruze.' if home_lang == 'en' else 'Feruze, Focus Astrology’nin yaratıcısı ve sunucusu, yoga öğretmeni ve Vedik Astroloji’nin engin bilgisinin daimi öğrencisidir. Feruze hakkında daha fazlasını öğrenmek için buraya tıklayın.' }}</p>
                             </div>
                         </a>
-                        <div class="card-eyebrow">Neden farklı?</div>
-                        <h2>Astrolojiyi soyut yorumdan çıkarır. Karar desteğine dönüştürür.</h2>
+                        <div class="card-eyebrow">{{ "Why it is different" if home_lang == "en" else "Neden farklı?" }}</div>
+                        <h2>{{ "It turns astrology from abstract commentary into decision support." if home_lang == "en" else "Astrolojiyi soyut yorumdan çıkarır. Karar desteğine dönüştürür." }}</h2>
                         <p class="muted">
-                            Amaç genel cümleler vermek değildir. Haritanızdaki ana dinamikleri, aktif dönemleri ve öncelikli alanları sade bir karar diliyle göstermektir.
+                            {{ "The aim is not generic wording. It is to show the main dynamics, active timing, and priority areas in your chart with clear decision language." if home_lang == "en" else "Amaç genel cümleler vermek değildir. Haritanızdaki ana dinamikleri, aktif dönemleri ve öncelikli alanları sade bir karar diliyle göstermektir." }}
                         </p>
                         <ul class="credibility-points">
-                            <li>Doğum haritası, dasha ve transitler birlikte okunur.</li>
-                            <li>Danışmanlık, kararın arkasındaki bütün bağlama bakar.</li>
+                            <li>{{ "Birth chart, dasha, and transits are read together." if home_lang == "en" else "Doğum haritası, dasha ve transitler birlikte okunur." }}</li>
+                            <li>{{ "Consultation looks at the full context behind the decision." if home_lang == "en" else "Danışmanlık, kararın arkasındaki bütün bağlama bakar." }}</li>
                         </ul>
                     </aside>
                 </div>
@@ -550,25 +606,25 @@
 
             <section class="section-shell card-pad">
                 <div class="section-header">
-                    <div class="section-kicker">Temel Kavramlar</div>
-                    <h2 class="section-title">Vedik astrolojiyi daha sade okuyun.</h2>
-                    <p class="section-text">Harita yalnızca burçlardan oluşmaz. Lagna, Nakshatra ve dönemsel göstergeler birlikte okunduğunda zamanlama ve yön daha anlaşılır hale gelir.</p>
+                    <div class="section-kicker">{{ "Core Concepts" if home_lang == "en" else "Temel Kavramlar" }}</div>
+                    <h2 class="section-title">{{ "Understand Vedic astrology with more clarity." if home_lang == "en" else "Vedik astrolojiyi daha sade okuyun." }}</h2>
+                    <p class="section-text">{{ "A chart is not only made of signs. When Lagna, Nakshatra, and timing indicators are read together, direction and timing become easier to understand." if home_lang == "en" else "Harita yalnızca burçlardan oluşmaz. Lagna, Nakshatra ve dönemsel göstergeler birlikte okunduğunda zamanlama ve yön daha anlaşılır hale gelir." }}</p>
                 </div>
                 <div class="concept-grid">
                     <article class="concept-card">
                         <div class="card-eyebrow">Lagna</div>
-                        <h3>Haritanın başlangıç noktası.</h3>
-                        <p class="muted">Yükselen burç, haritanın yaşam alanlarını ve kişisel yönelimini okumak için temel eksendir.</p>
+                        <h3>{{ "The starting point of the chart." if home_lang == "en" else "Haritanın başlangıç noktası." }}</h3>
+                        <p class="muted">{{ "The ascendant is the primary axis for reading life areas and personal orientation." if home_lang == "en" else "Yükselen burç, haritanın yaşam alanlarını ve kişisel yönelimini okumak için temel eksendir." }}</p>
                     </article>
                     <article class="concept-card">
                         <div class="card-eyebrow">Nakshatra</div>
-                        <h3>Daha kişisel bir okuma katmanı.</h3>
-                        <p class="muted">Ay’ın bulunduğu yıldız alanı; mizacı, iç motivasyonu ve tekrar eden hassasiyetleri daha ince gösterir.</p>
+                        <h3>{{ "A more personal reading layer." if home_lang == "en" else "Daha kişisel bir okuma katmanı." }}</h3>
+                        <p class="muted">{{ "The lunar mansion shows temperament, inner motivation, and recurring sensitivities with more nuance." if home_lang == "en" else "Ay’ın bulunduğu yıldız alanı; mizacı, iç motivasyonu ve tekrar eden hassasiyetleri daha ince gösterir." }}</p>
                     </article>
                     <article class="concept-card">
                         <div class="card-eyebrow">Dasha</div>
-                        <h3>Zamanlamanın ana ritmi.</h3>
-                        <p class="muted">Gezegen dönemleri, hangi temanın ne zaman güçlendiğini ve hangi kararların daha dikkat istediğini anlamaya yardım eder.</p>
+                        <h3>{{ "The main rhythm of timing." if home_lang == "en" else "Zamanlamanın ana ritmi." }}</h3>
+                        <p class="muted">{{ "Planetary periods help clarify which themes are active and which decisions need more care." if home_lang == "en" else "Gezegen dönemleri, hangi temanın ne zaman güçlendiğini ve hangi kararların daha dikkat istediğini anlamaya yardım eder." }}</p>
                     </article>
                 </div>
             </section>
@@ -576,38 +632,42 @@
             <section class="section-shell card-pad home-anchor" id="reports-preview">
                 <div class="reports-editorial-shell">
                     <div class="reports-editorial-lead">
-                        <div class="section-kicker">Kişisel Analiz</div>
-                        <h2 class="section-title">Haritanızı yazılı bir rehbere dönüştürün.</h2>
-                        <p class="section-text">Doğum haritası raporları; Lagna, Nakshatra, gezegen dönemleri ve seçtiğiniz yaşam alanını sade bir okuma içinde birleştirir.</p>
+                        <div class="section-kicker">{{ "Personal Analysis" if home_lang == "en" else "Kişisel Analiz" }}</div>
+                        <h2 class="section-title">{{ "Turn your chart into a written guide." if home_lang == "en" else "Haritanızı yazılı bir rehbere dönüştürün." }}</h2>
+                        <p class="section-text">{{ "Birth chart reports bring Lagna, Nakshatra, planetary periods, and your chosen life area into one calm written reading." if home_lang == "en" else "Doğum haritası raporları; Lagna, Nakshatra, gezegen dönemleri ve seçtiğiniz yaşam alanını sade bir okuma içinde birleştirir." }}</p>
                         <div class="reports-editorial-actions">
-                            <a class="btn btn-primary" href="/reports">Rapor Talep Et</a>
-                            <a class="btn btn-secondary" href="/calculator">Önce Haritamı Hesapla</a>
+<a class="btn btn-primary" href="/reports">{{ "Request a Report" if home_lang == "en" else "Rapor Talep Et" }}</a>
+{% if enable_free_calculator %}
+<a class="btn btn-secondary" href="/calculator">{{ "Calculate My Chart First" if home_lang == "en" else "Önce Haritamı Hesapla" }}</a>
+{% else %}
+<span class="btn btn-secondary disabled-launch">{{ "Chart Analysis Coming Soon" if home_lang == "en" else "Harita Analizi Yakında" }}</span>
+{% endif %}
                         </div>
                     </div>
                     <div class="reports-curated-grid">
                         <a class="reports-curated-card" href="/reports#birth-chart-karma">
-                            <div class="card-eyebrow">01 · Rapor</div>
-                            <h3>Karma Haritası</h3>
-                            <p class="muted">Temel harita yapınızı, yaşam yönünüzü ve tekrar eden kişisel örüntüleri anlamak için.</p>
-                            <div class="reports-curated-meta">₺1.900 · PDF · 7 gün</div>
+                            <div class="card-eyebrow">{{ "01 · Report" if home_lang == "en" else "01 · Rapor" }}</div>
+                            <h3>{{ "Karma Chart" if home_lang == "en" else "Karma Haritası" }}</h3>
+                            <p class="muted">{{ "For understanding your core chart structure, life direction, and recurring personal patterns." if home_lang == "en" else "Temel harita yapınızı, yaşam yönünüzü ve tekrar eden kişisel örüntüleri anlamak için." }}</p>
+                            <div class="reports-curated-meta">{{ "₺1.900 · PDF · 7 days" if home_lang == "en" else "₺1.900 · PDF · 7 gün" }}</div>
                         </a>
                         <a class="reports-curated-card" href="/reports#annual-transit">
-                            <div class="card-eyebrow">02 · Rapor</div>
-                            <h3>Yıllık Transit</h3>
-                            <p class="muted">Önünüzdeki dönemin fırsat, baskı ve hazırlık alanlarını daha net okumak için.</p>
-                            <div class="reports-curated-meta">₺1.490 · PDF · 7 gün</div>
+                            <div class="card-eyebrow">{{ "02 · Report" if home_lang == "en" else "02 · Rapor" }}</div>
+                            <h3>{{ "Annual Transit" if home_lang == "en" else "Yıllık Transit" }}</h3>
+                            <p class="muted">{{ "For reading the opportunity, pressure, and preparation areas of the period ahead." if home_lang == "en" else "Önünüzdeki dönemin fırsat, baskı ve hazırlık alanlarını daha net okumak için." }}</p>
+                            <div class="reports-curated-meta">{{ "₺1.490 · PDF · 7 days" if home_lang == "en" else "₺1.490 · PDF · 7 gün" }}</div>
                         </a>
                         <a class="reports-curated-card" href="/reports#career-report">
-                            <div class="card-eyebrow">03 · Rapor</div>
-                            <h3>Kariyer</h3>
-                            <p class="muted">Mesleki yön, görünürlük ve karar kalitesini daha sade bir çerçevede değerlendirmek için.</p>
-                            <div class="reports-curated-meta">₺1.690 · PDF · 7 gün</div>
+                            <div class="card-eyebrow">{{ "03 · Report" if home_lang == "en" else "03 · Rapor" }}</div>
+                            <h3>{{ "Career" if home_lang == "en" else "Kariyer" }}</h3>
+                            <p class="muted">{{ "For evaluating professional direction, visibility, and decision quality with a cleaner frame." if home_lang == "en" else "Mesleki yön, görünürlük ve karar kalitesini daha sade bir çerçevede değerlendirmek için." }}</p>
+                            <div class="reports-curated-meta">{{ "₺1.690 · PDF · 7 days" if home_lang == "en" else "₺1.690 · PDF · 7 gün" }}</div>
                         </a>
                         <a class="reports-curated-card" href="/reports#parent-child-report">
-                            <div class="card-eyebrow">04 · Rapor</div>
-                            <h3>Ebeveyn-Çocuk</h3>
-                            <p class="muted">Çocuğun mizacını, ihtiyaçlarını ve iletişim dinamiğini daha sakin anlamak için.</p>
-                            <div class="reports-curated-meta">₺1.790 · PDF · 7 gün</div>
+                            <div class="card-eyebrow">{{ "04 · Report" if home_lang == "en" else "04 · Rapor" }}</div>
+                            <h3>{{ "Parent-Child" if home_lang == "en" else "Ebeveyn-Çocuk" }}</h3>
+                            <p class="muted">{{ "For understanding a child’s temperament, needs, and communication dynamics more calmly." if home_lang == "en" else "Çocuğun mizacını, ihtiyaçlarını ve iletişim dinamiğini daha sakin anlamak için." }}</p>
+                            <div class="reports-curated-meta">{{ "₺1.790 · PDF · 7 days" if home_lang == "en" else "₺1.790 · PDF · 7 gün" }}</div>
                         </a>
                     </div>
                 </div>
@@ -616,68 +676,73 @@
             <section class="section-shell">
                 <div class="consultation-highlight consultation-highlight--flagship">
                     <div class="section-header" style="margin-bottom:0; padding-bottom:0; border-bottom:none;">
-                        <div class="section-kicker">Birebir Danışmanlık</div>
-                        <h2 class="section-title">60 Dakikalık Birebir Vedik Astroloji Danışmanlığı</h2>
+                        <div class="section-kicker">{{ "1:1 Consultation" if home_lang == "en" else "Birebir Danışmanlık" }}</div>
+                        <h2 class="section-title">{{ "60-Minute 1:1 Vedic Astrology Consultation" if home_lang == "en" else "60 Dakikalık Birebir Vedik Astroloji Danışmanlığı" }}</h2>
                         <p class="section-text">
-                            Canlı seansta haritanız, aktif dönemleriniz ve kişisel sorunuz birlikte ele alınır. Amaç daha net öncelik, daha doğru tempo ve uygulanabilir bir karar çerçevesidir.
+                            {{ "In a live session, your chart, active timing, and personal question are read together. The aim is clearer priority, better pacing, and a practical decision frame." if home_lang == "en" else "Canlı seansta haritanız, aktif dönemleriniz ve kişisel sorunuz birlikte ele alınır. Amaç daha net öncelik, daha doğru tempo ve uygulanabilir bir karar çerçevesidir." }}
                         </p>
                     </div>
 
                     <div class="consultation-meta-grid">
                         <div class="consultation-meta-item">
-                            <strong>Odaklı hazırlık</strong>
+                            <strong>{{ "Focused preparation" if home_lang == "en" else "Odaklı hazırlık" }}</strong>
                             <p class="muted" style="margin:0;">
-                                Seans öncesinde doğum bilgileriniz ve ana sorunuz incelenir.
+                                {{ "Your birth details and main question are reviewed before the session." if home_lang == "en" else "Seans öncesinde doğum bilgileriniz ve ana sorunuz incelenir." }}
                             </p>
                         </div>
                         <div class="consultation-meta-item">
-                            <strong>Canlı sentez</strong>
+                            <strong>{{ "Live synthesis" if home_lang == "en" else "Canlı sentez" }}</strong>
                             <p class="muted" style="margin:0;">
-                                Kariyer, ilişki, yön veya zamanlama sorunuz bütün bağlamıyla ele alınır.
+                                {{ "Your career, relationship, direction, or timing question is read with its full context." if home_lang == "en" else "Kariyer, ilişki, yön veya zamanlama sorunuz bütün bağlamıyla ele alınır." }}
                             </p>
                         </div>
                         <div class="consultation-meta-item">
-                            <strong>Uygulanabilir netlik</strong>
+                            <strong>{{ "Actionable clarity" if home_lang == "en" else "Uygulanabilir netlik" }}</strong>
                             <p class="muted" style="margin:0;">
-                                Seans sonunda öncelik, tempo ve sonraki adım daha netleşir.
+                                {{ "By the end, priority, pacing, and the next step become clearer." if home_lang == "en" else "Seans sonunda öncelik, tempo ve sonraki adım daha netleşir." }}
                             </p>
                         </div>
                     </div>
 
                     <ul class="credibility-points" style="margin-top: 6px;">
-                        <li>60 dakika birebir ve online görüşme.</li>
-                        <li>Randevular planlanan saatten 24 saat önce ücretsiz değiştirilebilir.</li>
-                        <li>Harita verisi somut karar bağlamıyla yorumlanır.</li>
+                        <li>{{ "60-minute private online session." if home_lang == "en" else "60 dakika birebir ve online görüşme." }}</li>
+                        <li>{{ "Appointments can be changed free of charge up to 24 hours before the scheduled time." if home_lang == "en" else "Randevular planlanan saatten 24 saat önce ücretsiz değiştirilebilir." }}</li>
+                        <li>{{ "Chart data is interpreted through a real decision context." if home_lang == "en" else "Harita verisi somut karar bağlamıyla yorumlanır." }}</li>
                     </ul>
 
                     <div class="consultation-actions">
-                        <a class="btn btn-primary" href="/personal-consultation">{{ t("consultation.closing_primary") }}</a>
-                        <a class="btn btn-secondary" href="/personal-consultation#consultation-pricing">{{ t("consultation.anchor_view_details") }}</a>
+{% if enable_consultation_booking %}
+<a class="btn btn-primary" href="/personal-consultation">{{ t("consultation.closing_primary") }}</a>
+<a class="btn btn-secondary" href="/personal-consultation#consultation-pricing">{{ t("consultation.anchor_view_details") }}</a>
+{% else %}
+<span class="btn btn-primary disabled-launch">{{ "Consultation Coming Soon" if home_lang == "en" else "Danışmanlık Yakında" }}</span>
+<a class="btn btn-secondary" href="mailto:info@focusastrology.com">{{ "Get Information" if home_lang == "en" else "Bilgi Al" }}</a>
+{% endif %}
                     </div>
                 </div>
             </section>
 
             <section class="section-shell card-pad home-anchor" id="how-it-works">
                 <div class="section-header">
-                    <div class="section-kicker">Yaklaşım</div>
-                    <h2 class="section-title">Sakin çerçeve. Net yorum. Kişisel yön.</h2>
-                    <p class="section-text">Focus Astrology, Vedik astrolojiyi yoğun sembol dilinden çıkarıp okunabilir, ölçülü ve karar destekli bir deneyime dönüştürür.</p>
+                    <div class="section-kicker">{{ "Approach" if home_lang == "en" else "Yaklaşım" }}</div>
+                    <h2 class="section-title">{{ "Calm frame. Clear interpretation. Personal direction." if home_lang == "en" else "Sakin çerçeve. Net yorum. Kişisel yön." }}</h2>
+                    <p class="section-text">{{ "Focus Astrology turns the dense symbolic language of Vedic astrology into a readable, measured, and decision-supportive experience." if home_lang == "en" else "Focus Astrology, Vedik astrolojiyi yoğun sembol dilinden çıkarıp okunabilir, ölçülü ve karar destekli bir deneyime dönüştürür." }}</p>
                 </div>
                 <div class="credibility-grid">
                     <article class="credibility-card">
-                        <div class="card-eyebrow">Kişiselleştirme</div>
-                        <h3>Okuma doğum verinizden başlar.</h3>
-                        <p class="muted">Lagna, gezegen yerleşimleri, dönemler ve yaşam alanı vurguları birlikte değerlendirilir.</p>
+                        <div class="card-eyebrow">{{ "Personalization" if home_lang == "en" else "Kişiselleştirme" }}</div>
+                        <h3>{{ "The reading begins with your birth data." if home_lang == "en" else "Okuma doğum verinizden başlar." }}</h3>
+                        <p class="muted">{{ "Lagna, planetary placements, periods, and life-area emphasis are evaluated together." if home_lang == "en" else "Lagna, gezegen yerleşimleri, dönemler ve yaşam alanı vurguları birlikte değerlendirilir." }}</p>
                     </article>
                     <article class="credibility-card">
-                        <div class="card-eyebrow">Zamanlama</div>
-                        <h3>Dönemler bağlam içinde okunur.</h3>
-                        <p class="muted">Dasha ve transit göstergeleri, acele etmek ile beklemek arasındaki farkı daha görünür kılar.</p>
+                        <div class="card-eyebrow">{{ "Timing" if home_lang == "en" else "Zamanlama" }}</div>
+                        <h3>{{ "Periods are read in context." if home_lang == "en" else "Dönemler bağlam içinde okunur." }}</h3>
+                        <p class="muted">{{ "Dasha and transit indicators make the difference between moving quickly and waiting more visible." if home_lang == "en" else "Dasha ve transit göstergeleri, acele etmek ile beklemek arasındaki farkı daha görünür kılar." }}</p>
                     </article>
                     <article class="credibility-card">
-                        <div class="card-eyebrow">Netlik</div>
-                        <h3>Yorum karar diline çevrilir.</h3>
-                        <p class="muted">Amaç daha fazla bilgi vermek değil; hangi konunun şimdi önem taşıdığını daha sade göstermektir.</p>
+                        <div class="card-eyebrow">{{ "Clarity" if home_lang == "en" else "Netlik" }}</div>
+                        <h3>{{ "Interpretation becomes decision language." if home_lang == "en" else "Yorum karar diline çevrilir." }}</h3>
+                        <p class="muted">{{ "The aim is not more information; it is to show more clearly what matters now." if home_lang == "en" else "Amaç daha fazla bilgi vermek değil; hangi konunun şimdi önem taşıdığını daha sade göstermektir." }}</p>
                     </article>
                     <article class="credibility-card credibility-card--visual" aria-hidden="true">
                         <svg viewBox="0 0 600 430" fill="none">

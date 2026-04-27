@@ -1,0 +1,34 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Accounting Transactions{% endblock %}
+{% block admin_content %}
+<div class="admin-page-header">
+  <div><h1 class="admin-page-title">Transactions</h1><p class="admin-page-sub">{{ total }} records · {{ accounting_disclaimer }}</p></div>
+  <a class="btn-admin" href="/admin/accounting">← Dashboard</a>
+</div>
+<form class="admin-filter-bar" method="get">
+  <input type="date" name="start_date" value="{{ start_date }}">
+  <input type="date" name="end_date" value="{{ end_date }}">
+  <input type="text" name="product_type" value="{{ product_type }}" placeholder="Product type">
+  <select name="payment_status"><option value="">Payment</option><option value="paid" {% if payment_status == 'paid' %}selected{% endif %}>Paid</option><option value="refunded" {% if payment_status == 'refunded' %}selected{% endif %}>Refunded</option></select>
+  <select name="invoice_status"><option value="">Invoice</option><option value="uninvoiced" {% if invoice_status == 'uninvoiced' %}selected{% endif %}>Uninvoiced</option><option value="draft" {% if invoice_status == 'draft' %}selected{% endif %}>Draft</option><option value="issued" {% if invoice_status == 'issued' %}selected{% endif %}>Issued</option><option value="sent" {% if invoice_status == 'sent' %}selected{% endif %}>Sent</option></select>
+  <button class="btn-admin btn-admin-primary" type="submit">Filter</button>
+</form>
+<div class="admin-table-wrap">
+  <table class="admin-table">
+    <thead><tr><th>ID</th><th>Order</th><th>Customer</th><th>Product</th><th>Gross</th><th>Commission</th><th>Refunded</th><th>Net</th><th>Payment</th><th>Invoice</th><th>Paid At</th><th></th></tr></thead>
+    <tbody>
+    {% for t in transactions %}
+    <tr>
+      <td>#{{ t.id }}</td><td>{{ t.service_order_id or "—" }}</td><td>{{ t.customer.email if t.customer else "—" }}</td><td>{{ t.product_type or "—" }}</td>
+      <td>{{ t.gross_amount }}</td><td>{{ t.commission_amount }}</td><td>{{ t.refunded_amount }}</td><td>{{ t.net_amount }}</td>
+      <td><span class="badge {% if t.payment_status == 'paid' %}badge-success{% else %}badge-danger{% endif %}">{{ t.payment_status }}</span></td>
+      <td><span class="badge badge-muted">{{ t.invoice_status }}</span></td><td class="admin-muted">{{ t.paid_at }}</td>
+      <td><a class="btn-admin" href="/admin/accounting/transactions/{{ t.id }}">Detail</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="12" style="text-align:center; color:var(--muted); padding:28px;">No transactions.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

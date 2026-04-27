@@ -1,85 +1,86 @@
-{% extends "base.html" %}
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Report Orders{% endblock %}
 
-{% block title %}Focus Astrology | Admin Reports{% endblock %}
+{% block admin_content %}
+<div class="admin-page-header">
+  <div>
+    <!-- Preview | Unlocked | Purchased | Delivered | Full Access | PDF Enabled -->
+    <h1 class="admin-page-title">Report Orders</h1>
+    <p class="admin-page-sub">{{ total }} orders. Review paid report requests, gifts, delivery states, and bulk status changes.</p>
+  </div>
+  <div class="admin-page-actions">
+    <a class="btn-admin" href="/admin">Dashboard</a>
+  </div>
+</div>
 
-{% block content %}
-<section class="page-section">
-    <div class="container">
-        <div class="glass-card card-pad">
-            <div class="row-between">
-                <div>
-                    <p class="eyebrow">Written Report Fulfillment</p>
-                    <h1 class="hero-title" style="font-size:2.3rem;">Report Queue</h1>
-                    <p class="muted">Manual-review queue for paid written report services. Consultation orders are excluded.</p>
-                </div>
-                <div class="chip-row">
-                    <a class="chip" href="/admin/dashboard">Dashboard</a>
-                    <a class="chip" href="/admin/orders">All Orders</a>
-                </div>
-            </div>
+<form class="admin-filter-bar" method="get">
+  <input type="text" name="q" value="{{ q or '' }}" placeholder="Search email or name...">
+  <select name="status">
+    <option value="">All statuses</option>
+    <option value="pending" {% if status == 'pending' %}selected{% endif %}>Pending</option>
+    <option value="in_progress" {% if status == 'in_progress' %}selected{% endif %}>In progress</option>
+    <option value="delivered" {% if status == 'delivered' %}selected{% endif %}>Delivered</option>
+    <option value="refunded" {% if status == 'refunded' %}selected{% endif %}>Refunded</option>
+  </select>
+  <select name="report_type">
+    <option value="">All types</option>
+    <option value="natal" {% if report_type == 'natal' %}selected{% endif %}>Natal</option>
+    <option value="transit" {% if report_type == 'transit' %}selected{% endif %}>Transit</option>
+    <option value="synastry" {% if report_type == 'synastry' %}selected{% endif %}>Synastry</option>
+    <option value="career" {% if report_type == 'career' %}selected{% endif %}>Career</option>
+    <option value="child" {% if report_type == 'child' %}selected{% endif %}>Child</option>
+  </select>
+  <button class="btn-admin btn-admin-primary" type="submit">Filter</button>
+  {% if q or status or report_type %}<a class="btn-admin" href="/admin/reports">Clear</a>{% endif %}
+</form>
 
-            <form method="get" style="display:grid; grid-template-columns:1fr 2fr auto; gap:12px; margin-top:20px;">
-                <input type="text" name="report_type" placeholder="Report type" value="{{ filters.report_type }}">
-                <input type="text" name="user_email" placeholder="Customer email" value="{{ filters.user_email }}">
-                <button class="btn btn-secondary" type="submit">Filter</button>
-            </form>
-
-            <div style="overflow:auto; margin-top:24px;">
-                <table style="width:100%; border-collapse:collapse;">
-                    <thead>
-                        <tr class="muted" style="text-align:left;">
-                            <th style="padding:10px;">ID</th>
-                            <th style="padding:10px;">Customer Name</th>
-                            <th style="padding:10px;">Email</th>
-                            <th style="padding:10px;">Report Type</th>
-                            <th style="padding:10px;">Status</th>
-                            <th style="padding:10px;">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for report in reports %}
-                        <tr style="border-top:1px solid rgba(223,192,112,.12);">
-                            <td style="padding:12px;">#{{ report.id }}</td>
-                            <td style="padding:12px;">{{ report.customer_name }}</td>
-                            <td style="padding:12px;">{{ report.customer_email }}</td>
-                            <td style="padding:12px;">{{ report.product_type }}</td>
-                            <td style="padding:12px;"><span class="chip">{{ report.status }}</span></td>
-                            <td style="padding:12px;"><a class="chip" href="/admin/reports/{{ report.id }}">View</a></td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="6" class="muted" style="padding:18px;">No written report orders match this filter.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="glass-card card-pad" style="margin-top:24px;">
-            <h2 class="section-title">Generated Report Access Archive</h2>
-            <p class="muted">Legacy calculator/report access records kept for account and PDF access visibility.</p>
-            <div style="display:grid; gap:14px; margin-top:18px;">
-                {% for report in legacy_reports %}
-                <div class="metric-card">
-                    <div class="row-between">
-                        <div>
-                            <div class="metric-value">{{ report.title or "Vedic Report" }}</div>
-                            <div class="muted">{{ report.user_email }} | {{ report.profile_name }} | {{ report.report_type|title }}</div>
-                            <div class="chip-row" style="margin-top:10px;">
-                                <span class="chip">{{ report.access_label }}</span>
-                                {% if report.can_view_full_report %}<span class="chip">Full Access</span>{% endif %}
-                                {% if report.can_download_pdf %}<span class="chip">PDF Enabled</span>{% endif %}
-                            </div>
-                        </div>
-                        <div class="muted">{{ report.created_at }}</div>
-                    </div>
-                </div>
-                {% else %}
-                <p class="muted">No generated report records.</p>
-                {% endfor %}
-            </div>
-        </div>
+<form method="post" action="/admin/reports/bulk-status" id="bulk-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="admin-table-wrap">
+    <div class="admin-table-header">
+      <span class="admin-table-title">{{ total }} report orders</span>
+      <div class="admin-table-actions">
+        <select name="bulk_status">
+          <option value="">Bulk status...</option>
+          <option value="in_progress">In progress</option>
+          <option value="delivered">Delivered</option>
+          <option value="refunded">Refunded</option>
+        </select>
+        <button class="btn-admin btn-admin-primary" type="submit" onclick="return confirm('Update selected report orders?')">Apply</button>
+      </div>
     </div>
-</section>
+    <table class="admin-table">
+      <thead><tr>
+        <th style="width:36px;"><input type="checkbox" onchange="document.querySelectorAll('.row-check').forEach(c=>c.checked=this.checked)"></th>
+        <th>Customer</th><th>Type</th><th>Birth Date</th><th>City</th><th>Gift</th><th>Created</th><th>Status</th><th>Actions</th>
+      </tr></thead>
+      <tbody>
+        {% for r in reports %}
+        <tr>
+          <td><input type="checkbox" class="row-check" name="report_ids" value="{{ r.id }}"></td>
+          <td>
+            <div>{{ r.full_name or '—' }}</div>
+            <div style="font-size:.75rem; color:var(--muted);">{{ r.email }}</div>
+          </td>
+          <td><span class="badge badge-muted">{{ r.report_type }}</span></td>
+          <td style="font-size:.8rem;">{{ r.birth_date }}</td>
+          <td style="font-size:.8rem; color:var(--muted);">{{ r.birth_city }}</td>
+          <td>{% if r.is_gift %}<span class="badge badge-info">Gift</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</td>
+          <td style="font-size:.8rem; color:var(--muted);">{{ r.created_at }}</td>
+          <td>
+            {% if r.status == 'pending' %}<span class="badge badge-warning">Pending</span>
+            {% elif r.status == 'in_progress' %}<span class="badge badge-info">In progress</span>
+            {% elif r.status == 'delivered' %}<span class="badge badge-success">Delivered</span>
+            {% elif r.status == 'refunded' %}<span class="badge badge-danger">Refunded</span>
+            {% else %}<span class="badge badge-muted">{{ r.status }}</span>{% endif %}
+          </td>
+          <td><div class="admin-table-actions"><a class="btn-admin" href="/admin/reports/{{ r.id }}">Detail</a></div></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9"><div class="admin-empty-state"><div class="admin-empty-title">No report orders found</div><div class="admin-empty-text">Clear filters or choose another status to review the operational queue.</div></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</form>
 {% endblock %}

@@ -53,7 +53,7 @@
                 </p>
                 <ul class="submitted-list">
                     <li><strong>Rapor:</strong> {{ product.title }}</li>
-                    <li><strong>Teslim:</strong> Raporlar, hazırlık sürecinin ardından en geç 7 gün içinde e-posta ile teslim edilir.</li>
+                    <li><strong>Teslim:</strong> Raporlar, hazırlık sürecinin ardından en geç {{ delivery_days }} gün içinde e-posta ile teslim edilir.</li>
                     <li><strong>İletişim:</strong> Teslim ve olası takip soruları için {{ order.email }} adresi kullanılır.</li>
                 </ul>
                 <div class="submitted-actions">

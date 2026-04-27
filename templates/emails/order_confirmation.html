@@ -1,0 +1,27 @@
+{% extends "emails/base_email.html" %}
+{% block email_content %}
+<p style="margin:0 0 8px;font-size:13px;letter-spacing:0.1em;text-transform:uppercase;color:rgba(223,192,112,0.7);">Rapor Talebi</p>
+<h1 style="margin:0 0 24px;font-family:'Georgia',serif;font-size:26px;font-weight:400;color:#f0f0ef;line-height:1.2;">Talebiniz alındı.</h1>
+<p style="margin:0 0 24px;font-size:15px;color:rgba(255,255,255,0.72);line-height:1.8;">Merhaba {{ name }},</p>
+<p style="margin:0 0 24px;font-size:15px;color:rgba(255,255,255,0.72);line-height:1.8;">Rapor talebinizi aldık. Doğum bilgileriniz incelemeye alındı.</p>
+<table width="100%" cellpadding="0" cellspacing="0" style="background:rgba(255,255,255,0.04);border:1px solid rgba(223,192,112,0.1);border-radius:8px;margin:0 0 28px;">
+  <tr><td style="padding:20px 24px;">
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td style="font-size:12px;color:rgba(255,255,255,0.4);padding:6px 0;text-transform:uppercase;letter-spacing:0.08em;width:40%;">Rapor türü</td>
+        <td style="font-size:14px;color:#f0f0ef;padding:6px 0;">{{ report_type }}</td>
+      </tr>
+      <tr>
+        <td style="font-size:12px;color:rgba(255,255,255,0.4);padding:6px 0;text-transform:uppercase;letter-spacing:0.08em;">Tahmini teslim</td>
+        <td style="font-size:14px;color:#f0f0ef;padding:6px 0;">{{ delivery_days }} iş günü içinde</td>
+      </tr>
+      <tr>
+        <td style="font-size:12px;color:rgba(255,255,255,0.4);padding:6px 0;text-transform:uppercase;letter-spacing:0.08em;">Teslim adresi</td>
+        <td style="font-size:14px;color:#f0f0ef;padding:6px 0;">{{ to_email }}</td>
+      </tr>
+    </table>
+  </td></tr>
+</table>
+<p style="margin:0 0 28px;font-size:15px;color:rgba(255,255,255,0.72);line-height:1.8;">Raporunuz hazırlandıktan sonra sizi bu adrese e-posta ile bilgilendireceğiz. Sorularınız için bize her zaman ulaşabilirsiniz.</p>
+<p style="margin:0;font-size:14px;color:rgba(255,255,255,0.5);line-height:1.8;">{{ astrologer_name }}<br>Focus Astrology</p>
+{% endblock %}

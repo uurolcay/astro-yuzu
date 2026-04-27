@@ -1,0 +1,12 @@
+<header class="admin-topbar">
+  <div class="admin-topbar-left">
+    <div class="admin-topbar-kicker">Focus Astrology</div>
+    <div class="admin-topbar-title">{% block admin_shell_title %}Internal Operations Dashboard{% endblock %}</div>
+  </div>
+  <div class="admin-topbar-right">
+    <span>{{ current_user.email if current_user else "" }}</span>
+    <span style="color:rgba(255,255,255,.18);">|</span>
+    <a href="/" target="_blank">View Site</a>
+    <a href="/logout">Logout</a>
+  </div>
+</header>

@@ -1,61 +1,69 @@
-{% extends "base.html" %}
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}DanÄ±ÅŸmanlÄ±k RandevularÄ±{% endblock %}
 
-{% block title %}Focus Astrology | Admin Consultations{% endblock %}
+{% block admin_content %}
+<div class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">DanÄ±ÅŸmanlÄ±k RandevularÄ±</h1>
+    <p class="admin-page-sub">{{ total }} randevu</p>
+  </div>
+</div>
 
-{% block content %}
-<section class="page-section">
-    <div class="container">
-        <div class="glass-card card-pad">
-            <div class="row-between">
-                <div>
-                    <p class="eyebrow">Consultation Monitoring</p>
-                    <h1 class="hero-title" style="font-size:2.3rem;">Consultations</h1>
-                    <p class="muted">Calendly-linked consultation orders only. Report orders are excluded.</p>
-                </div>
-                <div class="chip-row">
-                    <a class="chip" href="/admin/dashboard">Dashboard</a>
-                    <a class="chip" href="/admin/orders">All Orders</a>
-                </div>
-            </div>
+<form class="admin-filter-bar" method="get">
+  <input type="text" name="q" value="{{ q or '' }}" placeholder="E-posta ara...">
+  <select name="status">
+    <option value="">TÃ¼m durumlar</option>
+    <option value="pending" {% if status == 'pending' %}selected{% endif %}>Bekliyor</option>
+    <option value="confirmed" {% if status == 'confirmed' %}selected{% endif %}>OnaylandÄ±</option>
+    <option value="completed" {% if status == 'completed' %}selected{% endif %}>TamamlandÄ±</option>
+    <option value="cancelled" {% if status == 'cancelled' %}selected{% endif %}>Ä°ptal</option>
+  </select>
+  <button class="btn-admin btn-admin-primary" type="submit">Filtrele</button>
+</form>
 
-            <form method="get" style="display:grid; grid-template-columns:1fr auto; gap:12px; margin-top:20px;">
-                <input type="text" name="status" placeholder="Status" value="{{ filters.status }}">
-                <button class="btn btn-secondary" type="submit">Filter</button>
-            </form>
-
-            <div style="overflow:auto; margin-top:24px;">
-                <table style="width:100%; border-collapse:collapse;">
-                    <thead>
-                        <tr class="muted" style="text-align:left;">
-                            <th style="padding:10px;">Customer Name</th>
-                            <th style="padding:10px;">Email</th>
-                            <th style="padding:10px;">Date</th>
-                            <th style="padding:10px;">Time</th>
-                            <th style="padding:10px;">Paid</th>
-                            <th style="padding:10px;">Status</th>
-                            <th style="padding:10px;">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in consultations %}
-                        <tr style="border-top:1px solid rgba(223,192,112,.12);">
-                            <td style="padding:12px;">{{ item.customer_name }}</td>
-                            <td style="padding:12px;">{{ item.customer_email }}</td>
-                            <td style="padding:12px;">{{ item.scheduled_start.date() if item.scheduled_start else "-" }}</td>
-                            <td style="padding:12px;">{{ item.scheduled_start.time() if item.scheduled_start else "-" }}</td>
-                            <td style="padding:12px;">{{ item.paid_label }}</td>
-                            <td style="padding:12px;"><span class="chip">{{ item.status }}</span></td>
-                            <td style="padding:12px;"><a class="chip" href="/admin/orders/{{ item.id }}">View</a></td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="7" class="muted" style="padding:18px;">No consultation orders match this filter.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-</section>
+<div class="admin-table-wrap">
+  <table class="admin-table">
+    <thead><tr>
+      <th>MÃ¼ÅŸteri</th><th>Randevu Tarihi</th><th>Ã–deme</th><th>Durum</th><th>Not</th><th></th>
+    </tr></thead>
+    <tbody>
+      {% for c in consultations %}
+      <tr>
+        <td>
+          <div><a href="/admin/orders/{{ c.id }}">{{ c.name or 'â€”' }}</a></div>
+          <div style="font-size:.75rem; color:var(--muted);">{{ c.email }}</div>
+        </td>
+        <td style="font-size:.85rem;">{{ c.booking_date or 'â€”' }}</td>
+        <td>
+          {% if c.payment_status == 'paid' %}<span class="badge badge-success">Ã–dendi</span>
+          {% elif c.payment_status == 'pending' %}<span class="badge badge-warning">Bekliyor</span>
+          {% else %}<span class="badge badge-muted">{{ c.payment_status or 'â€”' }}</span>{% endif %}
+        </td>
+        <td>
+          {% if c.status == 'pending' %}<span class="badge badge-warning">Bekliyor</span>
+          {% elif c.status == 'confirmed' %}<span class="badge badge-info">OnaylandÄ±</span>
+          {% elif c.status == 'completed' %}<span class="badge badge-success">TamamlandÄ±</span>
+          {% elif c.status == 'cancelled' %}<span class="badge badge-danger">Ä°ptal</span>
+          {% else %}<span class="badge badge-muted">{{ c.status }}</span>{% endif %}
+        </td>
+        <td style="font-size:.8rem; color:var(--muted); max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ c.notes or 'â€”' }}</td>
+        <td>
+          <form method="post" action="/admin/consultations/{{ c.id }}/status" style="display:flex; gap:6px; align-items:center;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <select name="status" style="font-size:.8rem; padding:4px 8px; background:var(--surface2); border:1px solid var(--border); color:var(--text); border-radius:6px;">
+              <option value="pending">Bekliyor</option>
+              <option value="confirmed">OnaylandÄ±</option>
+              <option value="completed">TamamlandÄ±</option>
+              <option value="cancelled">Ä°ptal</option>
+            </select>
+            <button class="btn-admin" type="submit" style="padding:4px 10px; font-size:.8rem;">GÃ¼ncelle</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" style="color:var(--muted); text-align:center; padding:32px;">Randevu bulunamadÄ±</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
 {% endblock %}

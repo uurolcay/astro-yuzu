@@ -1,0 +1,180 @@
+{% extends "admin/astro_workspace.html" %}
+{% block admin_content %}
+{{ super() }}
+{% if result %}
+<section class="admin-card">
+  <div class="admin-table-header" style="padding:0 0 14px; border-bottom:1px solid var(--border-soft); margin-bottom:14px;">
+    <div>
+      <div class="admin-card-title" style="margin:0; padding:0; border:0;">Interpretation Output</div>
+      <div class="admin-muted" style="font-size:.84rem; margin-top:5px;">{{ result.report_type|replace("_", " ")|title }}</div>
+    </div>
+    <form method="post" action="/admin/astro-workspace/export">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      {% if result.interpretation %}
+      <input type="hidden" name="interpretation_id" value="{{ result.interpretation.id }}">
+      {% else %}
+      <input type="hidden" name="payload_json" value="{{ result.payload_json|e }}">
+      <input type="hidden" name="interpretation_text" value="{{ result.interpretation_text|e }}">
+      {% endif %}
+      <button class="btn-admin" type="submit">Export PDF</button>
+    </form>
+  </div>
+  {% if result.notice %}
+  <p class="admin-muted" style="margin-bottom:12px;">{{ result.notice }}</p>
+  {% endif %}
+  {% if result.interpretation %}
+  <p class="admin-muted" style="margin-bottom:12px;">Saved as internal interpretation #{{ result.interpretation.id }}.</p>
+  {% endif %}
+  <div style="white-space:pre-wrap; line-height:1.7; color:var(--text);">{{ result.interpretation_text }}</div>
+</section>
+<section class="admin-card">
+  <div class="admin-card-title">Prediction Fusion (Dasha + Transit)</div>
+  <div id="prediction-fusion-empty" class="admin-muted" style="display:none; margin-top:12px;">No fusion predictions available for this profile.</div>
+  <div id="prediction-fusion-root" style="display:grid; gap:14px; margin-top:14px;">
+    <details class="admin-fusion-section" open>
+      <summary>Prediction Windows</summary>
+      <div id="prediction-fusion-windows" class="admin-fusion-list"></div>
+    </details>
+    <details class="admin-fusion-section">
+      <summary>Active Themes (dasha active, no transit yet)</summary>
+      <div id="prediction-fusion-active" class="admin-fusion-list"></div>
+    </details>
+    <details class="admin-fusion-section">
+      <summary>Blocked Predictions (transit present, no dasha)</summary>
+      <div id="prediction-fusion-blocked" class="admin-fusion-list"></div>
+    </details>
+    <details class="admin-fusion-section">
+      <summary>Confidence Notes</summary>
+      <div id="prediction-fusion-notes" class="admin-fusion-list"></div>
+    </details>
+  </div>
+  <script id="prediction-fusion-payload" type="application/json">{{ result.payload_json|safe }}</script>
+  <style>
+    .admin-fusion-section { border: 1px solid var(--border-soft); border-radius: 16px; padding: 10px 14px; background: rgba(255,255,255,0.02); }
+    .admin-fusion-section summary { cursor: pointer; color: var(--text); font-weight: 600; }
+    .admin-fusion-list { display: grid; gap: 12px; margin-top: 12px; }
+    .admin-fusion-item { border: 1px solid var(--border-soft); border-radius: 14px; padding: 14px; background: rgba(255,255,255,0.025); display: grid; gap: 10px; }
+    .admin-fusion-top { display:flex; gap:10px; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; }
+    .admin-fusion-meta { display:flex; gap:8px; flex-wrap:wrap; }
+    .admin-fusion-badge { display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; font-size:.76rem; font-weight:600; }
+    .admin-fusion-badge.low { background: rgba(255,255,255,0.08); color: var(--muted); }
+    .admin-fusion-badge.medium { background: rgba(246,210,122,0.16); color: #f6d27a; }
+    .admin-fusion-badge.high { background: rgba(120,190,140,0.18); color: #9fe1ad; }
+    .admin-fusion-badge.very_high { background: rgba(120,190,140,0.24); color: #c4f2ce; }
+    .admin-fusion-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px; }
+    .admin-fusion-note { color: var(--muted); font-style: italic; }
+    .admin-fusion-muted { color: var(--muted); }
+    .admin-fusion-list ul { margin: 0; padding-left: 18px; }
+    .admin-fusion-list li { margin: 0 0 6px; color: var(--muted); }
+  </style>
+  <script>
+    (function () {
+      const payloadNode = document.getElementById("prediction-fusion-payload");
+      if (!payloadNode) return;
+      let parsed = {};
+      try {
+        parsed = JSON.parse(payloadNode.textContent || "{}");
+      } catch (_error) {
+        parsed = {};
+      }
+      const fusion = parsed.prediction_fusion || {};
+      const windows = Array.isArray(fusion.prediction_windows) ? fusion.prediction_windows : [];
+      const activeThemes = Array.isArray(fusion.active_themes) ? fusion.active_themes : [];
+      const blocked = Array.isArray(fusion.blocked_predictions) ? fusion.blocked_predictions : [];
+      const notes = Array.isArray(fusion.confidence_notes) ? fusion.confidence_notes : [];
+      const emptyState = document.getElementById("prediction-fusion-empty");
+      const root = document.getElementById("prediction-fusion-root");
+      const hasContent = windows.length || activeThemes.length || blocked.length || notes.length;
+      if (!hasContent) {
+        if (emptyState) emptyState.style.display = "block";
+        if (root) root.style.display = "none";
+        return;
+      }
+
+      function escapeHtml(value) {
+        return String(value || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/\"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function badge(level) {
+        const text = escapeHtml(level || "low");
+        const tone = String(level || "low").toLowerCase();
+        return `<span class="admin-fusion-badge ${tone}">${text}</span>`;
+      }
+
+      function renderList(containerId, items, renderer, emptyText) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        if (!items.length) {
+          container.innerHTML = `<div class="admin-fusion-muted">${escapeHtml(emptyText)}</div>`;
+          return;
+        }
+        container.innerHTML = items.map(renderer).join("");
+      }
+
+      renderList("prediction-fusion-windows", windows, (item) => {
+        const boosts = [
+          item.yoga_boosted ? `<span class="admin-fusion-badge medium">Yoga boosted</span>` : "",
+          item.atmakaraka_boosted ? `<span class="admin-fusion-badge medium">Atmakaraka boosted</span>` : "",
+        ].filter(Boolean).join("");
+        const supporting = Array.isArray(item.supporting_signals) ? item.supporting_signals.map(escapeHtml).join(", ") : "";
+        return `
+          <div class="admin-fusion-item">
+            <div class="admin-fusion-top">
+              <div>
+                <div><strong>${escapeHtml(item.theme)}</strong></div>
+                <div class="admin-fusion-muted">${escapeHtml(item.domain)} · ${escapeHtml(item.timing_window)}</div>
+              </div>
+              <div class="admin-fusion-meta">
+                ${badge(item.confidence)}
+                ${badge(item.risk_level)}
+                ${badge(item.opportunity_level)}
+              </div>
+            </div>
+            ${boosts ? `<div class="admin-fusion-meta">${boosts}</div>` : ""}
+            <div class="admin-fusion-grid">
+              <div><strong>Activation</strong><div class="admin-fusion-muted">${escapeHtml(item.activation_source)}</div></div>
+              <div><strong>Delivery</strong><div class="admin-fusion-muted">${escapeHtml(item.delivery_source)}</div></div>
+              <div><strong>Supporting Signals</strong><div class="admin-fusion-muted">${supporting || "—"}</div></div>
+            </div>
+            <div><strong>Why now</strong><div class="admin-fusion-muted">${escapeHtml(item.why_now)}</div></div>
+            <div><strong>Recommended action</strong><div class="admin-fusion-muted">${escapeHtml(item.recommended_action)}</div></div>
+            <div><strong>Avoid action</strong><div class="admin-fusion-muted">${escapeHtml(item.avoid_action)}</div></div>
+            <div class="admin-fusion-note">${escapeHtml(item.not_fated_note)}</div>
+          </div>`;
+      }, "No prediction windows.");
+
+      renderList("prediction-fusion-active", activeThemes, (item) => `
+          <div class="admin-fusion-item">
+            <div class="admin-fusion-top">
+              <div>
+                <div><strong>${escapeHtml(item.theme)}</strong></div>
+                <div class="admin-fusion-muted">${escapeHtml(item.domain)}</div>
+              </div>
+              <div class="admin-fusion-meta">${badge(item.confidence)}</div>
+            </div>
+            <div class="admin-fusion-grid">
+              <div><strong>Activation</strong><div class="admin-fusion-muted">${escapeHtml(item.activation_source)}</div></div>
+              <div><strong>Supporting Signals</strong><div class="admin-fusion-muted">${Array.isArray(item.supporting_signals) ? item.supporting_signals.map(escapeHtml).join(", ") : "—"}</div></div>
+            </div>
+            <div><strong>Why now</strong><div class="admin-fusion-muted">${escapeHtml(item.why_now)}</div></div>
+            <div class="admin-fusion-note">${escapeHtml(item.not_fated_note)}</div>
+          </div>`, "No active themes.");
+
+      renderList("prediction-fusion-blocked", blocked, (item) => `
+          <div class="admin-fusion-item">
+            <div><strong>${escapeHtml(item.theme || "Blocked prediction")}</strong></div>
+            <div class="admin-fusion-muted">${escapeHtml(item.domain || "")}</div>
+            <div class="admin-fusion-muted">${escapeHtml(item.reason || "Transit is present without dasha support.")}</div>
+          </div>`, "No blocked predictions.");
+
+      renderList("prediction-fusion-notes", notes, (item) => `<ul><li>${escapeHtml(item)}</li></ul>`, "No confidence notes.");
+    })();
+  </script>
+</section>
+{% endif %}
+{% endblock %}

@@ -1,5 +1,6 @@
 import csv
 import copy
+import base64
 import html as html_lib
 import hmac
 import hashlib
@@ -10,36 +11,44 @@ import re
 import sys
 import time
 import secrets
+from collections import defaultdict
 from functools import wraps
-from io import StringIO
+from io import BytesIO, StringIO
 from datetime import timedelta
 from collections.abc import Mapping
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from unicodedata import normalize
 from datetime import date, datetime
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import parse_qs, unquote, urlencode
 
 from dotenv import load_dotenv
 import pytz
 import uvicorn
-from jinja2 import pass_context
-from fastapi import Depends, FastAPI, Form, HTTPException, Query
+from jinja2 import Environment, FileSystemLoader, pass_context
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, inspect as sa_inspect, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
+from itsdangerous import BadSignature, TimestampSigner
+from weasyprint import HTML as WeasyHTML
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import ai_interpreter as ai_logic
 import database as db_mod
 import email_utils
+from services.accounting import exports as accounting_exports
+from services.accounting import document_service, invoice_service, month_close_service, reminders_service, tax_service, transaction_service
+from services.accounting.calculations import collection_ratio, invoice_coverage_ratio
 import utils
 from translations import (
+    TRANSLATIONS,
     get_preferred_language,
     t as translate_text,
     translation_namespace,
@@ -76,6 +85,11 @@ from services.admin_segments import (
     _resolve_segment_filters,
     _segment_export_rows,
 )
+from services import admin_astro_workspace as astro_workspace
+from services import admin_astro_chat as astro_chat
+from services import ai_behavior_rules
+from services import astro_signal_enrichment
+from services import report_structure_v3
 from services.geocoding import BirthPlaceResolutionError, search_birth_places
 from services import payments
 from engines import engines_dasha, engines_eclipses, engines_natal, engines_navamsa, engines_transits
@@ -100,6 +114,36 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
 def _env_flag_value(name, default=False):
     raw = str(os.getenv(name, "true" if default else "false")).strip().lower()
     return raw in {"1", "true", "yes", "on"}
+
+
+def launch_mode_enabled():
+    return _env_flag_value("LAUNCH_MODE", default=False)
+
+
+def launch_payments_enabled():
+    return _env_flag_value("ENABLE_PAYMENTS", default=True)
+
+
+def launch_free_calculator_enabled():
+    return _env_flag_value("ENABLE_FREE_CALCULATOR", default=True)
+
+
+def launch_ai_interpretation_enabled():
+    return _env_flag_value("ENABLE_AI_INTERPRETATION", default=True)
+
+
+def launch_consultation_booking_enabled():
+    return _env_flag_value("ENABLE_CONSULTATION_BOOKING", default=True)
+
+
+def _launch_mode_flags():
+    return {
+        "launch_mode": launch_mode_enabled(),
+        "enable_payments": launch_payments_enabled(),
+        "enable_free_calculator": launch_free_calculator_enabled(),
+        "enable_ai_interpretation": launch_ai_interpretation_enabled(),
+        "enable_consultation_booking": launch_consultation_booking_enabled(),
+    }
 
 
 TRUST_PROXY = _env_flag_value("TRUST_PROXY", default=False)
@@ -138,6 +182,124 @@ app.add_middleware(
 )
 
 db_mod.init_db()
+os.makedirs("static/reports", exist_ok=True)
+_pdf_env = Environment(loader=FileSystemLoader("templates/pdf"))
+
+
+def get_setting(db: Session, key: str, default: str = "") -> str:
+    row = db.query(db_mod.SiteSetting).filter(db_mod.SiteSetting.key == key).first()
+    return row.value if row and row.value is not None else default
+
+
+def render_email(template_name: str, **kwargs) -> str:
+    return email_utils.render_email(template_name, **kwargs)
+
+
+def send_email(
+    to_email: str,
+    subject: str,
+    html_body: str,
+    plain_body: str = "",
+    attachment_path: str | None = None,
+    attachment_filename: str | None = None,
+) -> bool:
+    return email_utils.send_email(
+        to_email=to_email,
+        subject=subject,
+        html_body=html_body,
+        plain_body=plain_body,
+        attachment_path=attachment_path,
+        attachment_filename=attachment_filename,
+    )
+
+
+def get_astrologer_name(db: Session) -> str:
+    return get_setting(db, "astrologer_name", "Focus Astrology") or "Focus Astrology"
+
+
+def generate_report_pdf(order_id: int, context: dict) -> str:
+    """Render the PDF template and write to static/reports/{order_id}.pdf"""
+    html_content = _pdf_env.get_template("report_base.html").render(**context)
+    output_path = f"static/reports/{order_id}.pdf"
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    WeasyHTML(string=html_content, base_url=".").write_pdf(output_path)
+    return output_path
+
+
+def _send_logged_email(
+    db: Session,
+    *,
+    email_type: str,
+    to_email: str,
+    subject: str,
+    html_body: str,
+    event_type: str | None = None,
+    event_key: str | None = None,
+    user_id: int | None = None,
+    plain_body: str = "",
+    attachment_path: str | None = None,
+    attachment_filename: str | None = None,
+) -> bool:
+    if not to_email:
+        return False
+    if _find_existing_email_log(db, email_type, to_email, event_key):
+        logger.info("Duplicate transactional email suppressed email_type=%s recipient=%s event_key=%s", email_type, to_email, event_key)
+        return True
+    ok = send_email(
+        to_email=to_email,
+        subject=subject,
+        html_body=html_body,
+        plain_body=plain_body,
+        attachment_path=attachment_path,
+        attachment_filename=attachment_filename,
+    )
+    _create_email_log(
+        db,
+        user_id=user_id,
+        email_type=email_type,
+        recipient_email=to_email,
+        subject=subject,
+        status="sent" if ok else "failed",
+        related_event_type=event_type,
+        related_event_key=event_key,
+        error_message=None if ok else "send_email_failed",
+    )
+    return ok
+
+
+def base_context(request: Request, db: Session, **kwargs) -> dict:
+    return _auth_template_context(
+        request,
+        instagram_url=get_setting(db, "site_instagram_url", "https://www.instagram.com/focusastrology/"),
+        **kwargs,
+    )
+
+
+def seed_faq_if_empty(db: Session):
+    if db.query(db_mod.FAQItem).count() > 0:
+        return
+    seed_data = [
+        db_mod.FAQItem(category="Genel", question_tr="Vedik astroloji nedir, Batı astrolojisinden farkı ne?", answer_tr="Vedik astroloji (Jyotisha), Hindistan'ın kadim Vedik geleneğinden gelen ve beş binden fazla yıllık birikimi olan bir sistemdir. Batı astrolojisinden en temel farkı hesaplama yöntemidir: Vedik sistem sabit yıldızları referans alır (sidereal zodiac), Batı sistemi ise Güneş'in ilkbahar noktasını (tropical zodiac).", question_en="What is Vedic astrology and how does it differ from Western astrology?", answer_en="Vedic astrology (Jyotisha) is an ancient system from India's Vedic tradition with over five thousand years of history. Its main difference from Western astrology is the calculation method: Vedic uses the sidereal zodiac (fixed stars), while Western uses the tropical zodiac (Sun's spring equinox point).", sort_order=1, is_published=True),
+        db_mod.FAQItem(category="Genel", question_tr="Harita hesaplaması ücretsiz mi?", answer_tr="Evet, doğum haritanızı hesaplamak tamamen ücretsizdir. Haritayı yorumlamak için ücretli raporlarımızdan veya birebir danışmanlık seansından yararlanabilirsiniz.", question_en="Is the birth chart calculation free?", answer_en="Yes, calculating your birth chart is completely free. To interpret the chart, you can use our paid reports or a one-on-one consultation session.", sort_order=2, is_published=True),
+        db_mod.FAQItem(category="Genel", question_tr="Doğum saatimi bilmiyorum, yine de analiz yaptırabilir miyim?", answer_tr="Doğum saati, doğru bir harita için en kritik bilgidir. Saatinizi kesin olarak bilmiyorsanız bize not ekleyebilirsiniz; bazı durumlarda saati daraltan teknikler uygulanabilir.", question_en="I don't know my birth time - can I still get an analysis?", answer_en="Birth time is the most critical piece of information for an accurate chart. If you don't know your exact time, you can add a note and we may apply rectification techniques in some cases.", sort_order=3, is_published=True),
+        db_mod.FAQItem(category="Raporlar", question_tr="Raporlar nasıl hazırlanıyor, ne zaman teslim ediliyor?", answer_tr="Doğum bilgilerinizle AI destekli bir taslak hazırlanır ve uzman incelemesinden geçirilir. Rapor en geç 7 gün içinde e-posta ile teslim edilir.", question_en="How are reports prepared and when are they delivered?", answer_en="An AI-assisted draft is created from your birth data and reviewed by an expert. The report is delivered by email within 7 days.", sort_order=1, is_published=True),
+        db_mod.FAQItem(category="Raporlar", question_tr="Hangi raporu seçmeliyim?", answer_tr="Genel yaşam temalarını anlamak için Doğum Haritası, dönem ve zamanlama için Yıllık Transit, kariyer kararları için Kariyer raporu önerilir. Birden fazla konu aynı anda etkili oluyorsa danışmanlık daha kapsamlı bir çerçeve sunar.", question_en="Which report should I choose?", answer_en="For understanding general life themes, choose Natal Chart. For timing and upcoming periods, Annual Transit. For career decisions, Career report. If multiple themes are active simultaneously, a consultation offers a more comprehensive framework.", sort_order=2, is_published=True),
+        db_mod.FAQItem(category="Raporlar", question_tr="Rapor satın aldıktan sonra iade alabilir miyim?", answer_tr="Dijital ürün niteliğindeki raporlarda, hazırlık süreci başladıktan sonra iade yapılamamaktadır. Detaylar için Satış Koşulları sayfamızı inceleyebilirsiniz.", question_en="Can I get a refund after purchasing a report?", answer_en="Once the preparation process has started, refunds are not available for digital products. Please review our Sales Terms page for full details.", sort_order=3, is_published=True),
+        db_mod.FAQItem(category="Danışmanlık", question_tr="Birebir danışmanlık seansı nasıl işliyor?", answer_tr="Seans başvurusu yaptıktan sonra doğum bilgilerinizi paylaşırsınız. Görüşme öncesinde haritanız incelenir. 60 dakikalık seans online olarak gerçekleştirilmektedir.", question_en="How does a one-on-one consultation session work?", answer_en="After applying, you share your birth information. Your chart is reviewed before the session. The 60-minute session takes place online.", sort_order=1, is_published=True),
+        db_mod.FAQItem(category="Danışmanlık", question_tr="Randevumu iptal etmek veya ertelemek istiyorum.", answer_tr="Randevunuzu planlanan saatten en az 24 saat önce ücretsiz olarak iptal edebilir veya erteleyebilirsiniz. 24 saatten kısa süre kala yapılan iptallerde ücret iadesi yapılamamaktadır.", question_en="I want to cancel or reschedule my appointment.", answer_en="You may cancel or reschedule free of charge at least 24 hours before your appointment. Cancellations made less than 24 hours in advance are non-refundable.", sort_order=2, is_published=True),
+        db_mod.FAQItem(category="Danışmanlık", question_tr="Başkası adına seans veya rapor alabilir miyim?", answer_tr="Evet, sevdiğiniz biri için rapor veya danışmanlık seansı satın alabilirsiniz. Sipariş formunda alıcının adını ve e-posta adresini belirtmeniz yeterlidir.", question_en="Can I buy a session or report for someone else?", answer_en="Yes, you can purchase a report or consultation session as a gift. Simply provide the recipient's name and email address in the order form.", sort_order=3, is_published=True),
+    ]
+    for item in seed_data:
+        db.add(item)
+    db.commit()
+
+
+_seed_db = db_mod.SessionLocal()
+try:
+    seed_faq_if_empty(_seed_db)
+finally:
+    _seed_db.close()
+
 logger = logging.getLogger(__name__)
 if SESSION_SECRET_KEY == "jyotish-dev-secret-change-me":
     logger.warning("Using development session secret. Set SECRET_KEY or APP_SECRET_KEY in production.")
@@ -188,7 +350,19 @@ def _bootstrap_admin_user_from_env():
             user.is_active = True
             if _env_flag_value("ADMIN_RESET_PASSWORD", default=False):
                 user.password_hash = generate_password_hash(admin_password)
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            user = db.query(db_mod.AppUser).filter(db_mod.AppUser.email == admin_email).first()
+            if not user:
+                raise
+            user.is_admin = True
+            user.is_active = True
+            if _env_flag_value("ADMIN_RESET_PASSWORD", default=False):
+                user.password_hash = generate_password_hash(admin_password)
+            db.commit()
+            created = False
         logger.info("Admin bootstrap %s email=%s", "created" if created else "verified", admin_email)
         return {"status": "created" if created else "verified", "email": admin_email}
     finally:
@@ -653,18 +827,18 @@ _ADMIN_ALLOWLIST_CACHE = None
 _ADMIN_ALLOWLIST_LOGGED = False
 ARTICLE_SLUG_CHAR_MAP = str.maketrans(
     {
-        "ç": "c",
-        "Ç": "c",
-        "ğ": "g",
-        "Ğ": "g",
-        "ı": "i",
-        "İ": "i",
-        "ö": "o",
-        "Ö": "o",
-        "ş": "s",
-        "Ş": "s",
-        "ü": "u",
-        "Ü": "u",
+        "\u00e7": "c",
+        "\u00c7": "c",
+        "\u011f": "g",
+        "\u011e": "g",
+        "\u0131": "i",
+        "\u0130": "i",
+        "\u00f6": "o",
+        "\u00d6": "o",
+        "\u015f": "s",
+        "\u015e": "s",
+        "\u00fc": "u",
+        "\u00dc": "u",
     }
 )
 
@@ -742,6 +916,22 @@ def get_request_user(request, db):
     return user
 
 
+def _request_user_from_signed_cookie(request, db):
+    raw_cookie = request.cookies.get("session")
+    if not raw_cookie:
+        return None
+    try:
+        signer = TimestampSigner(str(SESSION_SECRET_KEY))
+        unsigned = signer.unsign(raw_cookie.encode("utf-8"), max_age=int(timedelta(days=30).total_seconds()))
+        payload = json.loads(base64.b64decode(unsigned))
+        user_id = payload.get("user_id")
+    except (BadSignature, ValueError, TypeError, json.JSONDecodeError):
+        return None
+    if not user_id:
+        return None
+    return db.query(db_mod.AppUser).filter(db_mod.AppUser.id == user_id, db_mod.AppUser.is_active.is_(True)).first()
+
+
 def _admin_email_allowlist():
     global _ADMIN_ALLOWLIST_CACHE, _ADMIN_ALLOWLIST_LOGGED
 
@@ -804,6 +994,18 @@ def enforce_rate_limit(request, scope, limit=10, window_seconds=600):
                 _RATE_LIMIT_BUCKETS.pop(bucket_key, None)
 
 
+def check_rate_limit(key: str, max_calls: int, window_seconds: int) -> bool:
+    now = time.monotonic()
+    window_start = now - max(int(window_seconds or 1), 1)
+    calls = [ts for ts in _RATE_LIMIT_BUCKETS.get(key, []) if ts >= window_start]
+    _RATE_LIMIT_BUCKETS[key] = calls
+    if len(calls) >= int(max_calls):
+        return False
+    calls.append(now)
+    _RATE_LIMIT_BUCKETS[key] = calls
+    return True
+
+
 def ensure_csrf_token(request):
     if "session" not in getattr(request, "scope", {}):
         return ""
@@ -812,6 +1014,41 @@ def ensure_csrf_token(request):
         token = secrets.token_urlsafe(32)
         request.session[CSRF_SESSION_KEY] = token
     return token
+
+
+def get_csrf_token(request: Request) -> str:
+    return ensure_csrf_token(request)
+
+
+def verify_csrf_token(request: Request, form_token: str) -> bool:
+    session_token = request.session.get(CSRF_SESSION_KEY, "") if "session" in getattr(request, "scope", {}) else ""
+    if not session_token:
+        raw_cookie = request.cookies.get("session")
+        try:
+            if raw_cookie:
+                signer = TimestampSigner(str(SESSION_SECRET_KEY))
+                unsigned = signer.unsign(raw_cookie.encode("utf-8"), max_age=int(timedelta(days=30).total_seconds()))
+                payload = json.loads(base64.b64decode(unsigned))
+                session_token = payload.get(CSRF_SESSION_KEY, "")
+        except (BadSignature, ValueError, TypeError, json.JSONDecodeError):
+            session_token = ""
+    return bool(session_token) and secrets.compare_digest(str(session_token), str(form_token or ""))
+
+
+def _csrf_token_from_body(request: Request, body: bytes) -> str:
+    content_type = str(request.headers.get("content-type", "")).lower()
+    if "application/x-www-form-urlencoded" in content_type:
+        parsed = parse_qs(body.decode("utf-8", errors="ignore"), keep_blank_values=True)
+        values = parsed.get(CSRF_FORM_FIELD) or []
+        return str(values[0] if values else "")
+    if "multipart/form-data" in content_type:
+        match = re.search(
+            rb'name=["\']csrf_token["\'][^\r\n]*(?:\r?\n){2}([^\r\n]*)',
+            body,
+            flags=re.IGNORECASE,
+        )
+        return match.group(1).decode("utf-8", errors="ignore").strip() if match else ""
+    return str(request.headers.get("x-csrf-token") or request.headers.get("x-focus-csrf-token") or "")
 
 
 async def validate_csrf_token(request, submitted_token=None):
@@ -836,6 +1073,30 @@ async def validate_csrf_token(request, submitted_token=None):
 
 
 templates.env.globals["csrf_token_for"] = ensure_csrf_token
+
+
+def set_flash(request: Request, message: str, level: str = "success"):
+    if "session" in getattr(request, "scope", {}):
+        request.session[f"flash_{level}"] = message
+
+
+def get_flash(request: Request) -> dict:
+    if "session" not in getattr(request, "scope", {}):
+        return {"flash_success": None, "flash_error": None}
+    return {
+        "flash_success": request.session.pop("flash_success", None),
+        "flash_error": request.session.pop("flash_error", None),
+    }
+
+
+def _unread_contact_count():
+    db = db_mod.SessionLocal()
+    try:
+        return db.query(db_mod.ContactMessage).filter(db_mod.ContactMessage.is_read.is_(False)).count()
+    except Exception:
+        return 0
+    finally:
+        db.close()
 
 
 def _app_base_url(request=None):
@@ -1634,6 +1895,21 @@ def _require_authenticated_user(request, db):
     return None
 
 
+def _safe_model_id(instance):
+    if instance is None:
+        return None
+    try:
+        identity = sa_inspect(instance).identity
+        if identity:
+            return identity[0]
+    except Exception:
+        pass
+    try:
+        return getattr(instance, "id", None)
+    except Exception:
+        return None
+
+
 def _require_admin_user(request, db):
     user = _require_authenticated_user(request, db)
     if not user:
@@ -1642,7 +1918,7 @@ def _require_admin_user(request, db):
         logger.warning(
             "Admin access denied ip=%s user_id=%s email=%s path=%s",
             _client_ip(request),
-            getattr(user, "id", None),
+            _safe_model_id(user),
             getattr(user, "email", None),
             request.url.path,
         )
@@ -1661,10 +1937,18 @@ def admin_required(func):
         if denied_response:
             return denied_response
         request.state.admin_user = _public_user_view(admin_user)
-        logger.info("Admin page accessed admin_id=%s path=%s", admin_user.id, request.url.path)
+        logger.info("Admin page accessed admin_id=%s path=%s", _safe_model_id(admin_user), request.url.path)
         return await func(*args, **kwargs)
 
     return wrapper
+
+
+async def require_admin(request: Request, db: Session = Depends(get_db)):
+    current_user = get_request_user(request, db)
+    if not current_user or not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    request.state.admin_user = _public_user_view(current_user)
+    return current_user
 
 
 def admin_api_required(func):
@@ -1679,10 +1963,10 @@ def admin_api_required(func):
             logger.warning("Admin API access denied ip=%s user_id=%s email=%s path=%s", _client_ip(request), None, None, request.url.path)
             return json_admin_error("authentication_required", 401, endpoint=request)
         if not is_admin_user(user):
-            logger.warning("Admin API access denied ip=%s user_id=%s email=%s path=%s", _client_ip(request), getattr(user, "id", None), getattr(user, "email", None), request.url.path)
+            logger.warning("Admin API access denied ip=%s user_id=%s email=%s path=%s", _client_ip(request), _safe_model_id(user), getattr(user, "email", None), request.url.path)
             return json_admin_error("admin_access_denied", 403, endpoint=request)
         request.state.admin_user = _public_user_view(user)
-        logger.info("Admin API accessed admin_id=%s path=%s", user.id, request.url.path)
+        logger.info("Admin API accessed admin_id=%s path=%s", _safe_model_id(user), request.url.path)
         return await func(*args, **kwargs)
     return wrapper
 
@@ -3391,11 +3675,372 @@ def _report_order_admin_email():
     return legacy_configured or "info@focusastrology.com"
 
 
-def _build_report_order_payload(order_data, product):
+def _attach_astro_signal_context(payload, *, report_type=None):
+    payload = _serialize_temporal_values(payload or {})
+    normalized_report_type = astro_workspace.normalize_workspace_report_type(
+        report_type or payload.get("workspace_report_type") or payload.get("report_order_type") or payload.get("report_type")
+    )
+    if payload.get("astro_signal_context"):
+        if normalized_report_type == "parent_child":
+            interaction_signals = astro_signal_enrichment.build_parent_child_interaction_signals(
+                {
+                    "language": payload.get("language"),
+                    **(payload.get("astro_signal_context") or {}),
+                },
+                report_type="parent_child",
+            )
+            if interaction_signals.get("interaction_patterns") or interaction_signals.get("confidence_notes"):
+                payload["astro_signal_context"]["parent_child_interaction_signals"] = interaction_signals
+        return payload
+    natal_data = payload.get("natal_data") or {}
+    if not isinstance(natal_data, dict) or not natal_data.get("planets"):
+        return payload
+    try:
+        payload["astro_signal_context"] = astro_signal_enrichment.build_astro_signal_context(
+            natal_data,
+            navamsa_data=payload.get("navamsa_data") or {},
+            dasha_data=payload.get("dasha_data") or [],
+            transit_context=payload.get("timing_data") or payload.get("interpretation_context") or {},
+            report_type=normalized_report_type,
+        )
+    except Exception:
+        logger.exception("Astro signal enrichment attach failed report_type=%s", normalized_report_type)
+    return payload
+
+
+def _report_order_chart_payload_from_existing_data(order_data):
+    payload = {}
+    for key in (
+        "natal_data",
+        "navamsa_data",
+        "dasha_data",
+        "timing_data",
+        "transit_data",
+        "eclipse_data",
+        "fullmoon_data",
+        "interpretation_context",
+        "calculation_config",
+        "calculation_metadata",
+        "astro_signal_context",
+    ):
+        value = order_data.get(key)
+        if value not in (None, "", [], {}):
+            payload[key] = value
+    has_natal = isinstance(payload.get("natal_data"), dict) and bool((payload.get("natal_data") or {}).get("planets"))
+    if has_natal:
+        return payload
+    return {}
+
+
+def _report_order_signal_fallback_note():
+    return "Chart context unavailable; interpretation generated without signal enrichment."
+
+
+def _combine_signal_confidence_notes(*contexts):
+    notes = []
+    for context in contexts:
+        if isinstance(context, dict):
+            notes.extend(context.get("confidence_notes") or [])
+    return list(dict.fromkeys(note for note in notes if note))
+
+
+def _build_report_order_birth_context(order_data, *, birth_date, birth_place, raw_birth_place_input=None, normalized_birth_place=None, latitude=None, longitude=None, timezone=None, geocode_provider=None, geocode_confidence=None, birth_country=None):
+    if latitude not in (None, "") and longitude not in (None, "") and timezone:
+        return _build_birth_context_from_saved_fields(
+            birth_date,
+            raw_birth_place_input=raw_birth_place_input or birth_place,
+            normalized_birth_place=normalized_birth_place or birth_place,
+            latitude=float(latitude),
+            longitude=float(longitude),
+            timezone=str(timezone).strip(),
+            geocode_provider=geocode_provider,
+            geocode_confidence=geocode_confidence,
+            fallback_place_text=birth_place,
+        )
+    return _build_birth_context(
+        birth_date,
+        birth_place,
+        birth_country or "",
+    )
+
+
+def _report_order_profile_input(order_data, *, role):
+    if role == "parent":
+        source = dict(order_data.get("parent_profile") or {})
+        return {
+            "full_name": source.get("full_name") or "Parent",
+            "birth_date": source.get("birth_date") or "",
+            "birth_time": source.get("birth_time") or "",
+            "birth_place": source.get("birth_city") or source.get("birth_place") or "",
+            "birth_country": source.get("birth_country") or "",
+            "raw_birth_place_input": source.get("raw_birth_place_input") or source.get("birth_city") or source.get("birth_place"),
+            "normalized_birth_place": source.get("normalized_birth_place"),
+            "latitude": source.get("latitude") if source.get("latitude") not in (None, "") else source.get("lat"),
+            "longitude": source.get("longitude") if source.get("longitude") not in (None, "") else source.get("lon"),
+            "timezone": source.get("timezone"),
+            "geocode_provider": source.get("geocode_provider"),
+            "geocode_confidence": source.get("geocode_confidence"),
+        }
+    child_meta = dict(order_data.get("child_profile_meta") or {})
     return {
+        "full_name": child_meta.get("full_name") or order_data.get("full_name") or "Child",
+        "birth_date": child_meta.get("birth_date") or order_data.get("birth_date") or "",
+        "birth_time": child_meta.get("birth_time") or order_data.get("birth_time") or "",
+        "birth_place": child_meta.get("birth_city") or child_meta.get("birth_place") or order_data.get("birth_place") or order_data.get("birth_city") or "",
+        "birth_country": child_meta.get("birth_country") or order_data.get("birth_country") or "",
+        "raw_birth_place_input": child_meta.get("raw_birth_place_input") or order_data.get("raw_birth_place_input") or order_data.get("birth_place") or order_data.get("birth_city"),
+        "normalized_birth_place": child_meta.get("normalized_birth_place") or order_data.get("normalized_birth_place"),
+        "latitude": child_meta.get("latitude") if child_meta.get("latitude") not in (None, "") else order_data.get("latitude"),
+        "longitude": child_meta.get("longitude") if child_meta.get("longitude") not in (None, "") else order_data.get("longitude"),
+        "timezone": child_meta.get("timezone") or order_data.get("timezone"),
+        "geocode_provider": child_meta.get("geocode_provider") or order_data.get("geocode_provider"),
+        "geocode_confidence": child_meta.get("geocode_confidence") if child_meta.get("geocode_confidence") not in (None, "") else order_data.get("geocode_confidence"),
+    }
+
+
+def _build_single_profile_report_order_chart_payload(order_data):
+    existing_payload = _report_order_chart_payload_from_existing_data(order_data)
+    if existing_payload:
+        return existing_payload
+
+    birth_date = str(order_data.get("birth_date") or "").strip()
+    birth_place = str(order_data.get("birth_place") or order_data.get("birth_city") or "").strip()
+    if not birth_date or not birth_place:
+        return {
+            "interpretation_context": {
+                "confidence_notes": [_report_order_signal_fallback_note()],
+            }
+        }
+
+    try:
+        birth_context = _build_report_order_birth_context(
+            order_data,
+            birth_date=birth_date,
+            birth_place=birth_place,
+            raw_birth_place_input=order_data.get("raw_birth_place_input"),
+            normalized_birth_place=order_data.get("normalized_birth_place"),
+            latitude=order_data.get("latitude"),
+            longitude=order_data.get("longitude"),
+            timezone=order_data.get("timezone"),
+            geocode_provider=order_data.get("geocode_provider"),
+            geocode_confidence=order_data.get("geocode_confidence"),
+            birth_country=order_data.get("birth_country"),
+        )
+        bundle = _calculate_chart_bundle_from_birth_context(birth_context)
+    except Exception as exc:
+        logger.exception("Paid report chart bundle preparation failed order_id=%s", order_data.get("order_id"))
+        confidence_notes = list(((order_data.get("interpretation_context") or {}).get("confidence_notes") or []))
+        confidence_notes.append(_report_order_signal_fallback_note())
+        return {
+            "interpretation_context": {
+                **(order_data.get("interpretation_context") or {}),
+                "confidence_notes": confidence_notes,
+            }
+        }
+
+    return {
+        "raw_birth_place_input": birth_context.get("raw_birth_place_input"),
+        "normalized_birth_place": birth_context.get("normalized_birth_place"),
+        "latitude": birth_context.get("latitude"),
+        "longitude": birth_context.get("longitude"),
+        "timezone": birth_context.get("timezone"),
+        "geocode_provider": birth_context.get("geocode_provider"),
+        "geocode_confidence": birth_context.get("geocode_confidence"),
+        "calculation_config": bundle.get("calculation_config") or {},
+        "natal_data": bundle.get("natal_data") or {},
+        "dasha_data": bundle.get("dasha_data") or [],
+        "navamsa_data": bundle.get("navamsa_data") or {},
+        "timing_data": bundle.get("interpretation_context") or {},
+        "transit_data": bundle.get("transit_data") or [],
+        "eclipse_data": bundle.get("eclipse_data") or [],
+        "fullmoon_data": bundle.get("fullmoon_data") or [],
+        "interpretation_context": bundle.get("interpretation_context") or {},
+        "calculation_metadata": bundle.get("calculation_metadata") or {},
+    }
+
+
+def _build_parent_child_report_order_chart_payload(order_data):
+    child_existing = {
+        "natal_data": order_data.get("natal_data") or {},
+        "navamsa_data": order_data.get("navamsa_data") or {},
+        "dasha_data": order_data.get("dasha_data") or [],
+        "transit_data": order_data.get("transit_data") or [],
+        "eclipse_data": order_data.get("eclipse_data") or [],
+        "fullmoon_data": order_data.get("fullmoon_data") or [],
+        "interpretation_context": order_data.get("interpretation_context") or {},
+        "calculation_config": order_data.get("calculation_config") or {},
+        "calculation_metadata": order_data.get("calculation_metadata") or {},
+    }
+    child_has_chart = isinstance(child_existing["natal_data"], dict) and bool(child_existing["natal_data"].get("planets"))
+    parent_signal_existing = order_data.get("parent_astro_signal_context") or {}
+    child_signal_existing = order_data.get("child_astro_signal_context") or {}
+    parent_natal_existing = order_data.get("parent_natal_data") or {}
+    parent_has_chart = isinstance(parent_natal_existing, dict) and bool(parent_natal_existing.get("planets"))
+    parent_dasha_existing = order_data.get("parent_dasha_data") or []
+
+    if child_has_chart and parent_has_chart:
+        child_signal_context = child_signal_existing or astro_signal_enrichment.build_astro_signal_context(
+            child_existing["natal_data"],
+            navamsa_data=child_existing["navamsa_data"],
+            dasha_data=child_existing["dasha_data"],
+            transit_context=child_existing["interpretation_context"] or child_existing["transit_data"] or {},
+            report_type="parent_child",
+        )
+        parent_signal_context = parent_signal_existing or astro_signal_enrichment.build_astro_signal_context(
+            parent_natal_existing,
+            navamsa_data=order_data.get("parent_navamsa_data") or {},
+            dasha_data=parent_dasha_existing,
+            transit_context=order_data.get("parent_interpretation_context") or child_existing["interpretation_context"] or {},
+            report_type="parent_child",
+        )
+        return {
+            **child_existing,
+            "timing_data": child_existing["interpretation_context"] or {},
+            "parent_natal_data": parent_natal_existing,
+            "parent_dasha_data": parent_dasha_existing,
+            "parent_astro_signal_context": parent_signal_context,
+            "child_astro_signal_context": child_signal_context,
+            "astro_signal_context": {
+                "parent_profile_signals": parent_signal_context,
+                "child_profile_signals": child_signal_context,
+                "confidence_notes": _combine_signal_confidence_notes(parent_signal_context, child_signal_context),
+            },
+        }
+        payload["astro_signal_context"]["parent_child_interaction_signals"] = astro_signal_enrichment.build_parent_child_interaction_signals(
+            {
+                "language": order_data.get("user_lang") or "tr",
+                **payload["astro_signal_context"],
+            },
+            report_type="parent_child",
+        )
+        return payload
+
+    parent_profile = _report_order_profile_input(order_data, role="parent")
+    child_profile = _report_order_profile_input(order_data, role="child")
+    if not all([parent_profile["birth_date"], parent_profile["birth_time"], parent_profile["birth_place"], child_profile["birth_date"], child_profile["birth_time"], child_profile["birth_place"]]):
+        return {
+            "interpretation_context": {
+                "confidence_notes": [_report_order_signal_fallback_note()],
+            }
+        }
+
+    try:
+        parent_birth_context = _build_report_order_birth_context(
+            order_data,
+            birth_date=parent_profile["birth_date"],
+            birth_place=parent_profile["birth_place"],
+            raw_birth_place_input=parent_profile["raw_birth_place_input"],
+            normalized_birth_place=parent_profile["normalized_birth_place"],
+            latitude=parent_profile["latitude"],
+            longitude=parent_profile["longitude"],
+            timezone=parent_profile["timezone"],
+            geocode_provider=parent_profile["geocode_provider"],
+            geocode_confidence=parent_profile["geocode_confidence"],
+            birth_country=parent_profile["birth_country"],
+        )
+        child_birth_context = _build_report_order_birth_context(
+            order_data,
+            birth_date=child_profile["birth_date"],
+            birth_place=child_profile["birth_place"],
+            raw_birth_place_input=child_profile["raw_birth_place_input"],
+            normalized_birth_place=child_profile["normalized_birth_place"],
+            latitude=child_profile["latitude"],
+            longitude=child_profile["longitude"],
+            timezone=child_profile["timezone"],
+            geocode_provider=child_profile["geocode_provider"],
+            geocode_confidence=child_profile["geocode_confidence"],
+            birth_country=child_profile["birth_country"],
+        )
+        parent_bundle = _calculate_chart_bundle_from_birth_context(parent_birth_context)
+        child_bundle = _calculate_chart_bundle_from_birth_context(child_birth_context)
+        interpretation_context = order_data.get("interpretation_context") or build_parent_child_interpretation(parent_bundle, child_bundle)
+        parent_signal_context = astro_signal_enrichment.build_astro_signal_context(
+            parent_bundle.get("natal_data") or {},
+            navamsa_data=parent_bundle.get("navamsa_data") or {},
+            dasha_data=parent_bundle.get("dasha_data") or [],
+            transit_context=interpretation_context,
+            report_type="parent_child",
+        )
+        child_signal_context = astro_signal_enrichment.build_astro_signal_context(
+            child_bundle.get("natal_data") or {},
+            navamsa_data=child_bundle.get("navamsa_data") or {},
+            dasha_data=child_bundle.get("dasha_data") or [],
+            transit_context=interpretation_context,
+            report_type="parent_child",
+        )
+    except Exception:
+        logger.exception("Paid parent-child chart bundle preparation failed order_id=%s", order_data.get("order_id"))
+        return {
+            "interpretation_context": {
+                **(order_data.get("interpretation_context") or {}),
+                "confidence_notes": [_report_order_signal_fallback_note()],
+            }
+        }
+
+    return {
+        "raw_birth_place_input": child_birth_context.get("raw_birth_place_input"),
+        "normalized_birth_place": child_birth_context.get("normalized_birth_place"),
+        "latitude": child_birth_context.get("latitude"),
+        "longitude": child_birth_context.get("longitude"),
+        "timezone": child_birth_context.get("timezone"),
+        "geocode_provider": child_birth_context.get("geocode_provider"),
+        "geocode_confidence": child_birth_context.get("geocode_confidence"),
+        "calculation_config": child_bundle.get("calculation_config") or {},
+        "natal_data": child_bundle.get("natal_data") or {},
+        "dasha_data": child_bundle.get("dasha_data") or [],
+        "navamsa_data": child_bundle.get("navamsa_data") or {},
+        "timing_data": interpretation_context or {},
+        "transit_data": child_bundle.get("transit_data") or [],
+        "eclipse_data": child_bundle.get("eclipse_data") or [],
+        "fullmoon_data": child_bundle.get("fullmoon_data") or [],
+        "interpretation_context": interpretation_context or {},
+        "calculation_metadata": child_bundle.get("calculation_metadata") or {},
+        "parent_profile": {
+            "full_name": parent_profile["full_name"],
+            "birth_date": parent_profile["birth_date"],
+            "birth_time": parent_profile["birth_time"],
+            "birth_city": parent_birth_context.get("normalized_birth_place") or parent_profile["birth_place"],
+            "birth_country": parent_profile["birth_country"],
+        },
+        "child_profile_meta": {
+            "full_name": child_profile["full_name"],
+            "birth_date": child_profile["birth_date"],
+            "birth_time": child_profile["birth_time"],
+            "birth_city": child_birth_context.get("normalized_birth_place") or child_profile["birth_place"],
+            "birth_country": child_profile["birth_country"],
+        },
+        "parent_natal_data": parent_bundle.get("natal_data") or {},
+        "parent_dasha_data": parent_bundle.get("dasha_data") or [],
+        "parent_astro_signal_context": parent_signal_context,
+        "child_astro_signal_context": child_signal_context,
+        "astro_signal_context": {
+            "parent_profile_signals": parent_signal_context,
+            "child_profile_signals": child_signal_context,
+            "confidence_notes": _combine_signal_confidence_notes(parent_signal_context, child_signal_context),
+        },
+    }
+    payload["astro_signal_context"]["parent_child_interaction_signals"] = astro_signal_enrichment.build_parent_child_interaction_signals(
+        {
+            "language": order_data.get("user_lang") or "tr",
+            **payload["astro_signal_context"],
+        },
+        report_type="parent_child",
+    )
+    return payload
+
+
+def _build_report_order_chart_payload(order_data):
+    if astro_workspace.normalize_workspace_report_type(order_data.get("report_type")) == "parent_child":
+        return _build_parent_child_report_order_chart_payload(order_data)
+    return _build_single_profile_report_order_chart_payload(order_data)
+
+
+def _build_report_order_payload(order_data, product):
+    payload = {
         "workflow": "report_order_admin_review",
-        "language": "tr",
+        "language": "en" if str(order_data.get("user_lang") or "tr").lower() == "en" else "tr",
         "report_order_type": order_data["report_type"],
+        "report_type": order_data["report_type"],
         "bundle_type": order_data.get("bundle_type") or "",
         "included_products": order_data.get("included_products") or [],
         "report_product_title": product["title"],
@@ -3417,6 +4062,8 @@ def _build_report_order_payload(order_data, product):
         },
         "requested_at": datetime.now(pytz.UTC).isoformat(),
     }
+    payload.update(_build_report_order_chart_payload(order_data))
+    return _attach_astro_signal_context(payload, report_type=order_data["report_type"])
 
 
 def _generate_report_order_draft(order_payload):
@@ -3473,7 +4120,7 @@ def _order_data_from_service_order(order):
     payload = _service_order_payload(order)
     email_config = email_utils.get_email_config()
     app_base_url = str(email_config.get("app_base_url") or "").rstrip("/")
-    return {
+    order_data = {
         "order_id": order.id,
         "order_token": order.order_token or order.public_token or "",
         "full_name": order.customer_name or payload.get("full_name") or "",
@@ -3491,7 +4138,39 @@ def _order_data_from_service_order(order):
         "admin_detail_url": f"{app_base_url}/admin/reports/{order.id}" if app_base_url else f"/admin/reports/{order.id}",
         "pdf_status": order.pdf_status or "",
         "final_pdf_path": order.final_pdf_path or "",
+        "user_lang": payload.get("user_lang") or getattr(order, "user_lang", None) or "tr",
+        "raw_birth_place_input": payload.get("raw_birth_place_input") or payload.get("birth_place") or payload.get("birth_city"),
+        "normalized_birth_place": payload.get("normalized_birth_place"),
+        "latitude": payload.get("latitude") if payload.get("latitude") not in (None, "") else payload.get("lat"),
+        "longitude": payload.get("longitude") if payload.get("longitude") not in (None, "") else payload.get("lon"),
+        "timezone": payload.get("timezone"),
+        "geocode_provider": payload.get("geocode_provider"),
+        "geocode_confidence": payload.get("geocode_confidence"),
     }
+    for key in (
+        "natal_data",
+        "navamsa_data",
+        "dasha_data",
+        "timing_data",
+        "transit_data",
+        "eclipse_data",
+        "fullmoon_data",
+        "interpretation_context",
+        "calculation_config",
+        "calculation_metadata",
+        "astro_signal_context",
+        "parent_profile",
+        "child_profile_meta",
+        "parent_natal_data",
+        "parent_dasha_data",
+        "parent_navamsa_data",
+        "parent_interpretation_context",
+        "parent_astro_signal_context",
+        "child_astro_signal_context",
+    ):
+        if key in payload:
+            order_data[key] = payload.get(key)
+    return order_data
 
 
 def generate_ai_draft_for_order(db, order):
@@ -3861,6 +4540,18 @@ def log_admin_action(db, order, action, actor=None, metadata=None):
     return log
 
 
+def log_action(db, user_email, action, target_type, target_id, detail=""):
+    entry = db_mod.ActivityLog(
+        user_email=user_email,
+        action=action,
+        target_type=target_type,
+        target_id=str(target_id) if target_id is not None else None,
+        detail=detail or "",
+    )
+    db.add(entry)
+    return entry
+
+
 def _validate_order_paid(order):
     if getattr(order, "status", "") in {"awaiting_payment", "booking_pending_payment", "booking_expired", "initiated"} or not getattr(order, "paid_at", None):
         raise ValueError("Order must be paid before this admin action.")
@@ -4129,15 +4820,47 @@ def enqueue_final_report_delivery_tasks(order):
 
 def maybe_send_welcome_email(db, user):
     logger.info("Welcome email trigger evaluated user_id=%s", user.id)
-    return safe_send_template_email(
+    html = render_email(
+        "welcome.html",
+        name=getattr(user, "name", None) or getattr(user, "email", ""),
+        calculator_url="https://focusastrology.com/calculator",
+        reports_url="https://focusastrology.com/reports",
+        astrologer_name=get_astrologer_name(db),
+    )
+    ok = _send_logged_email(
         db,
-        user=user,
         email_type="welcome",
-        template_name="welcome_email",
-        subject="Welcome to Jyotish",
+        to_email=user.email,
+        subject="Focus Astrology'e hoş geldiniz",
+        html_body=html,
         event_type="signup",
         event_key=f"welcome:{user.id}",
+        user_id=user.id,
     )
+    return {"status": "sent" if ok else "failed", "ok": ok}
+
+
+def maybe_send_report_order_confirmation_email(db, order):
+    product = _service_order_product(order)
+    report_type_label = product.get("title") or getattr(order, "product_type", "Rapor")
+    html = render_email(
+        "order_confirmation.html",
+        name=order.customer_name or order.customer_email,
+        report_type=report_type_label,
+        delivery_days=get_setting(db, "site_report_delivery_days", "7"),
+        to_email=order.customer_email,
+        astrologer_name=get_astrologer_name(db),
+    )
+    ok = _send_logged_email(
+        db,
+        email_type="report_order_confirmation",
+        to_email=order.customer_email,
+        subject="Rapor talebiniz alÃ„Â±ndÃ„Â± Ã¢â‚¬â€ Focus Astrology",
+        html_body=html,
+        event_type="report_order",
+        event_key=f"report_order_confirmation:{order.id}",
+    )
+    return {"status": "sent" if ok else "failed", "ok": ok}
 
 
 def maybe_send_plan_activation_email(db, user, previous_plan, current_plan, event_key=None):
@@ -4261,6 +4984,11 @@ def process_billing_notification_event(db, event_payload):
 
 
 @app.middleware("http")
+async def maintenance_mode_middleware(request: Request, call_next):
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def load_user_context(request: Request, call_next):
     db = db_mod.SessionLocal()
     try:
@@ -4270,6 +4998,26 @@ async def load_user_context(request: Request, call_next):
         request.state.plan_code = get_user_plan(user)
         request.state.plan_features = get_plan_features(user)
         request.state.lang = get_preferred_language(request, user)
+        path = request.url.path
+        exempt = path.startswith("/admin") or path.startswith("/static") or path in {"/login", "/logout", "/signup"}
+        maintenance_user = user or _request_user_from_signed_cookie(request, db)
+        if not exempt and get_setting(db, "site_maintenance_mode", "false") == "true" and not (maintenance_user and getattr(maintenance_user, "is_admin", False)):
+            return Response(
+                content="""<!DOCTYPE html><html><head><title>Bakım</title>
+                <style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#0d1117;color:#f0f0f0;}
+                .box{text-align:center;max-width:420px;padding:48px 32px;}
+                h1{font-size:1.6rem;margin-bottom:16px;}p{color:#888;line-height:1.7;}</style></head>
+                <body><div class="box">
+                <h1>Bakım Çalışması</h1>
+                <p>Sitemiz kısa süre için bakım modunda. En kısa sürede geri döneceğiz.</p>
+                </div></body></html>""",
+                status_code=503,
+                media_type="text/html",
+            )
+        if request.method == "POST" and path.startswith("/admin"):
+            body = await request.body()
+            if not verify_csrf_token(request, _csrf_token_from_body(request, body)):
+                return Response("Invalid CSRF token", status_code=403, media_type="text/plain")
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
@@ -4609,6 +5357,56 @@ def _public_error(message, status_code=400):
     raise HTTPException(status_code=status_code, detail=message)
 
 
+def _launch_panel_copy(language="tr"):
+    if str(language or "tr").lower() == "en":
+        return {
+            "title": "Coming Soon",
+            "message": (
+                "Focus Astrology is currently in the final preparation phase for personal reports, "
+                "consultation services, and payment infrastructure. To give you a secure, professional, "
+                "and high-standard experience, we are keeping this area temporarily closed."
+            ),
+            "home_label": "Back to Home",
+            "info_label": "Get Information",
+            "empty_label": "No fusion predictions available for this profile.",
+        }
+    return {
+        "title": "Yak\u0131nda Yay\u0131nda",
+        "message": (
+            "Focus Astrology \u015fu anda ki\u015fisel raporlar, dan\u0131\u015fmanl\u0131k hizmetleri ve \u00f6deme altyap\u0131s\u0131 i\u00e7in "
+            "son haz\u0131rl\u0131k s\u00fcrecindedir. Size g\u00fcvenli, profesyonel ve y\u00fcksek standartlarda bir deneyim "
+            "sunabilmek i\u00e7in bu alan\u0131 ge\u00e7ici olarak kapal\u0131 tutuyoruz."
+        ),
+        "home_label": "Ana Sayfaya D\u00f6n",
+        "info_label": "Bilgi Al",
+        "empty_label": "Bu profil i\u00e7in hen\u00fcz bir birle\u015fik \u00f6ng\u00f6r\u00fc penceresi g\u00f6r\u00fcnm\u00fcyor.",
+    }
+
+def _coming_soon_template_response(request, *, status_code=200):
+    copy = _launch_panel_copy(getattr(request.state, "lang", "tr"))
+    return templates.TemplateResponse(
+        request=request,
+        name="coming_soon.html",
+        status_code=status_code,
+        context=_auth_template_context(
+            request,
+            coming_soon=copy,
+        ),
+    )
+
+
+def _coming_soon_json_response(language="tr"):
+    copy = _launch_panel_copy(language)
+    return JSONResponse(
+        {
+            "ok": False,
+            "launch_mode": True,
+            "message": copy.get("title") or ("Coming Soon" if str(language or "tr").lower() == "en" else "Yakinda Yayinda"),
+        },
+        status_code=200,
+    )
+
+
 def _ensure_runtime_dir(path):
     path.mkdir(parents=True, exist_ok=True)
     return path
@@ -4699,13 +5497,16 @@ def _focus_label(value, language="tr"):
     focus_map = {
         "career": {"tr": "Kariyer", "en": "Career"},
         "finances": {"tr": "Finans", "en": "Finances"},
-        "relationships": {"tr": "Iliskiler", "en": "Relationships"},
-        "personal_growth": {"tr": "Kisisel gelisim", "en": "Personal growth"},
-        "spirituality": {"tr": "Anlam ve inanc", "en": "Meaning and belief"},
-        "home": {"tr": "Ic dunya ve ev", "en": "Home and inner world"},
-        "health": {"tr": "Saglik", "en": "Health"},
-        "social_network": {"tr": "Sosyal ag", "en": "Social network"},
-        "general": {"tr": "Genel yasam akisi", "en": "General life flow"},
+        "relationships": {"tr": "İlişkiler", "en": "Relationships"},
+        "personal_growth": {"tr": "Kişisel gelişim", "en": "Personal growth"},
+        "spirituality": {"tr": "Anlam ve inanç", "en": "Meaning and belief"},
+        "home": {"tr": "İç dünya ve ev", "en": "Home and inner world"},
+        "health": {"tr": "Sağlık", "en": "Health"},
+        "social_network": {"tr": "Sosyal ağ", "en": "Social network"},
+        "family": {"tr": "Aile", "en": "Family"},
+        "parent_child_guidance": {"tr": "Ebeveyn-çocuk rehberliği", "en": "Parent-child guidance"},
+        "child_growth": {"tr": "Çocuğun gelişimi", "en": "Child growth"},
+        "general": {"tr": "Genel yaşam akışı", "en": "General life flow"},
     }
     key = str(value or "general").strip().lower().replace(" ", "_")
     if key in focus_map:
@@ -4721,6 +5522,216 @@ def _result_language(request, user=None):
 
 def _labelize(value):
     return str(value or "").replace("_", " ").strip().title()
+
+
+_PARENT_CHILD_TEXT_TR = {
+    "Expressive, fast-moving, and naturally motivated by visible momentum.": "İfade gücü yüksek, hızlı tepki veren ve görünür hareketle doğal olarak motive olan bir yapı.",
+    "Steady, tactile, and more secure when life feels structured and predictable.": "Düzen ve öngörülebilirlik olduğunda daha güvende hisseden, sağlam ve somut bir yapı.",
+    "Curious, verbal, and stimulated by questions, patterns, and exchange.": "Meraklı, sözel ifade ile güçlenen ve soru-cevap akışıyla canlı kalan bir yapı.",
+    "Sensitive, imaginative, and emotionally responsive to the tone of the environment.": "Hassas, hayal gücü kuvvetli ve bulunduğu ortamın duygusal tonuna açık bir yapı.",
+    "Layered, responsive, and shaped strongly by emotional tone and rhythm.": "Katmanlı, duyarlı ve duygusal ton ile ritimden güçlü şekilde etkilenen bir yapı.",
+    "Shows clear inner patterning when given consistency.": "Tutarlılık olduğunda iç düzenini daha net gösterir.",
+    "Responds well to supportive encouragement rather than force.": "Baskıdan çok destekleyici teşvikle daha iyi yanıt verir.",
+    "Needs more recovery time after emotional intensity or overstimulation.": "Duygusal yoğunluk veya aşırı uyarılma sonrası daha fazla toparlanma süresine ihtiyaç duyar.",
+    "Can internalize pressure quickly when expectations feel heavy or rigid.": "Beklentiler ağır ya da katı hissedildiğinde baskıyı hızla içine alabilir.",
+    "May become guarded when emotional tone changes too quickly around them.": "Etrafındaki duygusal ton çok hızlı değiştiğinde içine kapanabilir.",
+    "Needs calm emotional mirroring, predictability, and room to process feelings before being pushed into action.": "Eyleme itilmeden önce sakin duygusal eşlik, öngörülebilirlik ve duygularını işleyecek alana ihtiyaç duyar.",
+    "Needs responsive conversation, movement, and encouragement that keeps emotional expression active.": "Duygusal ifadesini canlı tutan karşılıklı iletişim, hareket alanı ve cesaretlendirmeye ihtiyaç duyar.",
+    "Grows best when guidance feels spacious and confidence-building.": "Rehberlik alan açtığında ve güven duygusunu güçlendirdiğinde daha iyi gelişir.",
+    "Grows best when support is steady, simple, and emotionally consistent.": "Destek düzenli, sade ve duygusal olarak tutarlı olduğunda daha iyi gelişir.",
+    "Learns quickly through conversation, questions, and repeating ideas out loud.": "Konuşarak, soru sorarak ve fikirleri sesli tekrar ederek daha hızlı öğrenir.",
+    "Learns best through repetition, examples, and steady hands-on reinforcement.": "Tekrar, örnekler ve düzenli uygulamalı destekle daha iyi öğrenir.",
+    "Attention rises when the task feels active and mentally alive.": "Görev hareketli ve zihinsel olarak canlı hissettirdiğinde dikkati artar.",
+    "Attention improves when pace is slower and the environment is clearly organized.": "Tempo yavaşlayıp ortam net biçimde düzenlendiğinde dikkati toparlanır.",
+    "Confidence grows when the child is invited to speak before being corrected.": "Düzeltilmeden önce konuşmasına alan açıldığında özgüveni artar.",
+    "Confidence grows when the child is given time to prepare before public expression.": "Kendini görünür biçimde ifade etmeden önce hazırlanma zamanı verildiğinde özgüveni artar.",
+    "May become self-critical when school pressure feels constant.": "Okul baskısı sürekli hissedildiğinde kendine fazla yüklenebilir.",
+    "Can push too hard, then lose patience when the pace feels repetitive.": "Kendini fazla zorlayıp tempo tekrar hissi verdiğinde sabırsızlaşabilir.",
+    "May need adults to translate pressure into calm structure rather than urgency.": "Yetişkinlerin baskıyı aceleye değil, sakin yapıya dönüştürmesine ihtiyaç duyabilir.",
+    "The child thrives when encouragement is consistent, emotionally safe, and tied to realistic pacing.": "Cesaretlendirme düzenli, duygusal olarak güvenli ve gerçekçi bir tempoya bağlı olduğunda çocuk daha iyi gelişir.",
+    "The relationship strengthens when correction becomes guidance and timing is treated with patience.": "Düzeltme rehberliğe dönüştüğünde ve zamanlama sabırla ele alındığında ilişki güçlenir.",
+    "Confidence grows through calm repetition and trust-building support.": "Sakin tekrar ve güven inşa eden destekle özgüven büyür.",
+    "Emotional flow is easier here because both charts process feelings with a similar tempo.": "Her iki harita da duyguları benzer bir tempoda işlediği için duygusal akış burada daha kolaydır.",
+    "Emotional tone may differ: one chart processes quickly while the other needs more time and softness.": "Duygusal ton farkı olabilir: bir harita hızlı işlerken diğeri daha fazla zaman ve yumuşaklık ister.",
+    "Communication can feel naturally smooth when ideas are spoken through in real time.": "Fikirler anlık olarak konuşulduğunda iletişim daha doğal ve akıcı hissedilebilir.",
+    "Misunderstandings are more likely when the parent explains quickly but the child needs slower repetition or reassurance.": "Ebeveyn hızlı anlattığında ama çocuk daha yavaş tekrar ya da güvenceye ihtiyaç duyduğunda yanlış anlaşılmalar artabilir.",
+    "Conflict can rise when urgency replaces regulation.": "Düzenleme yerine acele geçtiğinde çatışma artabilir.",
+    "The child may carry correction as pressure more strongly than adults expect.": "Çocuk, düzeltmeyi yetişkinlerin tahmin ettiğinden daha güçlü bir baskı olarak taşıyabilir.",
+    "Friction is more likely from pacing differences than from lack of care.": "Sürtüşme, ilgisizlikten çok tempo farklarından doğabilir.",
+    "The parent chart naturally brings encouragement, perspective, and long-range support.": "Ebeveyn haritası doğal olarak cesaretlendirme, perspektif ve uzun vadeli destek getirir.",
+    "The relationship flows best when emotional safety comes before instruction.": "İlişki, yönlendirmeden önce duygusal güven geldiğinde en iyi akar.",
+    "Use short, calm, repeatable language and check for emotional readiness before teaching.": "Kısa, sakin ve tekrarlanabilir bir dil kullanın; öğretmeden önce duygusal hazır oluşu kontrol edin.",
+    "Invite questions and dialogue so the child can process by interacting, not only by listening.": "Çocuğun yalnızca dinleyerek değil etkileşime girerek işlemesi için soru ve diyalog alanı açın.",
+    "Avoid turning discipline into chronic pressure or constant evaluation.": "Disiplini kronik baskıya ya da sürekli değerlendirmeye dönüştürmeyin.",
+    "Avoid demanding emotional expression on a timetable when the child is still internalizing.": "Çocuk hâlâ içselleştirirken duygusal ifadeyi belli bir takvime zorlamayın.",
+    "Avoid over-correcting in the moment; timing matters as much as content.": "Anın içinde aşırı düzeltmeye gitmeyin; zamanlama en az içerik kadar önemlidir.",
+    "The parent can help most by combining consistency, emotional safety, and a clear rhythm.": "Ebeveyn en çok; tutarlılığı, duygusal güveni ve net bir ritmi birleştirerek destek olabilir.",
+    "Child core emotional pattern": "Çocuğun temel duygusal örüntüsü",
+    "Parent-child relationship dynamic": "Ebeveyn-çocuk ilişki dinamiği",
+    "Parenting guidance that lands best": "En iyi karşılık bulan ebeveynlik yaklaşımı",
+    "The relationship strengthens when support stays calm, specific, and repeatable.": "Destek sakin, net ve tekrarlanabilir kaldığında ilişki güçlenir.",
+    "Lead with calm, specific communication": "Sakin ve net iletişimle başlayın",
+    "Current phase": "Mevcut dönem",
+    "Support learning through the child's natural pace": "Öğrenmeyi çocuğun doğal temposu üzerinden destekleyin",
+    "School and routine cycles": "Okul ve rutin döngüleri",
+    "Reduce pressure before correcting behavior": "Davranışı düzeltmeden önce baskıyı azaltın",
+    "Moments of stress": "Stres anları",
+    "Growth-supportive rhythm": "Gelişimi destekleyen ritim",
+    "Current season": "Mevcut dönem",
+    "Pressure-sensitive periods": "Baskıya hassas dönemler",
+    "When routines feel overloaded": "Rutinler fazla yüklü hissettirdiğinde",
+    "The child's current timing is being colored by ": "Çocuğun mevcut zamanlaması ",
+    " period emphasis": " dönemi vurgusu",
+}
+
+
+_SIGNAL_LABELS_TR = {
+    "money": "finans",
+    "wealth": "kaynak ve kazanç",
+    "career": "kariyer",
+    "growth": "büyüme",
+    "timing": "zamanlama",
+    "nodes": "Ay Düğümleri",
+    "relationship": "ilişki",
+    "parent-child": "ebeveyn-çocuk",
+    "child core emotional pattern": "çocuğun temel duygusal örüntüsü",
+    "parent-child relationship dynamic": "ebeveyn-çocuk ilişki dinamiği",
+    "parenting guidance that lands best": "en etkili ebeveynlik yaklaşımı",
+    "current phase": "mevcut dönem",
+    "school and routine cycles": "okul ve rutin döngüleri",
+    "moments of stress": "stres anları",
+    "growth-supportive rhythm": "gelişimi destekleyen ritim",
+    "pressure-sensitive periods": "baskıya hassas dönemler",
+    "mars period emphasis": "Mars dönemi vurgusu",
+    "lead with calm, specific communication": "sakin ve net iletişimle ilerleyin",
+    "support learning through the child's natural pace": "öğrenmeyi çocuğun doğal temposuyla destekleyin",
+    "reduce pressure before correcting behavior": "davranışı düzeltmeden önce baskıyı azaltın",
+    "invite questions and dialogue so the child can process by interacting, not only by listening": "çocuğun yalnızca dinleyerek değil, etkileşime girerek işlemesi için soru ve diyalog alanı açın",
+}
+
+
+def _localize_signal_label(value, language):
+    text = str(value or "")
+    if language != "tr" or not text:
+        return text
+    normalized = text.strip().lower()
+    return _SIGNAL_LABELS_TR.get(normalized, text)
+
+
+def _localize_signal_phrase(value, language):
+    text = str(value or "")
+    if language != "tr" or not text:
+        return text
+    exact = _PARENT_CHILD_TEXT_TR.get(text) or _RESULT_PHRASE_LOCALIZATION_TR.get(text)
+    if exact:
+        return exact
+    normalized = text.strip().lower()
+    if normalized in _SIGNAL_LABELS_TR:
+        return _SIGNAL_LABELS_TR[normalized]
+    if text.endswith(" period emphasis"):
+        planet = text[: -len(" period emphasis")].strip()
+        return f"{planet} dönemi vurgusu"
+    if text.startswith("The chart is currently led by "):
+        body = text.replace("The chart is currently led by ", "", 1).rstrip(".")
+        body = body.replace("money and nodes", "finans ve Ay Düğümleri")
+        body = body.replace("Timing and money", "zamanlama ve finans")
+        body = body.replace("timing and money", "zamanlama ve finans")
+        body = body.replace("money", "finans")
+        body = body.replace("nodes", "Ay Düğümleri")
+        return f"Haritada şu anda {body} teması öne çıkıyor."
+    if text.startswith("The chart is currently "):
+        body = text.replace("The chart is currently ", "", 1).rstrip(".")
+        body = body.replace("money and nodes", "finans ve Ay Düğümleri")
+        body = body.replace("Timing and money", "zamanlama ve finans")
+        body = body.replace("timing and money", "zamanlama ve finans")
+        body = body.replace("money", "finans")
+        body = body.replace("nodes", "Ay Düğümleri")
+        return f"Haritada şu anda {body} vurgusu öne çıkıyor."
+    localized = text
+    replacements = {
+        "Current phase": "Mevcut dönem",
+        "Current Phase": "Mevcut dönem",
+        "Timing": "Zamanlama",
+        "timing": "zamanlama",
+        "Timing and money need extra care.": "Zamanlama ve finans alanı daha dikkatli ele alınmalı.",
+        "Growth can happen through relationship repair.": "Büyüme, ilişkileri onarma üzerinden desteklenebilir.",
+        "Nodes can scatter attention.": "Ay Düğümleri dikkati dağıtabilir.",
+        "Nodes": "Ay Düğümleri",
+        "nodes": "Ay Düğümleri",
+        "money": "finans",
+        "relationships": "ilişkiler",
+        "wealth": "kaynak ve kazanç",
+        "growth-supportive rhythm": "gelişimi destekleyen ritim",
+        "pressure-sensitive periods": "baskıya hassas dönemler",
+        "school and routine cycles": "okul ve rutin döngüleri",
+        "Child core emotional pattern": "Çocuğun temel duygusal örüntüsü",
+        "Parent-child relationship dynamic": "Ebeveyn-çocuk ilişki dinamiği",
+    }
+    for source, target in replacements.items():
+        localized = localized.replace(source, target)
+    return localized
+
+
+def _localize_parent_child_phrase(value, language):
+    text = str(value or "")
+    if language != "tr" or not text:
+        return text
+    text = _localize_signal_phrase(text, language)
+    if text in _PARENT_CHILD_TEXT_TR:
+        return _PARENT_CHILD_TEXT_TR[text]
+    if text.startswith("The child's current timing is being colored by ") and text.endswith(", so emotional support and pacing should be read in that context."):
+        planet = text.replace("The child's current timing is being colored by ", "", 1).replace(", so emotional support and pacing should be read in that context.", "")
+        return f"Çocuğun mevcut zamanlaması {planet} tarafından renklendiği için duygusal destek ve tempo bu bağlamda değerlendirilmelidir."
+    return text
+
+
+def _localize_parent_child_interpretation_context(interpretation_context, language):
+    if language != "tr" or not isinstance(interpretation_context, dict):
+        return interpretation_context or {}
+    context = copy.deepcopy(interpretation_context)
+    for section_name in (
+        "child_profile",
+        "relationship_dynamics",
+        "school_guidance",
+        "parenting_guidance",
+        "growth_guidance",
+        "parent_profile",
+        "child_profile_meta",
+    ):
+        section = context.get(section_name)
+        if isinstance(section, dict):
+            for key, value in list(section.items()):
+                if isinstance(value, str):
+                    section[key] = _localize_parent_child_phrase(value, language)
+                elif isinstance(value, list):
+                    section[key] = [
+                        _localize_parent_child_phrase(item, language) if isinstance(item, str) else item
+                        for item in value
+                    ]
+    for list_name in ("watch_areas",):
+        items = context.get(list_name)
+        if isinstance(items, list):
+            context[list_name] = [
+                _localize_parent_child_phrase(item, language) if isinstance(item, str) else item
+                for item in items
+            ]
+    for list_name in ("timing_notes",):
+        items = context.get(list_name)
+        if isinstance(items, list):
+            localized_items = []
+            for item in items:
+                if not isinstance(item, dict):
+                    localized_items.append(item)
+                    continue
+                row = dict(item)
+                for key, value in list(row.items()):
+                    if isinstance(value, str):
+                        row[key] = _localize_parent_child_phrase(value, language)
+                localized_items.append(row)
+            context[list_name] = localized_items
+    if isinstance(context.get("summary"), str):
+        context["summary"] = _localize_parent_child_phrase(context["summary"], language)
+    return context
 
 
 _RESULT_DOMAIN_LABELS_TR = {
@@ -4787,6 +5798,8 @@ _NARRATIVE_LABELS_TR = {
     "release_and_closure": "Bırakma ve kapanış",
     "expansion_period": "Genişleme dönemi",
     "pressure_test_phase": "Baskı ve sınav dönemi",
+    "parent_child_guidance": "Ebeveyn-çocuk rehberliği",
+    "child_growth": "Çocuğun gelişimi",
 }
 
 _PRIORITY_LABELS_TR = {
@@ -4807,6 +5820,31 @@ def _localized_result_phrase(value, language):
     text = str(value or "")
     if language != "tr" or not text:
         return text
+    text = _localize_signal_phrase(text, language)
+    if " shaping " in text:
+        lead, domain = text.split(" shaping ", 1)
+        lead_map = {
+            "concentration": "Odak",
+            "flow": "Akış",
+            "timing": "Zamanlama",
+            "support": "Destek",
+            "activation": "Aktivasyon",
+            "nodes": "Ay Düğümleri",
+        }
+        domain_map = {
+            "career": "Kariyeri",
+            "growth": "Büyümeyi",
+            "relationships": "İlişkileri",
+            "relationships and money": "İlişkileri ve maddi akışı",
+            "personal growth": "Kişisel gelişimi",
+            "home": "Ev ve iç dengeyi",
+            "finances": "Finansı",
+            "money": "Finansı",
+            "wealth": "Kaynak ve kazancı",
+        }
+        localized_lead = lead_map.get(lead.strip().lower(), _localized_result_label(lead, language))
+        localized_domain = domain_map.get(domain.strip().lower(), _focus_label(domain, language))
+        return f"{localized_domain} şekillendiren {localized_lead}"
     narrative_text = localize_narrative_text(text, language)
     if narrative_text != text:
         return narrative_text
@@ -4833,12 +5871,19 @@ def _localized_result_phrase(value, language):
         parts = [part.strip() for part in domain_text.split(", ")]
         localized = [_RESULT_DOMAIN_LABELS_TR.get(part.replace(" ", "_"), part) for part in parts]
         return f"Bu odak, {' ve '.join(localized)} alanlarında karar kalitesini, duygusal yönelimi ve zamanlama hissini etkiler."
+    if text.startswith("This anchor shapes decision quality, emotional orientation, and zamanlama across "):
+        domain_text = text.split(" across ", 1)[1].rstrip(".")
+        parts = [part.strip() for part in domain_text.split(", ")]
+        localized = [_RESULT_DOMAIN_LABELS_TR.get(part.replace(" ", "_"), part) for part in parts]
+        return f"Bu odak, {' ve '.join(localized)} alanlarında karar kalitesini, duygusal yönelimi ve zamanlama hissini etkiler."
     if text.startswith("Supporting emphasis ") and " around " in text:
         prefix, subject = text.split(" around ", 1)
         return f"Destekleyici vurgu {prefix.replace('Supporting emphasis ', '')}: {subject}"
     if text.startswith("during the current ") and text.endswith(" phase"):
         planet = text.replace("during the current ", "", 1).replace(" phase", "")
         return f"mevcut {planet} döneminde"
+    if text.startswith("The chart is currently led by "):
+        return _localize_signal_phrase(text, language)
     if text == "next 4-6 weeks":
         return "önümüzdeki 4-6 hafta"
     if text == "next 4-8 weeks":
@@ -4931,7 +5976,7 @@ def _localize_result_layer_text(interpretation_context, language):
                         if isinstance(value, str):
                             item[key] = _localized_result_phrase(value, language)
 
-    return context
+    return _localize_parent_child_interpretation_context(context, language)
 
 
 def _localize_recommendation_layer_for_result(recommendation_layer, language):
@@ -4943,6 +5988,8 @@ def _localize_recommendation_layer_for_result(recommendation_layer, language):
                 item[field] = _localized_result_phrase(item.get(field), language)
         item["priority_label"] = _PRIORITY_LABELS_TR.get(str(item.get("priority") or "").lower(), _localized_result_label(item.get("priority", "medium"), language))
         item["type_label"] = _RECOMMENDATION_TYPE_LABELS_TR.get(str(item.get("type") or "").lower(), _localized_result_label(item.get("type", "focus"), language))
+        if item.get("linked_anchor_title"):
+            item["linked_anchor_title"] = _localized_result_phrase(item.get("linked_anchor_title"), language)
         for anchor in item.get("linked_anchors") or []:
             if isinstance(anchor, dict):
                 for field in ("title", "summary", "why_it_matters", "opportunity", "risk"):
@@ -5064,62 +6111,62 @@ def _decision_items(language, posture, primary_focus):
         presets = {
             "act": {
                 "do": [
-                    f"{focus} alaninda gorunur adimlar at.",
-                    "Ivme varsa bunu yapili ve net sekilde kullan.",
-                    "Icgoruyu uygulamaya gecir, fazla bekleme.",
+                    f"{focus} alanında görünür adımlar at.",
+                    "İvme varsa bunu yapılı ve net şekilde kullan.",
+                    "İçgörüyü uygulamaya geçir, fazla bekleme.",
                 ],
                 "avoid": [
                     "Gereksiz erteleme yapma.",
-                    "Dikkatini cok fazla yone dagitma.",
-                    "Tepkisel taahhutlerle ana yonunu sulandirma.",
+                    "Dikkatini çok fazla yöne dağıtma.",
+                    "Tepkisel taahhütlerle ana yönünü sulandırma.",
                 ],
             },
             "act_cautiously": {
                 "do": [
-                    f"{focus} alaninda olculu ama net ilerle.",
-                    "Onemli kararlari kademeli uygula.",
-                    "Hiz yerine yapi ve ritmi sec.",
+                    f"{focus} alanında ölçülü ama net ilerle.",
+                    "Önemli kararları kademeli uygula.",
+                    "Hız yerine yapı ve ritmi seç.",
                 ],
                 "avoid": [
-                    "Duygusal aciliyete kapilma.",
-                    "Kapasiteni fazla yukleme.",
-                    "Kontrol edemedigin riskleri buyutme.",
+                    "Duygusal aciliyete kapılma.",
+                    "Kapasiteni fazla yükleme.",
+                    "Kontrol edemediğin riskleri büyütme.",
                 ],
             },
             "hold": {
                 "do": [
-                    "Buyuk hamlelerden once mevcut yapini dengele.",
-                    "Bu donemi gozlem ve hazirlik icin kullan.",
-                    "Kisa vadeli gurultunun uzun vadeli yonunu bozmasina izin verme.",
+                    "Büyük hamlelerden önce mevcut yapını dengele.",
+                    "Bu dönemi gözlem ve hazırlık için kullan.",
+                    "Kısa vadeli gürültünün uzun vadeli yönünü bozmasına izin verme.",
                 ],
                 "avoid": [
-                    "Belirsiz zeminde hizli taahhut verme.",
-                    "Zamanlama hazir degilken zorla ivme yaratma.",
-                    "Baskinin onceliklerini degistirmesine izin verme.",
+                    "Belirsiz zeminde hızlı taahhüt verme.",
+                    "Zamanlama hazır değilken zorla ivme yaratma.",
+                    "Baskının önceliklerini değiştirmesine izin verme.",
                 ],
             },
             "avoid": {
                 "do": [
-                    "Yuksek baski alanlarinda maruziyeti azalt.",
-                    f"{focus} alaninda tepkisel degil planli davran.",
-                    "Enerjiyi koru ve onlenebilir hasari azalt.",
+                    "Yüksek baskı alanlarında maruziyeti azalt.",
+                    f"{focus} alanında tepkisel değil planlı davran.",
+                    "Enerjiyi koru ve önlenebilir hasarı azalt.",
                 ],
                 "avoid": [
-                    "Yeni kriz alanlari acma.",
-                    "Stres altinda buyuk sozler verme.",
-                    "Duygusal veya finansal asiri tepki verme.",
+                    "Yeni kriz alanları açma.",
+                    "Stres altında büyük sözler verme.",
+                    "Duygusal veya finansal aşırı tepki verme.",
                 ],
             },
             "prepare": {
                 "do": [
-                    "Bir sonraki guclu hamleyi hazirla.",
-                    "Yarim kalan yapilari toparla.",
-                    "Net taahhutlerden once sinyal topla.",
+                    "Bir sonraki güçlü hamleyi hazırla.",
+                    "Yarım kalan yapıları toparla.",
+                    "Net taahhütlerden önce sinyal topla.",
                 ],
                 "avoid": [
-                    "Kesinligi erken zorlamaya calisma.",
-                    "Zayif veriyle yon degistirme.",
-                    "Hazirlik isteyen secimlerde acele etme.",
+                    "Kesinliği erken zorlamaya çalışma.",
+                    "Zayıf veriyle yön değiştirme.",
+                    "Hazırlık isteyen seçimlerde acele etme.",
                 ],
             },
         }
@@ -5192,11 +6239,16 @@ def _filter_report_context(report_context):
 
 
 def _prepare_report_context(payload):
-    payload = _serialize_temporal_values(payload or {})
+    payload = _attach_astro_signal_context(payload)
     language = str(payload.get("language", "tr")).lower()
     if language not in {"tr", "en"}:
         language = "tr"
-    report_type, report_type_config = get_report_type_config(payload.get("report_type"))
+    selected_report_type = astro_workspace.normalize_workspace_report_type(
+        payload.get("workspace_report_type") or payload.get("report_order_type") or payload.get("report_type")
+    )
+    render_report_type = payload.get("render_report_type") or ("parent_child" if selected_report_type == "parent_child" else "premium")
+    _, report_type_config = get_report_type_config(render_report_type)
+    report_meta = astro_workspace.localized_workspace_report_meta(selected_report_type, language)
     interpretation_context = _localize_result_layer_text(payload.get("interpretation_context") or {}, language)
     primary_focus = interpretation_context.get("primary_focus") or interpretation_context.get("primary_life_focus") or "general"
     secondary_focus = interpretation_context.get("secondary_focus") or interpretation_context.get("secondary_life_focus") or "general"
@@ -5205,12 +6257,20 @@ def _prepare_report_context(payload):
     timing_windows = interpretation_context.get("top_timing_windows") or {}
     ai_interpretation = payload.get("ai_interpretation") or payload.get("interpretation") or payload.get("yorum")
     if not ai_interpretation:
-        ai_interpretation = ai_logic.generate_interpretation(payload)
+        if selected_report_type == "parent_child":
+            ai_interpretation = build_parent_child_ai_summary(interpretation_context, language=language)
+        else:
+            ai_interpretation = ai_logic.generate_interpretation(_attach_astro_signal_context(payload, report_type=selected_report_type))
     signal_layer = interpretation_context.get("signal_layer") or {}
     recommendation_layer = interpretation_context.get("recommendation_layer") or signal_layer.get("recommendation_layer") or {}
     calculation_config = payload.get("calculation_config") or {}
     parent_profile = payload.get("parent_profile") or interpretation_context.get("parent_profile") or {}
     child_profile_meta = payload.get("child_profile_meta") or interpretation_context.get("child_profile_meta") or {}
+    report_structure = report_structure_v3.build_report_structure_v3(
+        payload.get("astro_signal_context") or {},
+        selected_report_type,
+        language,
+    )
     top_anchors = [
         {
             "rank": anchor.get("rank"),
@@ -5242,24 +6302,8 @@ def _prepare_report_context(payload):
         {"label": translate_text("pdf.methodology_engine_version", language), "value": calculation_config.get("engine_version") or ASTRO_ENGINE_VERSION},
     ]
 
-    if report_type == "parent_child":
-        report_title = "Parent-Child Guidance Report" if language == "en" else "Ebeveyn-Cocuk Rehberlik Raporu"
-        report_subtitle = (
-            "A premium guidance report for emotional understanding, compatibility, learning patterns, and supportive parenting."
-            if language == "en"
-            else "Duygusal anlayis, uyum, okul-ogrme desenleri ve destekleyici ebeveynlik icin premium rehberlik raporu."
-        )
-    else:
-        report_title = (
-            "Premium Vedic Intelligence Report"
-            if language == "en"
-            else "Premium Vedik Icgoru Raporu"
-        )
-        report_subtitle = (
-            "An insight-first report built from your current timing, life themes, and strategic AI interpretation."
-            if language == "en"
-            else "Bu rapor, aktif zamanlamani, yasam temalarini ve stratejik AI yorumunu premium bir akista birlestirir."
-        )
+    report_title = payload.get("report_title") or report_meta["title"]
+    report_subtitle = payload.get("report_subtitle") or report_meta["subtitle"]
     decision_items = _decision_items(language, interpretation_context.get("decision_posture"), primary_focus)
     return {
         "language": language,
@@ -5267,11 +6311,12 @@ def _prepare_report_context(payload):
         "report_id": f"JY-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
         "report_title": report_title,
         "report_subtitle": report_subtitle,
-        "report_type": report_type,
+        "report_type": selected_report_type,
+        "render_report_type": render_report_type,
         "report_type_config": report_type_config,
-        "report_type_label": report_type_config.get("label", report_type.title()),
+        "report_type_label": payload.get("report_type_label") or report_meta["label"],
         "access_notice": payload.get("access_notice"),
-        "client_name": payload.get("full_name") or "Private Client",
+        "client_name": payload.get("full_name") or ("Private Client" if language == "en" else "Özel Profil"),
         "birth_summary": " | ".join(
             item for item in [
                 payload.get("birth_date"),
@@ -5290,6 +6335,8 @@ def _prepare_report_context(payload):
         "growth_guidance_report": interpretation_context.get("growth_guidance") or {},
         "timing_notes_report": interpretation_context.get("timing_notes") or [],
         "signal_layer": signal_layer,
+        "report_structure_v3": report_structure,
+        "report_v3_titles": report_structure.get("section_titles") or {},
         "top_anchors": top_anchors,
         "recommendation_layer": recommendation_layer,
         "top_recommendations": top_recommendations,
@@ -5301,7 +6348,7 @@ def _prepare_report_context(payload):
         "confidence_label": _localized_result_label(interpretation_context.get("confidence_level", "moderate"), language),
         "decision_posture_label": _localized_result_label(interpretation_context.get("decision_posture", "prepare"), language),
         "timing_strategy_label": _localized_result_label(interpretation_context.get("timing_strategy", "mixed"), language),
-        "dominant_narrative_label": _localized_result_label(dominant_narratives[0], language) if dominant_narratives else ("Current life cycle" if language == "en" else "Mevcut yasam dongusu"),
+        "dominant_narrative_label": _localized_result_label(dominant_narratives[0], language) if dominant_narratives else ("Current life cycle" if language == "en" else "Mevcut yaşam döngüsü"),
         "dominant_life_area_label": _focus_label(dominant_life_areas[0], language) if dominant_life_areas else _focus_label(primary_focus, language),
         "peak_window": timing_windows.get("peak"),
         "opportunity_window": timing_windows.get("opportunity"),
@@ -5370,6 +6417,14 @@ def _validate_pdf_bytes(pdf_bytes):
     return bool(pdf_bytes and len(pdf_bytes) > 4 and pdf_bytes.startswith(b"%PDF"))
 
 
+def _pdf_logo_data_uri():
+    logo_path = BASE_DIR / "static" / "focus-logo.png"
+    if not logo_path.exists():
+        return None
+    encoded = base64.b64encode(logo_path.read_bytes()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
 def _generate_pdf_bytes_from_report(report_context):
     try:
         _ensure_pdf_runtime_environment()
@@ -5380,9 +6435,12 @@ def _generate_pdf_bytes_from_report(report_context):
         ) from exc
 
     template = templates.env.get_template("report_pdf.html")
-    html_content = template.render(report_context)
+    render_context = dict(report_context or {})
+    render_context.setdefault("pdf_base_url", str(BASE_DIR))
+    render_context.setdefault("logo_data_uri", _pdf_logo_data_uri())
+    html_content = template.render(render_context)
     try:
-        pdf_bytes = HTML(string=html_content, base_url=str(BASE_DIR)).write_pdf()
+        pdf_bytes = HTML(string=html_content, base_url=render_context["pdf_base_url"]).write_pdf()
     except Exception as exc:
         raise ai_logic.AIServiceError("PDF raporu render edilirken bir sistem hatasi olustu.") from exc
     if not _validate_pdf_bytes(pdf_bytes):
@@ -5391,11 +6449,18 @@ def _generate_pdf_bytes_from_report(report_context):
 
 
 def _auth_template_context(request, **extra):
+    current_user = extra.get("current_user") or extra.get("dashboard_user") or getattr(request.state, "admin_user", None) or getattr(request.state, "current_user", None)
+    flash = get_flash(request)
     context = {
         "request": request,
         "lang": getattr(request.state, "lang", "en"),
         "csrf_token": ensure_csrf_token(request),
+        "current_user": current_user,
+        "flash_success": extra.get("flash_success") or flash.get("flash_success") or extra.get("notice") or "",
+        "flash_error": extra.get("flash_error") or flash.get("flash_error") or extra.get("error") or "",
+        "unread_contact": extra.get("unread_contact", _unread_contact_count() if str(getattr(request, "url", "")).find("/admin") >= 0 else 0),
     }
+    context.update(_launch_mode_flags())
     context.update(extra)
     return context
 
@@ -5426,6 +6491,24 @@ def _article_category_meta(category_slug):
     if normalized not in ARTICLE_CATEGORY_LABELS:
         return None
     return {"slug": normalized, "label": ARTICLE_CATEGORY_LABELS[normalized]}
+
+
+def _repair_mojibake_text(value):
+    text = str(value or "")
+    if not any(marker in text for marker in ("Ã", "Ä", "Å", "â")):
+        return text
+    current = text
+    for _ in range(4):
+        try:
+            repaired = current.encode("cp1252").decode("utf-8")
+        except Exception:
+            break
+        if repaired == current:
+            break
+        current = repaired
+        if not any(marker in current for marker in ("Ã", "Ä", "Å", "â")):
+            break
+    return current
 
 
 def _seed_articles(db):
@@ -5494,9 +6577,9 @@ def _seed_articles(db):
 def _localized_article_payload(article, language=None):
     requested_language = str(language or article.language or "tr").lower()
     localized = ARTICLE_LOCALIZED_CONTENT.get(article.slug, {}).get(requested_language, {})
-    title = localized.get("title") or article.title
-    excerpt = localized.get("excerpt") or article.excerpt or ""
-    body = localized.get("body") or article.body or ""
+    title = _repair_mojibake_text(localized.get("title") or article.title)
+    excerpt = _repair_mojibake_text(localized.get("excerpt") or article.excerpt or "")
+    body = _repair_mojibake_text(localized.get("body") or article.body or "")
     return {
         "title": title,
         "excerpt": excerpt,
@@ -5584,6 +6667,18 @@ def get_latest_articles(db, limit=3, language=None):
     return [_article_view(item, language=language) for item in items]
 
 
+def get_homepage_latest_articles(db, limit=3, language=None):
+    _seed_articles(db)
+    items = (
+        _published_articles_query(db, language=language)
+        .filter(or_(db_mod.Article.published_at.is_(None), db_mod.Article.published_at <= datetime.utcnow()))
+        .order_by(db_mod.Article.published_at.desc(), db_mod.Article.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [_article_view(item, language=language) for item in items]
+
+
 def _match_related_articles_for_result(db, interpretation_context, language=None):
     _seed_articles(db)
     signal_layer = (interpretation_context or {}).get("signal_layer") or {}
@@ -5603,37 +6698,114 @@ async def index(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context=_auth_template_context(
+        context=base_context(
             request,
-            latest_articles=get_latest_articles(db, limit=3, language=current_language),
+            db,
+            latest_articles=get_homepage_latest_articles(db, limit=3, language=current_language),
         ),
     )
 
 
 @app.get("/calculator", response_class=HTMLResponse)
-async def calculator(request: Request):
+async def calculator(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(
         request=request,
         name="calculator.html",
-        context=_auth_template_context(request),
+        context=base_context(request, db),
     )
 
 
 @app.get("/about", response_class=HTMLResponse)
-async def about(request: Request):
+async def about(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(
         request=request,
         name="about.html",
-        context=_auth_template_context(request),
+        context=base_context(request, db),
     )
 
 
 @app.get("/sss", response_class=HTMLResponse)
-async def faq_page(request: Request):
+async def faq_page(request: Request, db: Session = Depends(get_db)):
+    faq_items = (
+        db.query(db_mod.FAQItem)
+        .filter(db_mod.FAQItem.is_published.is_(True))
+        .order_by(db_mod.FAQItem.category.asc(), db_mod.FAQItem.sort_order.asc(), db_mod.FAQItem.id.asc())
+        .all()
+    )
+    faq_by_category = {}
+    for item in faq_items:
+        faq_by_category.setdefault(item.category, []).append(item)
     return templates.TemplateResponse(
         request=request,
         name="sss.html",
-        context=_auth_template_context(request),
+        context=base_context(request, db, faq_by_category=faq_by_category),
+    )
+
+
+@app.get("/contact", response_class=HTMLResponse)
+async def contact_page(request: Request, db: Session = Depends(get_db)):
+    return templates.TemplateResponse(
+        request=request,
+        name="contact.html",
+        context=base_context(request, db, success=False, form_data={}),
+    )
+
+
+@app.post("/contact", response_class=HTMLResponse)
+async def contact_submit(request: Request, db: Session = Depends(get_db)):
+    form_data = await request.form()
+    if not verify_csrf_token(request, form_data.get(CSRF_FORM_FIELD, "")):
+        raise HTTPException(status_code=403, detail="Invalid CSRF token")
+
+    name = str(form_data.get("name", "")).strip()
+    email = str(form_data.get("email", "")).strip()
+    subject = str(form_data.get("subject", "genel")).strip() or "genel"
+    message = str(form_data.get("message", "")).strip()
+    errors = []
+    if len(name) < 2:
+        errors.append("Ad en az 2 karakter olmalıdır.")
+    if "@" not in email:
+        errors.append("Geçerli bir e-posta girin.")
+    if len(message) < 10:
+        errors.append("Mesaj en az 10 karakter olmalıdır.")
+    if errors:
+        return templates.TemplateResponse(
+            request=request,
+            name="contact.html",
+            status_code=400,
+            context=base_context(request, db, error_message=" ".join(errors), form_data=form_data, success=False),
+        )
+    if not check_rate_limit(f"contact:{_client_ip(request)}", max_calls=5, window_seconds=3600):
+        return templates.TemplateResponse(
+            request=request,
+            name="contact.html",
+            status_code=429,
+            context=base_context(request, db, error_message="Çok fazla mesaj gönderildi. Lütfen daha sonra tekrar deneyin.", form_data=form_data, success=False),
+        )
+
+    msg = db_mod.ContactMessage(name=name, email=email, subject=subject, message=message)
+    db.add(msg)
+    db.commit()
+    html = render_email(
+        "contact_autoreply.html",
+        name=name,
+        instagram_url=get_setting(db, "site_instagram_url", ""),
+        astrologer_name=get_astrologer_name(db),
+    )
+    _send_logged_email(
+        db,
+        email_type="contact_autoreply",
+        to_email=email,
+        subject="MesajÃ„Â±nÃ„Â±z alÃ„Â±ndÃ„Â± Ã¢â‚¬â€ Focus Astrology",
+        html_body=html,
+        event_type="contact_message",
+        event_key=f"contact:{msg.id}",
+    )
+    print(f"[CONTACT] New message from {name} <{email}>: {message[:80]}")
+    return templates.TemplateResponse(
+        request=request,
+        name="contact.html",
+        context=base_context(request, db, success=True, form_data={}),
     )
 
 
@@ -5683,17 +6855,21 @@ async def appointment_policy(request: Request):
 
 
 @app.get("/personal-consultation", response_class=HTMLResponse)
-async def personal_consultation(request: Request):
+async def personal_consultation(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(
         request=request,
         name="personal_consultation.html",
-        context=_auth_template_context(request),
+        context=base_context(request, db),
     )
 
 
 @app.get("/personal-consultation/book")
 async def personal_consultation_book(request: Request):
-    calendly_url = str(os.getenv("CALENDLY_CONSULTATION_URL", "")).strip()
+    if not launch_consultation_booking_enabled():
+        return _coming_soon_template_response(request)
+    calendly_url = str(os.getenv("CALENDLY_CONSULTATION_URL", "https://calendly.com/focusastrology/vedicastrologyreading60")).strip()
+    if not calendly_url:
+        calendly_url = "https://calendly.com/focusastrology/vedicastrologyreading60"
     email_config = email_utils.get_email_config()
     booking_contact_email = email_config.get("support_email") or email_config.get("from_address") or "hello@focusastrology.com"
     return templates.TemplateResponse(
@@ -5709,6 +6885,8 @@ async def personal_consultation_book(request: Request):
 
 @app.get("/checkout/consultation", response_class=HTMLResponse)
 async def consultation_checkout_step(request: Request):
+    if not launch_payments_enabled() or not launch_consultation_booking_enabled():
+        return _coming_soon_template_response(request)
     notice = str(request.query_params.get("notice", "")).strip()
     return templates.TemplateResponse(
         request=request,
@@ -5737,6 +6915,66 @@ def _consultation_checkout_context(request, order=None, notice=""):
         checkout_notice=notice,
         checkout_upsell=_checkout_upsell_context(service_kind="consultation"),
     )
+
+
+@app.get("/consultation/continue", response_class=HTMLResponse)
+async def consultation_continue(request: Request, db: Session = Depends(get_db)):
+    if not launch_consultation_booking_enabled() or not launch_payments_enabled():
+        return _coming_soon_template_response(request)
+    def clean_query_value(*names):
+        for name in names:
+            value = str(request.query_params.get(name, "") or "").strip()
+            if value:
+                return unquote(value)
+        return ""
+
+    invitee_uri = clean_query_value("invitee_uri", "invitee")
+    event_uri = clean_query_value("event_uri", "event")
+    email = clean_query_value("email").lower()
+    scheduled_start_raw = clean_query_value("event_start_time")
+    scheduled_start = _parse_calendly_datetime(scheduled_start_raw) if scheduled_start_raw else None
+
+    query = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.service_type == "consultation")
+    order = None
+    if invitee_uri:
+        order = (
+            query.filter(db_mod.ServiceOrder.calendly_invitee_uri == invitee_uri)
+            .order_by(db_mod.ServiceOrder.created_at.desc())
+            .first()
+        )
+    if not order and event_uri:
+        order = (
+            query.filter(db_mod.ServiceOrder.calendly_event_uri == event_uri)
+            .order_by(db_mod.ServiceOrder.created_at.desc())
+            .first()
+        )
+    if not order and email and scheduled_start:
+        order = (
+            query.filter(
+                db_mod.ServiceOrder.customer_email == email,
+                db_mod.ServiceOrder.scheduled_start == scheduled_start,
+            )
+            .order_by(db_mod.ServiceOrder.created_at.desc())
+            .first()
+        )
+    if not order and email and scheduled_start:
+        order = (
+            query.filter(
+                db_mod.ServiceOrder.customer_email == email,
+                db_mod.ServiceOrder.scheduled_start.isnot(None),
+            )
+            .order_by(db_mod.ServiceOrder.created_at.desc())
+            .first()
+        )
+    if not order:
+        return templates.TemplateResponse(
+            request=request,
+            name="consultation_continue_not_found.html",
+            status_code=404,
+            context=_auth_template_context(request),
+        )
+
+    return RedirectResponse(url=f"/checkout/consultation/{order.order_token}", status_code=303)
 
 
 def _start_consultation_payment_for_order(db, order, request):
@@ -5771,6 +7009,8 @@ def _start_consultation_payment_for_order(db, order, request):
 
 @app.get("/checkout/consultation/{order_token}", response_class=HTMLResponse)
 async def consultation_checkout_for_booking(request: Request, order_token: str, db: Session = Depends(get_db)):
+    if not launch_payments_enabled() or not launch_consultation_booking_enabled():
+        return _coming_soon_template_response(request)
     order = _service_order_by_token_or_404(db, order_token)
     if order.service_type != "consultation":
         _public_error("Bu ödeme adımı danışmanlık içindir.", 404)
@@ -5784,6 +7024,8 @@ async def consultation_checkout_for_booking(request: Request, order_token: str, 
 
 @app.post("/checkout/consultation/{order_token}")
 async def start_consultation_checkout_for_booking(request: Request, order_token: str, db: Session = Depends(get_db)):
+    if not launch_payments_enabled() or not launch_consultation_booking_enabled():
+        return _coming_soon_template_response(request)
     enforce_rate_limit(request, "consultation_checkout", limit=20, window_seconds=600)
     await validate_csrf_token(request)
     order = _service_order_by_token_or_404(db, order_token)
@@ -5792,6 +7034,8 @@ async def start_consultation_checkout_for_booking(request: Request, order_token:
 
 @app.post("/checkout/consultation")
 async def start_consultation_checkout(request: Request, db: Session = Depends(get_db)):
+    if not launch_payments_enabled() or not launch_consultation_booking_enabled():
+        return _coming_soon_template_response(request)
     enforce_rate_limit(request, "consultation_checkout", limit=20, window_seconds=600)
     await validate_csrf_token(request)
     order = db_mod.ServiceOrder(
@@ -5853,8 +7097,9 @@ async def articles(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(
         request=request,
         name="articles.html",
-        context=_auth_template_context(
+        context=base_context(
             request,
+            db,
             articles=articles_payload,
             active_category=None,
             category_links=list(category_counts.values()),
@@ -5929,15 +7174,30 @@ async def signup_submit(
     name: str = Form(default=""),
     db: Session = Depends(get_db),
 ):
+    if not check_rate_limit(f"signup:{_client_ip(request)}", max_calls=5, window_seconds=3600):
+        return templates.TemplateResponse(
+            request=request,
+            name="signup.html",
+            context=_auth_template_context(request, error_message="Çok fazla kayıt denemesi. Lütfen daha sonra tekrar deneyin."),
+            status_code=429,
+        )
     normalized_email = str(email or "").strip().lower()
-    if "@" not in normalized_email or len(password or "") < 6:
+    clean_name = str(name or "").strip()
+    errors = []
+    if len(clean_name) < 2:
+        errors.append("Ad en az 2 karakter olmalıdır.")
+    if "@" not in normalized_email:
+        errors.append("Geçerli bir e-posta adresi girin.")
+    if len(password or "") < 8:
+        errors.append("Şifre en az 8 karakter olmalıdır.")
+    if errors:
         return templates.TemplateResponse(
             request=request,
             name="signup.html",
             context=_auth_template_context(
                 request,
-                error_message="Gecerli bir e-posta ve en az 6 karakterli sifre girin.",
-                form_data={"email": normalized_email, "name": name},
+                error_message=" ".join(errors),
+                form_data={"email": normalized_email, "name": clean_name},
             ),
             status_code=400,
         )
@@ -5985,6 +7245,13 @@ async def login_submit(
     password: str = Form(...),
     db: Session = Depends(get_db),
 ):
+    if not check_rate_limit(f"login:{_client_ip(request)}", max_calls=10, window_seconds=300):
+        return templates.TemplateResponse(
+            request=request,
+            name="login.html",
+            context=_auth_template_context(request, error_message="Çok fazla giriş denemesi. Lütfen 5 dakika bekleyin."),
+            status_code=429,
+        )
     normalized_email = str(email or "").strip().lower()
     user = db.query(db_mod.AppUser).filter(db_mod.AppUser.email == normalized_email, db_mod.AppUser.is_active.is_(True)).first()
     if not user or not check_password_hash(user.password_hash, password):
@@ -6054,8 +7321,9 @@ async def reports_history(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(
         request=request,
         name="reports.html",
-        context=_auth_template_context(
+        context=base_context(
             request,
+            db,
             dashboard_user=_public_user_view(user) if user else None,
             reports=reports,
             plan_features=get_plan_features(user) if user else PLAN_FEATURES["free"],
@@ -6065,6 +7333,8 @@ async def reports_history(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/reports/order/{report_type}", response_class=HTMLResponse)
 async def report_order_form(request: Request, report_type: str):
+    if not launch_payments_enabled():
+        return _coming_soon_template_response(request)
     normalized = normalize_report_order_type(report_type)
     if not normalized:
         _public_error("Rapor türü bulunamadı.", 404)
@@ -6097,9 +7367,14 @@ async def submit_report_order(
     birth_city: str = Form(default=""),
     selected_report_type: str = Form(default=""),
     optional_note: str = Form(default=""),
+    is_gift: str = Form(default=""),
+    gift_recipient_name: str = Form(default=""),
+    gift_recipient_email: str = Form(default=""),
     csrf_token: str = Form(default=""),
     db: Session = Depends(get_db),
 ):
+    if not launch_payments_enabled():
+        return _coming_soon_template_response(request)
     enforce_rate_limit(request, "report_order", limit=12, window_seconds=600)
     await validate_csrf_token(request, csrf_token)
     normalized = normalize_report_order_type(selected_report_type or report_type)
@@ -6109,6 +7384,21 @@ async def submit_report_order(
         return RedirectResponse(url="/reports/parent-child", status_code=303)
 
     product = dict(REPORT_ORDER_PRODUCTS[normalized])
+    if not check_rate_limit(f"order:{_client_ip(request)}", max_calls=5, window_seconds=3600):
+        return templates.TemplateResponse(
+            request=request,
+            name="report_order.html",
+            status_code=429,
+            context=_auth_template_context(
+                request,
+                product=product,
+                report_type=normalized,
+                order_action=f"/reports/order/{normalized}",
+                bundle_type="",
+                form_data={},
+                error_message="Çok fazla talep gönderildi. Lütfen daha sonra tekrar deneyin.",
+            ),
+        )
     form_data = {
         "full_name": full_name.strip(),
         "email": email.strip(),
@@ -6116,7 +7406,34 @@ async def submit_report_order(
         "birth_time": birth_time.strip(),
         "birth_city": birth_city.strip(),
         "optional_note": optional_note.strip(),
+        "is_gift": bool(is_gift),
+        "gift_recipient_name": gift_recipient_name.strip(),
+        "gift_recipient_email": gift_recipient_email.strip(),
     }
+    validation_errors = []
+    if len(form_data["full_name"]) < 2:
+        validation_errors.append("Ad soyad en az 2 karakter olmalıdır.")
+    if "@" not in form_data["email"] or "." not in form_data["email"].split("@")[-1]:
+        validation_errors.append("Geçerli bir e-posta adresi girin.")
+    if not form_data["birth_date"]:
+        validation_errors.append("Doğum tarihi zorunludur.")
+    if not form_data["birth_city"] or len(form_data["birth_city"]) < 2:
+        validation_errors.append("Doğum yeri zorunludur.")
+    if validation_errors:
+        return templates.TemplateResponse(
+            request=request,
+            name="report_order.html",
+            status_code=400,
+            context=_auth_template_context(
+                request,
+                product=product,
+                report_type=normalized,
+                order_action=f"/reports/order/{normalized}",
+                bundle_type="",
+                form_data=form_data,
+                error_message=" ".join(validation_errors),
+            ),
+        )
     required_missing = [
         label for key, label in (
             ("full_name", "Ad soyad"),
@@ -6144,10 +7461,13 @@ async def submit_report_order(
         )
 
     submitted_at = datetime.now(pytz.UTC).isoformat()
+    user_lang = str(getattr(request.state, "lang", "tr") or "tr").lower()
+    user_lang = user_lang if user_lang in {"tr", "en"} else "tr"
     order_data = {
         **form_data,
         "report_type": normalized,
         "report_title": product["title"],
+        "user_lang": user_lang,
         "submitted_at": submitted_at,
         "source": "reports_order_form",
     }
@@ -6162,7 +7482,11 @@ async def submit_report_order(
         birth_date=order_data["birth_date"],
         birth_time=order_data["birth_time"],
         birth_place=order_data["birth_city"],
+        user_lang=order_data["user_lang"],
         optional_note=order_data["optional_note"],
+        is_gift=order_data["is_gift"],
+        gift_recipient_name=order_data["gift_recipient_name"] or None,
+        gift_recipient_email=order_data["gift_recipient_email"] or None,
         amount=_amount_decimal(product["price"]),
         amount_label=product["price"],
         currency="TRY",
@@ -6172,12 +7496,15 @@ async def submit_report_order(
     db.add(order)
     db.commit()
     db.refresh(order)
+    maybe_send_report_order_confirmation_email(db, order)
 
     return RedirectResponse(url=f"/checkout/report/{order.order_token}", status_code=303)
 
 
 @app.get("/reports/order/bundle/{bundle_type}", response_class=HTMLResponse)
 async def report_bundle_order_form(request: Request, bundle_type: str):
+    if not launch_payments_enabled():
+        return _coming_soon_template_response(request)
     normalized = normalize_report_bundle_type(bundle_type)
     if not normalized:
         _public_error("Paket türü bulunamadı.", 404)
@@ -6210,12 +7537,29 @@ async def submit_report_bundle_order(
     csrf_token: str = Form(default=""),
     db: Session = Depends(get_db),
 ):
+    if not launch_payments_enabled():
+        return _coming_soon_template_response(request)
     enforce_rate_limit(request, "report_order", limit=12, window_seconds=600)
     await validate_csrf_token(request, csrf_token)
     normalized = normalize_report_bundle_type(bundle_type)
     if not normalized:
         _public_error("Paket türü bulunamadı.", 404)
     product = dict(REPORT_BUNDLE_PRODUCTS[normalized])
+    if not check_rate_limit(f"order:{_client_ip(request)}", max_calls=5, window_seconds=3600):
+        return templates.TemplateResponse(
+            request=request,
+            name="report_order.html",
+            status_code=429,
+            context=_auth_template_context(
+                request,
+                product=product,
+                report_type=normalized,
+                bundle_type=normalized,
+                order_action=f"/reports/order/bundle/{normalized}",
+                form_data={},
+                error_message="Çok fazla talep gönderildi. Lütfen daha sonra tekrar deneyin.",
+            ),
+        )
     form_data = {
         "full_name": full_name.strip(),
         "email": email.strip(),
@@ -6224,6 +7568,30 @@ async def submit_report_bundle_order(
         "birth_city": birth_city.strip(),
         "optional_note": optional_note.strip(),
     }
+    validation_errors = []
+    if len(form_data["full_name"]) < 2:
+        validation_errors.append("Ad soyad en az 2 karakter olmalıdır.")
+    if "@" not in form_data["email"] or "." not in form_data["email"].split("@")[-1]:
+        validation_errors.append("Geçerli bir e-posta adresi girin.")
+    if not form_data["birth_date"]:
+        validation_errors.append("Doğum tarihi zorunludur.")
+    if not form_data["birth_city"] or len(form_data["birth_city"]) < 2:
+        validation_errors.append("Doğum yeri zorunludur.")
+    if validation_errors:
+        return templates.TemplateResponse(
+            request=request,
+            name="report_order.html",
+            status_code=400,
+            context=_auth_template_context(
+                request,
+                product=product,
+                report_type=normalized,
+                bundle_type=normalized,
+                order_action=f"/reports/order/bundle/{normalized}",
+                form_data=form_data,
+                error_message=" ".join(validation_errors),
+            ),
+        )
     required_missing = [
         label for key, label in (
             ("full_name", "Ad soyad"),
@@ -6251,6 +7619,8 @@ async def submit_report_bundle_order(
         )
 
     submitted_at = datetime.now(pytz.UTC).isoformat()
+    user_lang = str(getattr(request.state, "lang", "tr") or "tr").lower()
+    user_lang = user_lang if user_lang in {"tr", "en"} else "tr"
     included_products = product.get("included_products", [])
     order_data = {
         **form_data,
@@ -6258,6 +7628,7 @@ async def submit_report_bundle_order(
         "bundle_type": normalized,
         "included_products": included_products,
         "report_title": product["title"],
+        "user_lang": user_lang,
         "submitted_at": submitted_at,
         "source": "reports_bundle_order_form",
     }
@@ -6275,6 +7646,7 @@ async def submit_report_bundle_order(
         birth_date=order_data["birth_date"],
         birth_time=order_data["birth_time"],
         birth_place=order_data["birth_city"],
+        user_lang=order_data["user_lang"],
         optional_note=order_data["optional_note"],
         amount=_amount_decimal(product["price"]),
         amount_label=product["price"],
@@ -6285,12 +7657,15 @@ async def submit_report_bundle_order(
     db.add(order)
     db.commit()
     db.refresh(order)
+    maybe_send_report_order_confirmation_email(db, order)
 
     return RedirectResponse(url=f"/checkout/report/{order.order_token}", status_code=303)
 
 
 @app.get("/checkout/report/{order_token}", response_class=HTMLResponse)
 async def report_checkout_step(request: Request, order_token: str, db: Session = Depends(get_db)):
+    if not launch_payments_enabled():
+        return _coming_soon_template_response(request)
     order = _service_order_by_token_or_404(db, order_token)
     if order.service_type != "report":
         _public_error("Bu ödeme adımı rapor siparişleri içindir.", 404)
@@ -6314,6 +7689,8 @@ async def report_checkout_step(request: Request, order_token: str, db: Session =
 
 @app.post("/checkout/report/{order_token}")
 async def start_report_checkout(request: Request, order_token: str, db: Session = Depends(get_db)):
+    if not launch_payments_enabled():
+        return _coming_soon_template_response(request)
     enforce_rate_limit(request, "report_checkout", limit=20, window_seconds=600)
     await validate_csrf_token(request)
     order = _service_order_by_token_or_404(db, order_token)
@@ -6423,6 +7800,7 @@ async def _handle_iyzico_callback(request, db, service_type):
                 request,
                 product=_service_order_product(order),
                 order=payload,
+                delivery_days=get_setting(db, "site_report_delivery_days", "7"),
             ),
         )
     return RedirectResponse(url="/personal-consultation/book?paid=1", status_code=303)
@@ -6709,40 +8087,31 @@ async def update_plan(request: Request, plan_code: str = Form(...), db: Session 
 async def admin_home(request: Request, db: Session = Depends(get_db)):
     try:
         total_users = db.query(db_mod.AppUser).count()
-        total_reports = db.query(db_mod.GeneratedReport).count()
+        total_articles = db.query(func.count(db_mod.Article.id)).scalar() or 0
         week_ago = datetime.utcnow() - timedelta(days=7)
-        month_ago = datetime.utcnow() - timedelta(days=30)
-        users_last_7_days = db.query(db_mod.AppUser).filter(db_mod.AppUser.created_at >= week_ago).count()
-        reports_last_7_days = db.query(db_mod.GeneratedReport).filter(db_mod.GeneratedReport.created_at >= week_ago).count()
-        reports_last_30_days = db.query(db_mod.GeneratedReport).filter(db_mod.GeneratedReport.created_at >= month_ago).count()
-        paid_users = db.query(db_mod.AppUser).filter(db_mod.AppUser.plan_code.in_(["basic", "premium", "elite"])).count()
-        users = db.query(db_mod.AppUser).order_by(db_mod.AppUser.created_at.desc()).limit(10).all()
-        reports = db.query(db_mod.GeneratedReport).order_by(db_mod.GeneratedReport.created_at.desc()).limit(10).all()
-        email_failures = db.query(db_mod.EmailLog).filter(db_mod.EmailLog.status == "failed").order_by(db_mod.EmailLog.created_at.desc()).limit(10).all()
-        billing_notifications = db.query(db_mod.EmailLog).filter(db_mod.EmailLog.related_event_type.isnot(None)).order_by(db_mod.EmailLog.created_at.desc()).limit(8).all()
-        plan_distribution = {
-            plan: db.query(db_mod.AppUser).filter(db_mod.AppUser.plan_code == plan).count()
-            for plan in PLAN_FEATURES.keys()
-        }
+        users_this_week = db.query(db_mod.AppUser).filter(db_mod.AppUser.created_at >= week_ago).count()
+        pending_reports = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.service_type == "report", db_mod.ServiceOrder.status == "pending").count()
+        delivered_reports_count = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.service_type == "report", db_mod.ServiceOrder.status == "delivered").count()
+        total_consultations = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.service_type == "consultation").count()
+        pending_consultations = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.service_type == "consultation", db_mod.ServiceOrder.status == "pending").count()
+        recent_users = db.query(db_mod.AppUser).order_by(db_mod.AppUser.created_at.desc()).limit(5).all()
+        recent_reports = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.service_type == "report").order_by(db_mod.ServiceOrder.created_at.desc()).limit(10).all()
         return templates.TemplateResponse(
             request=request,
-            name="admin/index.html",
+            name="admin/dashboard.html",
             context=_auth_template_context(
                 request,
                 dashboard_user=request.state.admin_user,
-                summary={
-                    "total_users": total_users,
-                    "total_reports": total_reports,
-                    "users_last_7_days": users_last_7_days,
-                    "reports_last_7_days": reports_last_7_days,
-                    "reports_last_30_days": reports_last_30_days,
-                    "paid_users": paid_users,
-                    "plan_distribution": plan_distribution,
-                },
-                recent_users=[_user_admin_view(user, db.query(db_mod.GeneratedReport).filter(db_mod.GeneratedReport.user_id == user.id).count()) for user in users],
-                recent_reports=[_report_view(report) for report in reports],
-                recent_email_failures=[_email_log_view(log) for log in email_failures],
-                recent_billing_notifications=[_email_log_view(log) for log in billing_notifications],
+                active_page="dashboard",
+                total_users=total_users,
+                users_this_week=users_this_week,
+                pending_reports=pending_reports,
+                delivered_reports_count=delivered_reports_count,
+                total_consultations=total_consultations,
+                pending_consultations=pending_consultations,
+                total_articles=total_articles,
+                recent_reports=[_service_report_row(order) for order in recent_reports],
+                recent_users=recent_users,
             ),
         )
     except Exception:
@@ -6780,6 +8149,11 @@ def _service_report_row(order):
     payload = _service_order_payload(order)
     return {
         "id": order.id,
+        "full_name": order.customer_name or payload.get("full_name") or "-",
+        "email": order.customer_email or payload.get("email") or "-",
+        "report_type": order.product_type or payload.get("report_type") or "-",
+        "birth_city": order.birth_place or payload.get("birth_city") or "-",
+        "admin_note": getattr(order, "admin_note", None) or getattr(order, "internal_notes", None) or "",
         "created_at": order.created_at,
         "customer_name": order.customer_name or payload.get("full_name") or "-",
         "customer_email": order.customer_email or payload.get("email") or "-",
@@ -6792,6 +8166,9 @@ def _service_report_row(order):
         "paid_at": order.paid_at,
         "delivered_at": order.delivered_at,
         "pdf_ready": bool(order.final_pdf_path and order.pdf_status in {"completed", "ready"}),
+        "is_gift": bool(getattr(order, "is_gift", False)),
+        "gift_recipient_name": getattr(order, "gift_recipient_name", None),
+        "gift_recipient_email": getattr(order, "gift_recipient_email", None),
     }
 
 
@@ -6799,6 +8176,11 @@ def _consultation_order_row(order):
     paid = bool(order.paid_at and order.status in SUCCESSFUL_PAID_ORDER_STATUSES)
     return {
         "id": order.id,
+        "name": order.customer_name or "-",
+        "email": order.customer_email or "-",
+        "booking_date": order.scheduled_start,
+        "payment_status": "paid" if paid else "pending",
+        "notes": order.internal_notes or order.optional_note or "",
         "created_at": order.created_at,
         "customer_name": order.customer_name or "-",
         "customer_email": order.customer_email or "-",
@@ -7169,10 +8551,36 @@ async def admin_dashboard(
     range_key: str = Query(default="7d", alias="range"),
 ):
     dashboard = get_dashboard_metrics(db, range_key)
+    pending_reports = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.service_type == "report", db_mod.ServiceOrder.status == "pending").count()
+    delivered_reports_count = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.service_type == "report", db_mod.ServiceOrder.status == "delivered").count()
+    pending_consultations = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.service_type == "consultation", db_mod.ServiceOrder.status == "pending").count()
+    recent_report_orders = (
+        db.query(db_mod.ServiceOrder)
+        .filter(db_mod.ServiceOrder.service_type == "report")
+        .order_by(db_mod.ServiceOrder.created_at.desc())
+        .limit(10)
+        .all()
+    )
+    recent_users = (
+        db.query(db_mod.AppUser)
+        .order_by(db_mod.AppUser.created_at.desc())
+        .limit(5)
+        .all()
+    )
     return templates.TemplateResponse(
         request=request,
         name="admin/dashboard.html",
-        context=_auth_template_context(request, dashboard=dashboard),
+        context=_auth_template_context(
+            request,
+            dashboard_user=request.state.admin_user,
+            active_page="dashboard",
+            dashboard=dashboard,
+            pending_reports=pending_reports,
+            delivered_reports_count=delivered_reports_count,
+            pending_consultations=pending_consultations,
+            recent_reports=[_service_report_row(order) for order in recent_report_orders],
+            recent_users=recent_users,
+        ),
     )
 
 
@@ -7334,27 +8742,32 @@ async def admin_reconcile_payment(
 
 @app.get("/admin/users", response_class=HTMLResponse)
 @admin_required
-async def admin_users(request: Request, db: Session = Depends(get_db), q: str = "", plan: str = "", status: str = ""):
+async def admin_users(request: Request, db: Session = Depends(get_db), q: str = "", plan: str = "", status: str = "", page: int = 1):
     query = db.query(db_mod.AppUser)
     if q.strip():
         like = f"%{q.strip().lower()}%"
-        query = query.filter(db_mod.AppUser.email.ilike(like))
+        query = query.filter(or_(db_mod.AppUser.email.ilike(like), db_mod.AppUser.name.ilike(like)))
     if plan.strip():
         query = query.filter(db_mod.AppUser.plan_code == normalize_plan_code(plan))
     if status.strip():
         query = query.filter(db_mod.AppUser.subscription_status == status.strip())
-    users = query.order_by(db_mod.AppUser.created_at.desc()).limit(200).all()
-    report_counts = {
-        user.id: db.query(db_mod.GeneratedReport).filter(db_mod.GeneratedReport.user_id == user.id).count()
-        for user in users
-    }
+    total = query.count()
+    page = max(int(page or 1), 1)
+    users = query.order_by(db_mod.AppUser.created_at.desc()).offset((page - 1) * 50).limit(50).all()
+    for user in users:
+        user.report_count = db.query(db_mod.GeneratedReport).filter(db_mod.GeneratedReport.user_id == user.id).count()
     return templates.TemplateResponse(
         request=request,
         name="admin/users.html",
         context=_auth_template_context(
             request,
             dashboard_user=request.state.admin_user,
-            users=[_user_admin_view(user, report_counts.get(user.id, 0)) for user in users],
+            active_page="users",
+            users=users,
+            total=total,
+            q=q,
+            plan=plan,
+            page=page,
             filters={"q": q, "plan": plan, "status": status},
         ),
     )
@@ -7374,22 +8787,73 @@ async def admin_user_detail(request: Request, user_id: int, db: Session = Depend
         context=_auth_template_context(
             request,
             dashboard_user=request.state.admin_user,
-            user_detail=_user_admin_view(user, len(reports)),
-            recent_reports=[_report_view(report) for report in reports],
-            recent_emails=[_email_log_view(log) for log in email_logs],
+            active_page="users",
+            detail_user=user,
+            user_reports=[
+                {
+                    "report_type": report.report_type,
+                    "created_at": report.created_at,
+                    "status": "delivered" if report.delivered_at else ("paid" if report.is_paid else report.access_state),
+                }
+                for report in reports
+            ],
+            recent_emails=email_logs,
         ),
     )
 
 
+@app.post("/admin/users/{user_id}")
+@admin_required
+async def admin_user_update(
+    request: Request,
+    user_id: int,
+    name: str = Form(default=""),
+    plan_code: str = Form(default="free"),
+    is_admin: str = Form(default=""),
+    db: Session = Depends(get_db),
+):
+    user = db.query(db_mod.AppUser).filter(db_mod.AppUser.id == user_id).first()
+    if not user:
+        _public_error("Kullanici bulunamadi.", 404)
+    user.name = name.strip() or None
+    user.plan_code = normalize_plan_code(plan_code)
+    user.is_admin = bool(is_admin)
+    user.updated_at = datetime.utcnow()
+    log_action(db, _admin_actor(request), "user_update", "user", user.id, f"plan={user.plan_code} is_admin={user.is_admin}")
+    db.commit()
+    return RedirectResponse(url=f"/admin/users/{user.id}?notice=updated", status_code=303)
+
+
+@app.post("/admin/users/{user_id}/delete")
+@admin_required
+async def admin_user_delete(request: Request, user_id: int, db: Session = Depends(get_db)):
+    user = db.query(db_mod.AppUser).filter(db_mod.AppUser.id == user_id).first()
+    if not user:
+        _public_error("Kullanici bulunamadi.", 404)
+    user.is_active = False
+    user.updated_at = datetime.utcnow()
+    log_action(db, _admin_actor(request), "user_soft_delete", "user", user.id, user.email)
+    db.commit()
+    return RedirectResponse(url="/admin/users?notice=deleted", status_code=303)
+
+
 @app.get("/admin/reports", response_class=HTMLResponse)
 @admin_required
-async def admin_reports(request: Request, db: Session = Depends(get_db), report_type: str = "", user_email: str = ""):
+async def admin_reports(request: Request, db: Session = Depends(get_db), report_type: str = "", user_email: str = "", status: str = "", q: str = "", page: int = 1):
     order_query = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.service_type == "report")
     if report_type.strip():
         order_query = order_query.filter(db_mod.ServiceOrder.product_type == normalize_report_type(report_type))
     if user_email.strip():
         order_query = order_query.filter(db_mod.ServiceOrder.customer_email.ilike(f"%{user_email.strip().lower()}%"))
-    service_reports = order_query.order_by(db_mod.ServiceOrder.created_at.desc()).limit(200).all()
+    search = (q or user_email or "").strip()
+    if search:
+        like = f"%{search.lower()}%"
+        order_query = order_query.filter(or_(db_mod.ServiceOrder.customer_email.ilike(like), db_mod.ServiceOrder.customer_name.ilike(like)))
+    if status.strip():
+        order_query = order_query.filter(db_mod.ServiceOrder.status == status.strip())
+    page = max(int(page or 1), 1)
+    total = order_query.count()
+    service_reports = order_query.order_by(db_mod.ServiceOrder.created_at.desc()).offset((page - 1) * 50).limit(50).all()
 
     legacy_query = db.query(db_mod.GeneratedReport)
     if report_type.strip():
@@ -7410,9 +8874,15 @@ async def admin_reports(request: Request, db: Session = Depends(get_db), report_
         context=_auth_template_context(
             request,
             dashboard_user=request.state.admin_user,
+            active_page="reports",
             reports=[_service_report_row(order) for order in service_reports],
             legacy_reports=legacy_rows,
-            filters={"report_type": report_type, "user_email": user_email},
+            total=total,
+            q=search,
+            status=status,
+            report_type=report_type,
+            page=page,
+            filters={"report_type": report_type, "user_email": user_email, "q": search, "status": status},
         ),
     )
 
@@ -7429,11 +8899,13 @@ async def admin_report_detail(request: Request, report_id: int, db: Session = De
             context=_auth_template_context(
                 request,
                 dashboard_user=request.state.admin_user,
+                active_page="reports",
                 order=order,
                 report=_service_report_row(order),
                 product=_service_order_product(order),
                 payload=_service_order_payload(order),
                 logs=logs,
+                pdf_exists=os.path.exists(f"static/reports/{order.id}.pdf"),
                 notice=notice,
                 error=error,
                 is_service_order=True,
@@ -7444,7 +8916,15 @@ async def admin_report_detail(request: Request, report_id: int, db: Session = De
         _public_error("Rapor bulunamadi.", 404)
     report_view = _report_view(report)
     report_view["user_email"] = report.user.email if report.user else "-"
+    report_view["email"] = report.user.email if report.user else "-"
     report_view["profile_name"] = report.profile.profile_name if report.profile else "-"
+    report_view["full_name"] = report.profile.profile_name if report.profile else "-"
+    report_view["birth_date"] = getattr(report.profile, "birth_date", "") if report.profile else ""
+    report_view["birth_time"] = getattr(report.profile, "birth_time", "") if report.profile else ""
+    report_view["birth_city"] = getattr(report.profile, "birth_place", "") if report.profile else ""
+    report_view["is_gift"] = False
+    report_view["admin_note"] = ""
+    report_view["optional_note"] = ""
     return templates.TemplateResponse(
         request=request,
         name="admin/report_detail.html",
@@ -7454,11 +8934,179 @@ async def admin_report_detail(request: Request, report_id: int, db: Session = De
             report=report_view,
             payload_summary=_report_detail_payload(report.result_payload_json),
             interpretation_summary=_report_detail_payload(report.interpretation_context_json),
+            pdf_exists=os.path.exists(f"static/reports/{report.id}.pdf"),
             is_service_order=False,
             notice=notice,
             error=error,
         ),
     )
+
+
+def _pdf_context_for_service_order(order):
+    product = _service_order_product(order)
+    payload = _service_order_payload(order)
+    lang = str(getattr(order, "user_lang", None) or payload.get("user_lang") or payload.get("lang") or payload.get("language") or "tr").lower()
+    lang = lang if lang in {"tr", "en"} else "tr"
+    draft_text = (getattr(order, "ai_draft_text", None) or "").strip()
+    blocks = []
+    if draft_text:
+        for paragraph in re.split(r"\n\s*\n", draft_text):
+            paragraph = paragraph.strip()
+            if paragraph:
+                blocks.append({"type": "paragraph", "text": paragraph})
+    else:
+        blocks.append({"type": "paragraph", "text": "This section will be filled with report content." if lang == "en" else "Bu bölüm rapor içeriğiyle doldurulacaktır."})
+    planet_names = (
+        ["Sun", "Moon", "Mars", "Mercury", "Jupiter", "Venus", "Saturn", "Rahu", "Ketu"]
+        if lang == "en"
+        else ["Güneş", "Ay", "Mars", "Merkür", "Jüpiter", "Venüs", "Satürn", "Rahu", "Ketu"]
+    )
+    return {
+        "lang": lang,
+        "person_name": order.customer_name or order.customer_email,
+        "birth_date": str(order.birth_date or ""),
+        "birth_time": str(order.birth_time) if order.birth_time else None,
+        "birth_city": order.birth_place or "",
+        "report_label": product.get("title") or order.product_type,
+        "prepared_date": date.today().strftime("%d %B %Y") if lang == "en" else date.today().strftime("%d.%m.%Y"),
+        "chart": {
+            "lagna": "Ã¢â‚¬â€",
+            "moon_sign": "Ã¢â‚¬â€",
+            "moon_house": "Ã¢â‚¬â€",
+            "sun_sign": "Ã¢â‚¬â€",
+            "sun_house": "Ã¢â‚¬â€",
+            "atmakaraka": "Ã¢â‚¬â€",
+            "mahadasha": "Ã¢â‚¬â€",
+            "mahadasha_end": "Ã¢â‚¬â€",
+            "antardasha": "Ã¢â‚¬â€",
+            "planets": [
+                {"name": planet, "sign": "Ã¢â‚¬â€", "house": "Ã¢â‚¬â€", "retrograde": False}
+                for planet in planet_names
+            ],
+        },
+        "report_sections": [
+            {
+                "kicker": "Analysis" if lang == "en" else "Analiz",
+                "title": "Report Content" if lang == "en" else "Rapor İçeriği",
+                "lead": order.optional_note or "",
+                "blocks": blocks,
+            }
+        ],
+        "closing_summary": "Read through all sections carefully." if lang == "en" else "Raporunun tüm bölümlerini dikkatlice oku.",
+        "key_points": [],
+    }
+
+
+@app.post("/admin/reports/{report_id}/generate-pdf")
+@admin_required
+async def admin_generate_pdf(request: Request, report_id: int, db: Session = Depends(get_db)):
+    form_data = await request.form()
+    if not verify_csrf_token(request, form_data.get(CSRF_FORM_FIELD, "")):
+        raise HTTPException(status_code=403, detail="Invalid CSRF token")
+    order = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.id == report_id, db_mod.ServiceOrder.service_type == "report").first()
+    if not order:
+        raise HTTPException(status_code=404)
+    try:
+        output_path = generate_report_pdf(report_id, _pdf_context_for_service_order(order))
+        order.final_pdf_path = output_path
+        order.pdf_status = "ready"
+        log_action(db, _admin_actor(request), "generate_pdf", "report_order", report_id, f"PDF oluşturuldu: {output_path}")
+        db.commit()
+        set_flash(request, "PDF taslağı oluşturuldu.")
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Admin PDF generation failed report_id=%s", report_id)
+        set_flash(request, f"PDF oluşturulamadı: {exc}", "error")
+    return RedirectResponse(f"/admin/reports/{report_id}", status_code=303)
+
+
+@app.get("/admin/reports/{report_id}/pdf-download")
+@admin_required
+async def admin_pdf_download(request: Request, report_id: int, db: Session = Depends(get_db)):
+    pdf_path = f"static/reports/{report_id}.pdf"
+    if not os.path.exists(pdf_path):
+        raise HTTPException(status_code=404)
+    return FileResponse(pdf_path, media_type="application/pdf", filename=f"FocusAstrology_Rapor_{report_id}.pdf")
+
+
+@app.post("/admin/reports/{report_id}/status")
+@admin_required
+async def admin_report_status(request: Request, report_id: int, status: str = Form(...), admin_note: str = Form(default=""), db: Session = Depends(get_db)):
+    allowed = {"pending", "in_progress", "delivered", "refunded", "paid", "draft_ready", "under_review", "ready_to_send"}
+    if status not in allowed:
+        _public_error("Invalid report status.", 400)
+    order = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.id == report_id, db_mod.ServiceOrder.service_type == "report").first()
+    if not order:
+        _public_error("Report order not found.", 404)
+    previous = order.status
+    order.status = status
+    order.admin_note = admin_note.strip() or None
+    order.internal_notes = admin_note.strip() or order.internal_notes
+    if status == "delivered" and not order.delivered_at:
+        order.delivered_at = datetime.utcnow()
+    if status == "delivered" and previous != "delivered":
+        report_type_label = _service_order_product(order).get("title") or order.product_type
+        pdf_path = f"static/reports/{order.id}.pdf"
+        html = render_email(
+            "report_delivery.html",
+            name=order.customer_name or order.customer_email,
+            report_type=report_type_label,
+            consultation_url="https://focusastrology.com/personal-consultation",
+            astrologer_name=get_astrologer_name(db),
+        )
+        _send_logged_email(
+            db,
+            email_type="report_delivery",
+            to_email=order.customer_email,
+            subject=f"Raporunuz hazÃ„Â±r Ã¢â‚¬â€ {report_type_label}",
+            html_body=html,
+            event_type="report_delivery",
+            event_key=f"report_delivery:{order.id}",
+            attachment_path=pdf_path if os.path.exists(pdf_path) else None,
+            attachment_filename=f"FocusAstrology_{order.customer_name or order.id}.pdf",
+        )
+    log_admin_action(db, order, "report_status_update", actor=_admin_actor(request), metadata={"from": previous, "to": status})
+    log_action(db, _admin_actor(request), "report_status_update", "report", order.id, f"{previous}->{status}")
+    db.commit()
+    set_flash(request, "Rapor durumu güncellendi.")
+    return RedirectResponse(url=f"/admin/reports/{order.id}?notice=status_updated", status_code=303)
+
+
+@app.post("/admin/reports/bulk-status")
+@admin_required
+async def admin_reports_bulk_status(request: Request, db: Session = Depends(get_db)):
+    form_data = await request.form()
+    bulk_status = str(form_data.get("bulk_status", "")).strip()
+    report_ids: list[str] = []
+    for raw_id in form_data.getlist("report_ids"):
+        for value in str(raw_id).replace("[", "").replace("]", "").replace("'", "").replace('"', "").split(","):
+            value = value.strip()
+            if value:
+                report_ids.append(value)
+    valid_statuses = {"pending", "in_progress", "delivered", "refunded"}
+    if not bulk_status or bulk_status not in valid_statuses or not report_ids:
+        set_flash(request, "Toplu güncelleme için rapor ve durum seçin.", "error")
+        return RedirectResponse("/admin/reports", status_code=303)
+
+    updated_count = 0
+    for rid in report_ids:
+        try:
+            order = (
+                db.query(db_mod.ServiceOrder)
+                .filter(db_mod.ServiceOrder.id == int(rid), db_mod.ServiceOrder.service_type == "report")
+                .first()
+            )
+            if order:
+                order.status = bulk_status
+                if bulk_status == "delivered" and not order.delivered_at:
+                    order.delivered_at = datetime.utcnow()
+                updated_count += 1
+        except (TypeError, ValueError):
+            continue
+    log_action(db, _admin_actor(request), "bulk_status_update", "report_order", None, f"{updated_count} siparişin durumu '{bulk_status}' olarak güncellendi")
+    db.commit()
+    set_flash(request, f"{updated_count} sipariş güncellendi.")
+    return RedirectResponse("/admin/reports", status_code=303)
 
 
 @app.post("/admin/reports/{report_id}/approve")
@@ -7476,6 +9124,7 @@ async def admin_report_approve(request: Request, report_id: int, db: Session = D
         order.review_started_at = order.review_started_at or now
         order.ready_to_send_at = order.ready_to_send_at or now
         log_admin_action(db, order, "approve_report", actor=_admin_actor(request), metadata={"to": "ready_to_send"})
+        log_action(db, _admin_actor(request), "approve_report", "report", order.id, "ready_to_send")
         db.commit()
     except ValueError as exc:
         return RedirectResponse(url=f"/admin/reports/{order.id}?error={urlencode({'message': str(exc)})}", status_code=303)
@@ -7491,6 +9140,7 @@ async def admin_report_send(request: Request, report_id: int, db: Session = Depe
     try:
         tasks = enqueue_final_report_delivery_tasks(order)
         log_admin_action(db, order, "send_final_report_queued", actor=_admin_actor(request), metadata={"tasks": tasks})
+        log_action(db, _admin_actor(request), "send_final_report_queued", "report", order.id, json.dumps(tasks, default=str))
         db.commit()
     except ValueError as exc:
         return RedirectResponse(url=f"/admin/reports/{order.id}?error={urlencode({'message': str(exc)})}", status_code=303)
@@ -7511,6 +9161,7 @@ async def admin_report_regenerate(request: Request, report_id: int, db: Session 
         order.last_task_error = None
         task = generate_ai_draft_task.delay(order.id)
         log_admin_action(db, order, "regenerate_report_queued", actor=_admin_actor(request), metadata={"task_id": task.id})
+        log_action(db, _admin_actor(request), "regenerate_report_queued", "report", order.id, task.id)
         db.commit()
     except ValueError as exc:
         return RedirectResponse(url=f"/admin/reports/{order.id}?error={urlencode({'message': str(exc)})}", status_code=303)
@@ -7519,21 +9170,55 @@ async def admin_report_regenerate(request: Request, report_id: int, db: Session 
 
 @app.get("/admin/consultations", response_class=HTMLResponse)
 @admin_required
-async def admin_consultations(request: Request, db: Session = Depends(get_db), status: str = ""):
+async def admin_consultations(request: Request, db: Session = Depends(get_db), status: str = "", q: str = "", page: int = 1):
     query = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.service_type == "consultation")
     if status.strip():
         query = query.filter(db_mod.ServiceOrder.status == status.strip())
-    consultations = query.order_by(db_mod.ServiceOrder.scheduled_start.desc().nullslast(), db_mod.ServiceOrder.created_at.desc()).limit(250).all()
+    if q.strip():
+        like = f"%{q.strip().lower()}%"
+        query = query.filter(or_(db_mod.ServiceOrder.customer_email.ilike(like), db_mod.ServiceOrder.customer_name.ilike(like)))
+    page = max(int(page or 1), 1)
+    total = query.count()
+    consultations = query.order_by(db_mod.ServiceOrder.scheduled_start.desc().nullslast(), db_mod.ServiceOrder.created_at.desc()).offset((page - 1) * 50).limit(50).all()
     return templates.TemplateResponse(
         request=request,
         name="admin/consultations.html",
         context=_auth_template_context(
             request,
             dashboard_user=request.state.admin_user,
+            active_page="consultations",
             consultations=[_consultation_order_row(order) for order in consultations],
+            total=total,
+            q=q,
+            status=status,
+            page=page,
             filters={"status": status},
         ),
     )
+
+
+@app.post("/admin/consultations/{consultation_id}/status")
+@admin_required
+async def admin_consultation_status(request: Request, consultation_id: int, status: str = Form(...), db: Session = Depends(get_db)):
+    allowed = {"pending", "confirmed", "completed", "cancelled", "booking_pending_payment", "paid", "prepared"}
+    if status not in allowed:
+        _public_error("Invalid consultation status.", 400)
+    order = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.id == consultation_id, db_mod.ServiceOrder.service_type == "consultation").first()
+    if not order:
+        _public_error("Consultation not found.", 404)
+    previous = order.status
+    order.status = status
+    now = datetime.utcnow()
+    if status == "confirmed" and not order.confirmed_at:
+        order.confirmed_at = now
+    if status == "prepared" and not order.prepared_at:
+        order.prepared_at = now
+    if status == "completed" and not order.completed_at:
+        order.completed_at = now
+    log_admin_action(db, order, "consultation_status_update", actor=_admin_actor(request), metadata={"from": previous, "to": status})
+    log_action(db, _admin_actor(request), "consultation_status_update", "consultation", order.id, f"{previous}->{status}")
+    db.commit()
+    return RedirectResponse(url="/admin/consultations?notice=status_updated", status_code=303)
 
 
 @app.get("/admin/content", response_class=HTMLResponse)
@@ -7640,6 +9325,144 @@ async def admin_content_update(
     return RedirectResponse(url="/admin/content", status_code=303)
 
 
+@app.get("/admin/articles", response_class=HTMLResponse)
+@admin_required
+async def admin_articles(request: Request, db: Session = Depends(get_db)):
+    query = db.query(db_mod.Article)
+    total = query.count()
+    articles = query.order_by(db_mod.Article.updated_at.desc(), db_mod.Article.created_at.desc()).limit(250).all()
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/articles.html",
+        context=_auth_template_context(request, dashboard_user=request.state.admin_user, active_page="articles", articles=articles, total=total),
+    )
+
+
+def _admin_article_categories(db):
+    slugs = [
+        row[0]
+        for row in db.query(db_mod.Article.category).distinct().order_by(db_mod.Article.category.asc()).all()
+        if row[0]
+    ]
+    for fallback in ("general", "vedic-astrology", "transits"):
+        if fallback not in slugs:
+            slugs.append(fallback)
+    return [{"id": slug, "slug": slug} for slug in slugs]
+
+
+@app.get("/admin/articles/new", response_class=HTMLResponse)
+@admin_required
+async def admin_article_new(request: Request, db: Session = Depends(get_db)):
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/article_form.html",
+        context=_auth_template_context(request, dashboard_user=request.state.admin_user, active_page="articles", article=None, mode="new", categories=_admin_article_categories(db)),
+    )
+
+
+@app.post("/admin/articles/new")
+@admin_required
+async def admin_article_create(
+    request: Request,
+    title: str = Form(...),
+    slug: str = Form(default=""),
+    excerpt: str = Form(default=""),
+    content: str = Form(default=""),
+    category_id: str = Form(default="general"),
+    cover_image: str = Form(default=""),
+    reading_time: int = Form(default=4),
+    meta_title: str = Form(default=""),
+    meta_description: str = Form(default=""),
+    is_published: str = Form(default=""),
+    db: Session = Depends(get_db),
+):
+    article = db_mod.Article(
+        title=title.strip(),
+        slug=_unique_article_slug(db, slug.strip() or title.strip()),
+        category=category_id.strip() or "general",
+        excerpt=excerpt.strip(),
+        body=content.strip(),
+        content=content.strip(),
+        cover_image=cover_image.strip() or None,
+        reading_time=reading_time,
+        meta_title=meta_title.strip() or None,
+        meta_description=meta_description.strip() or None,
+        is_published=bool(is_published),
+        published_at=datetime.utcnow() if is_published else None,
+        author_name="Focus Astrology",
+        language="tr",
+    )
+    db.add(article)
+    db.flush()
+    log_action(db, _admin_actor(request), "article_create", "article", article.id, article.title)
+    db.commit()
+    return RedirectResponse(url="/admin/articles?notice=created", status_code=303)
+
+
+@app.get("/admin/articles/{article_id}/edit", response_class=HTMLResponse)
+@admin_required
+async def admin_article_edit(request: Request, article_id: int, db: Session = Depends(get_db)):
+    article = db.query(db_mod.Article).filter(db_mod.Article.id == article_id).first()
+    if not article:
+        _public_error("Article not found.", 404)
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/article_form.html",
+        context=_auth_template_context(request, dashboard_user=request.state.admin_user, active_page="articles", article=article, mode="edit", categories=_admin_article_categories(db)),
+    )
+
+
+@app.post("/admin/articles/{article_id}/edit")
+@admin_required
+async def admin_article_update(
+    request: Request,
+    article_id: int,
+    title: str = Form(...),
+    slug: str = Form(default=""),
+    excerpt: str = Form(default=""),
+    content: str = Form(default=""),
+    category_id: str = Form(default="general"),
+    cover_image: str = Form(default=""),
+    reading_time: int = Form(default=4),
+    meta_title: str = Form(default=""),
+    meta_description: str = Form(default=""),
+    is_published: str = Form(default=""),
+    db: Session = Depends(get_db),
+):
+    article = db.query(db_mod.Article).filter(db_mod.Article.id == article_id).first()
+    if not article:
+        _public_error("Article not found.", 404)
+    article.title = title.strip()
+    article.slug = _unique_article_slug(db, slug.strip() or title.strip(), article_id=article.id)
+    article.category = category_id.strip() or "general"
+    article.excerpt = excerpt.strip()
+    article.body = content.strip()
+    article.content = content.strip()
+    article.cover_image = cover_image.strip() or None
+    article.reading_time = reading_time
+    article.meta_title = meta_title.strip() or None
+    article.meta_description = meta_description.strip() or None
+    article.is_published = bool(is_published)
+    if article.is_published and not article.published_at:
+        article.published_at = datetime.utcnow()
+    article.updated_at = datetime.utcnow()
+    log_action(db, _admin_actor(request), "article_update", "article", article.id, article.title)
+    db.commit()
+    return RedirectResponse(url="/admin/articles?notice=updated", status_code=303)
+
+
+@app.post("/admin/articles/{article_id}/delete")
+@admin_required
+async def admin_article_delete(request: Request, article_id: int, db: Session = Depends(get_db)):
+    article = db.query(db_mod.Article).filter(db_mod.Article.id == article_id).first()
+    if not article:
+        _public_error("Article not found.", 404)
+    log_action(db, _admin_actor(request), "article_delete", "article", article.id, article.title)
+    db.delete(article)
+    db.commit()
+    return RedirectResponse(url="/admin/articles?notice=deleted", status_code=303)
+
+
 @app.get("/admin/billing", response_class=HTMLResponse)
 @admin_required
 async def admin_billing(request: Request, db: Session = Depends(get_db)):
@@ -7679,6 +9502,834 @@ async def admin_emails(request: Request, db: Session = Depends(get_db), status: 
             filters={"status": status, "email_type": email_type, "recipient": recipient},
         ),
     )
+
+
+@app.get("/admin/faq", response_class=HTMLResponse)
+@admin_required
+async def admin_faq(request: Request, db: Session = Depends(get_db)):
+    items = db.query(db_mod.FAQItem).order_by(db_mod.FAQItem.category.asc(), db_mod.FAQItem.sort_order.asc(), db_mod.FAQItem.id.asc()).all()
+    faq_by_category = {}
+    for item in items:
+        faq_by_category.setdefault(item.category, []).append(item)
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/faq.html",
+        context=_auth_template_context(
+            request,
+            dashboard_user=request.state.admin_user,
+            active_page="faq",
+            faq_items=items,
+            faq_by_category=faq_by_category,
+            total=len(items),
+        ),
+    )
+
+
+@app.get("/admin/faq/new", response_class=HTMLResponse)
+@admin_required
+async def admin_faq_new(request: Request, db: Session = Depends(get_db)):
+    return templates.TemplateResponse(request=request, name="admin/faq_form.html", context=_auth_template_context(request, dashboard_user=request.state.admin_user, active_page="faq", item=None, mode="new"))
+
+
+@app.post("/admin/faq/new")
+@admin_required
+async def admin_faq_create(
+    request: Request,
+    category: str = Form(...),
+    question_tr: str = Form(...),
+    question_en: str = Form(...),
+    answer_tr: str = Form(...),
+    answer_en: str = Form(...),
+    sort_order: int = Form(default=0),
+    is_published: str = Form(default=""),
+    db: Session = Depends(get_db),
+):
+    item = db_mod.FAQItem(category=category, question_tr=question_tr, question_en=question_en, answer_tr=answer_tr, answer_en=answer_en, sort_order=sort_order, is_published=bool(is_published))
+    db.add(item)
+    db.flush()
+    log_action(db, _admin_actor(request), "faq_create", "faq", item.id, item.question_tr[:120])
+    db.commit()
+    return RedirectResponse(url="/admin/faq?notice=created", status_code=303)
+
+
+@app.get("/admin/faq/{faq_id}/edit", response_class=HTMLResponse)
+@admin_required
+async def admin_faq_edit(request: Request, faq_id: int, db: Session = Depends(get_db)):
+    item = db.query(db_mod.FAQItem).filter(db_mod.FAQItem.id == faq_id).first()
+    if not item:
+        _public_error("FAQ not found.", 404)
+    return templates.TemplateResponse(request=request, name="admin/faq_form.html", context=_auth_template_context(request, dashboard_user=request.state.admin_user, active_page="faq", item=item, mode="edit"))
+
+
+@app.post("/admin/faq/{faq_id}/edit")
+@admin_required
+async def admin_faq_update(
+    request: Request,
+    faq_id: int,
+    category: str = Form(...),
+    question_tr: str = Form(...),
+    question_en: str = Form(...),
+    answer_tr: str = Form(...),
+    answer_en: str = Form(...),
+    sort_order: int = Form(default=0),
+    is_published: str = Form(default=""),
+    db: Session = Depends(get_db),
+):
+    item = db.query(db_mod.FAQItem).filter(db_mod.FAQItem.id == faq_id).first()
+    if not item:
+        _public_error("FAQ not found.", 404)
+    item.category = category
+    item.question_tr = question_tr
+    item.question_en = question_en
+    item.answer_tr = answer_tr
+    item.answer_en = answer_en
+    item.sort_order = sort_order
+    item.is_published = bool(is_published)
+    item.updated_at = datetime.utcnow()
+    log_action(db, _admin_actor(request), "faq_update", "faq", item.id, item.question_tr[:120])
+    db.commit()
+    return RedirectResponse(url="/admin/faq?notice=updated", status_code=303)
+
+
+@app.post("/admin/faq/{faq_id}/delete")
+@admin_required
+async def admin_faq_delete(request: Request, faq_id: int, db: Session = Depends(get_db)):
+    item = db.query(db_mod.FAQItem).filter(db_mod.FAQItem.id == faq_id).first()
+    if not item:
+        _public_error("FAQ not found.", 404)
+    log_action(db, _admin_actor(request), "faq_delete", "faq", item.id, item.question_tr[:120])
+    db.delete(item)
+    db.commit()
+    return RedirectResponse(url="/admin/faq?notice=deleted", status_code=303)
+
+
+@app.get("/admin/gifts", response_class=HTMLResponse)
+@admin_required
+async def admin_gifts(request: Request, db: Session = Depends(get_db)):
+    gifts = db.query(db_mod.ServiceOrder).filter(db_mod.ServiceOrder.service_type == "report", db_mod.ServiceOrder.is_gift.is_(True)).order_by(db_mod.ServiceOrder.created_at.desc()).limit(250).all()
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/gifts.html",
+        context=_auth_template_context(
+            request,
+            dashboard_user=request.state.admin_user,
+            active_page="gifts",
+            gifts=[_service_report_row(order) for order in gifts],
+            total=len(gifts),
+        ),
+    )
+
+
+def _accounting_context(request: Request, **extra):
+    return _auth_template_context(
+        request,
+        dashboard_user=request.state.admin_user,
+        active_page="accounting",
+        accounting_disclaimer="Operational tracking and tax estimates only. This does not replace official accounting, e-invoice, or tax filing advice.",
+        **extra,
+    )
+
+
+def _parse_date_filter(value: str, end_of_day: bool = False):
+    value = str(value or "").strip()
+    if not value:
+        return None
+    try:
+        parsed = datetime.strptime(value, "%Y-%m-%d")
+        if end_of_day:
+            parsed = parsed.replace(hour=23, minute=59, second=59)
+        return parsed
+    except ValueError:
+        return None
+
+
+def _sync_accounting(db):
+    transaction_service.sync_paid_orders(db)
+    reminders_service.create_operational_reminders(db)
+    db.commit()
+
+
+def _accounting_dashboard_trends(transactions):
+    today = datetime.utcnow().date()
+    rows = {
+        today - timedelta(days=offset): {"date": today - timedelta(days=offset), "revenue": Decimal("0.00"), "transactions": 0, "refunds": Decimal("0.00")}
+        for offset in range(29, -1, -1)
+    }
+    for transaction in transactions:
+        paid_at = getattr(transaction, "paid_at", None)
+        if not paid_at:
+            continue
+        day = paid_at.date()
+        if day not in rows:
+            continue
+        rows[day]["revenue"] += _decimal_amount(getattr(transaction, "net_amount", 0))
+        rows[day]["transactions"] += 1
+        rows[day]["refunds"] += _decimal_amount(getattr(transaction, "refunded_amount", 0))
+    return list(rows.values())
+
+
+def _accounting_product_performance(transactions):
+    grouped = defaultdict(lambda: {"product_type": "", "count": 0, "gross": Decimal("0.00"), "net": Decimal("0.00")})
+    for transaction in transactions:
+        key = getattr(transaction, "product_type", None) or getattr(transaction, "service_type", None) or "unknown"
+        grouped[key]["product_type"] = key
+        grouped[key]["count"] += 1
+        grouped[key]["gross"] += _decimal_amount(getattr(transaction, "gross_amount", 0))
+        grouped[key]["net"] += _decimal_amount(getattr(transaction, "net_amount", 0))
+    return sorted(grouped.values(), key=lambda row: row["net"], reverse=True)
+
+
+@app.get("/admin/accounting", response_class=HTMLResponse)
+@admin_required
+async def admin_accounting_dashboard(request: Request, db: Session = Depends(get_db)):
+    _sync_accounting(db)
+    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    month_start = today.replace(day=1)
+    previous_month_day = month_start - timedelta(days=1)
+    trend_start = today - timedelta(days=29)
+    transactions = db.query(db_mod.Transaction).all()
+    trend_transactions = db.query(db_mod.Transaction).filter(db_mod.Transaction.paid_at >= trend_start).all()
+    today_transactions = db.query(db_mod.Transaction).filter(db_mod.Transaction.paid_at >= today).all()
+    month_transactions = db.query(db_mod.Transaction).filter(db_mod.Transaction.paid_at >= month_start).all()
+    tax = tax_service.tax_overview(db, month_transactions)
+    paid_count = db.query(db_mod.Transaction).filter(db_mod.Transaction.payment_status == "paid").count()
+    invoiced_count = db.query(db_mod.Transaction).filter(db_mod.Transaction.invoice_status.in_(["issued", "sent"])).count()
+    invoice_queue_rows, _invoice_queue_summary = invoice_service.invoice_queue_rows(db, tab="ready")
+    missing_billing_customers = (
+        db.query(db_mod.Customer)
+        .join(db_mod.Transaction, db_mod.Transaction.customer_id == db_mod.Customer.id)
+        .filter(db_mod.Transaction.payment_status == "paid")
+        .filter(or_(db_mod.Customer.tax_id.is_(None), db_mod.Customer.billing_address.is_(None)))
+        .distinct()
+        .limit(8)
+        .all()
+    )
+    recent_transactions = db.query(db_mod.Transaction).order_by(db_mod.Transaction.paid_at.desc().nullslast(), db_mod.Transaction.created_at.desc()).limit(8).all()
+    recent_expenses = db.query(db_mod.Expense).order_by(db_mod.Expense.expense_date.desc()).limit(6).all()
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/accounting/dashboard.html",
+        context=_accounting_context(
+            request,
+            today_revenue=tax_service.tax_overview(db, today_transactions)["net_sales"],
+            monthly_revenue=tax["net_sales"],
+            total_transactions=len(transactions),
+            refunded_transactions=db.query(db_mod.Transaction).filter(db_mod.Transaction.payment_status == "refunded").count(),
+            issued_invoices=db.query(db_mod.Invoice).filter(db_mod.Invoice.status.in_(["issued", "sent"])).count(),
+            pending_invoices=db.query(db_mod.Invoice).filter(db_mod.Invoice.status.in_(["draft", "issued"])).count(),
+            invoices_awaiting_send=db.query(db_mod.Invoice).filter(db_mod.Invoice.status.in_(["issued", "sent"]), db_mod.Invoice.pdf_status == "ready", db_mod.Invoice.send_status.in_(["not_sent", "failed"])).count(),
+            uninvoiced_paid_transactions=db.query(db_mod.Transaction).filter(db_mod.Transaction.payment_status == "paid", db_mod.Transaction.invoice_status == "uninvoiced").count(),
+            estimated_vat=tax["estimated_vat"],
+            estimated_tax=tax["estimated_tax"],
+            commission_totals=tax["commission_totals"],
+            net_retained_amount=tax["net_retained"],
+            open_reminders=db.query(db_mod.Reminder).filter(db_mod.Reminder.status == "open").count(),
+            successful_transactions=db.query(db_mod.Transaction).filter(db_mod.Transaction.payment_status == "paid").count(),
+            invoice_coverage=invoice_coverage_ratio(paid_count, invoiced_count),
+            collection_ratio=collection_ratio(tax["gross_sales"], tax["net_sales"]),
+            reminders=db.query(db_mod.Reminder).filter(db_mod.Reminder.status == "open").order_by(db_mod.Reminder.due_date.asc().nullslast()).limit(8).all(),
+            trend_rows=_accounting_dashboard_trends(trend_transactions),
+            invoice_queue=invoice_queue_rows[:8],
+            missing_billing_customers=missing_billing_customers,
+            product_performance=_accounting_product_performance(month_transactions)[:8],
+            recent_transactions=recent_transactions,
+            recent_expenses=recent_expenses,
+            current_month_review=db.query(db_mod.TaxPeriod).filter(db_mod.TaxPeriod.period_key == month_close_service.period_key(today.year, today.month)).first(),
+            previous_month_review=db.query(db_mod.TaxPeriod).filter(db_mod.TaxPeriod.period_key == month_close_service.period_key(previous_month_day.year, previous_month_day.month)).first(),
+            current_month_blockers=len([c for c in month_close_service.readiness_checklist(db, today.year, today.month) if c["state"] == "blocker"]),
+        ),
+    )
+
+
+@app.get("/admin/accounting/month-close", response_class=HTMLResponse)
+@admin_required
+async def admin_accounting_month_close(request: Request, db: Session = Depends(get_db), year: int | None = None, month: int | None = None):
+    _sync_accounting(db)
+    now = datetime.utcnow()
+    target_year = int(year or now.year)
+    target_month = max(1, min(12, int(month or now.month)))
+    period = month_close_service.get_or_create_period(db, target_year, target_month)
+    summary = month_close_service.monthly_summary(db, target_year, target_month)
+    checks = month_close_service.readiness_checklist(db, target_year, target_month)
+    highlights = month_close_service.activity_highlights(db, target_year, target_month)
+    db.commit()
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/accounting/month_close.html",
+        context=_accounting_context(
+            request,
+            year=target_year,
+            month=target_month,
+            period=period,
+            summary=summary,
+            checks=checks,
+            highlights=highlights,
+            blocker_count=len([c for c in checks if c["state"] == "blocker"]),
+            warning_count=len([c for c in checks if c["state"] == "warning"]),
+            export_query=f"year={target_year}&month={target_month}",
+        ),
+    )
+
+
+@app.post("/admin/accounting/month-close/{year}/{month}/mark-reviewed")
+@admin_required
+async def admin_accounting_month_close_mark_reviewed(request: Request, year: int, month: int, db: Session = Depends(get_db)):
+    _sync_accounting(db)
+    form = await request.form()
+    note = str(form.get("notes", "") or "").strip()
+    confirmed = str(form.get("confirm_warnings", "") or "") == "on"
+    result = month_close_service.mark_reviewed(db, year, month, _admin_actor(request), note=note, confirmed=confirmed)
+    if not result["ok"]:
+        db.rollback()
+        set_flash(request, result["reason"], "error")
+        return RedirectResponse(f"/admin/accounting/month-close?year={year}&month={month}", status_code=303)
+    log_action(db, _admin_actor(request), "accounting_month_reviewed", "tax_period", result["period"].id, result["period"].period_key)
+    db.commit()
+    set_flash(request, "Month reviewed for internal operational tracking.")
+    return RedirectResponse(f"/admin/accounting/month-close?year={year}&month={month}", status_code=303)
+
+
+@app.get("/admin/accounting/transactions", response_class=HTMLResponse)
+@admin_required
+async def admin_accounting_transactions(request: Request, db: Session = Depends(get_db), start_date: str = "", end_date: str = "", product_type: str = "", payment_status: str = "", invoice_status: str = ""):
+    _sync_accounting(db)
+    query = transaction_service.filtered_transactions(
+        db,
+        start_date=_parse_date_filter(start_date),
+        end_date=_parse_date_filter(end_date, end_of_day=True),
+        product_type=product_type,
+        payment_status=payment_status,
+        invoice_status=invoice_status,
+    )
+    transactions = query.limit(250).all()
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/accounting/transactions.html",
+        context=_accounting_context(request, transactions=transactions, total=query.count(), start_date=start_date, end_date=end_date, product_type=product_type, payment_status=payment_status, invoice_status=invoice_status),
+    )
+
+
+@app.get("/admin/accounting/transactions/{transaction_id}", response_class=HTMLResponse)
+@admin_required
+async def admin_accounting_transaction_detail(request: Request, transaction_id: int, db: Session = Depends(get_db)):
+    _sync_accounting(db)
+    transaction = db.query(db_mod.Transaction).filter(db_mod.Transaction.id == transaction_id).first()
+    if not transaction:
+        raise HTTPException(status_code=404)
+    invoices = db.query(db_mod.Invoice).filter(db_mod.Invoice.transaction_id == transaction.id).order_by(db_mod.Invoice.created_at.desc()).all()
+    return templates.TemplateResponse(request=request, name="admin/accounting/transaction_detail.html", context=_accounting_context(request, transaction=transaction, invoices=invoices))
+
+
+@app.get("/admin/accounting/invoices", response_class=HTMLResponse)
+@admin_required
+async def admin_accounting_invoices(
+    request: Request,
+    db: Session = Depends(get_db),
+    status: str = "",
+    tab: str = "all",
+    start_date: str = "",
+    end_date: str = "",
+    q: str = "",
+    product_type: str = "",
+    invoice_view: str = "all",
+    invoice_q: str = "",
+    invoice_start_date: str = "",
+    invoice_end_date: str = "",
+):
+    _sync_accounting(db)
+    query = db.query(db_mod.Invoice).order_by(db_mod.Invoice.created_at.desc())
+    if status:
+        query = query.filter(db_mod.Invoice.status == status)
+    if invoice_view == "draft":
+        query = query.filter(db_mod.Invoice.status == "draft")
+    elif invoice_view == "issued":
+        query = query.filter(db_mod.Invoice.status == "issued")
+    elif invoice_view == "pdf_ready":
+        query = query.filter(db_mod.Invoice.pdf_status == "ready")
+    elif invoice_view == "awaiting_send":
+        query = query.filter(db_mod.Invoice.status.in_(["issued", "sent"]), db_mod.Invoice.pdf_status == "ready", db_mod.Invoice.send_status.in_(["not_sent", "failed"]))
+    elif invoice_view == "send_failed":
+        query = query.filter(db_mod.Invoice.send_status == "failed")
+    elif invoice_view == "cancelled":
+        query = query.filter(db_mod.Invoice.status == "cancelled")
+    if invoice_start_date:
+        parsed = _parse_date_filter(invoice_start_date)
+        if parsed:
+            query = query.filter(db_mod.Invoice.created_at >= parsed)
+    if invoice_end_date:
+        parsed = _parse_date_filter(invoice_end_date, end_of_day=True)
+        if parsed:
+            query = query.filter(db_mod.Invoice.created_at <= parsed)
+    if invoice_q:
+        like = f"%{invoice_q.strip().lower()}%"
+        query = query.outerjoin(db_mod.Customer, db_mod.Invoice.customer_id == db_mod.Customer.id).filter(
+            or_(db_mod.Invoice.invoice_number.ilike(like), db_mod.Customer.email.ilike(like), db_mod.Customer.name.ilike(like))
+        )
+    invoices = query.limit(250).all()
+    queue_rows, queue_summary = invoice_service.invoice_queue_rows(
+        db,
+        tab=tab,
+        start_date=_parse_date_filter(start_date),
+        end_date=_parse_date_filter(end_date, end_of_day=True),
+        q=q,
+        product_type=product_type,
+    )
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/accounting/invoices.html",
+        context=_accounting_context(
+            request,
+            invoices=invoices,
+            queue_rows=queue_rows,
+            queue_summary=queue_summary,
+            total=query.count(),
+            status=status,
+            tab=tab or "all",
+            start_date=start_date,
+            end_date=end_date,
+            q=q,
+            product_type=product_type,
+            invoice_view=invoice_view or "all",
+            invoice_q=invoice_q,
+            invoice_start_date=invoice_start_date,
+            invoice_end_date=invoice_end_date,
+            awaiting_send_count=db.query(db_mod.Invoice).filter(db_mod.Invoice.status.in_(["issued", "sent"]), db_mod.Invoice.pdf_status == "ready", db_mod.Invoice.send_status.in_(["not_sent", "failed"])).count(),
+            send_failed_count=db.query(db_mod.Invoice).filter(db_mod.Invoice.send_status == "failed").count(),
+        ),
+    )
+
+
+@app.post("/admin/accounting/invoices/create-draft")
+@admin_required
+async def admin_accounting_invoice_create_draft(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    transaction_id = int(form.get("transaction_id", "0"))
+    transaction = db.query(db_mod.Transaction).filter(db_mod.Transaction.id == transaction_id).first()
+    if not transaction:
+        raise HTTPException(status_code=404)
+    readiness = invoice_service.invoice_readiness(db, transaction)
+    if not readiness["can_create"] and not readiness.get("invoice"):
+        set_flash(request, f"Draft not created: {readiness['label']} ({readiness.get('reason') or 'not ready'}).", "error")
+        return RedirectResponse("/admin/accounting/invoices", status_code=303)
+    invoice = invoice_service.create_draft_invoice(db, transaction_id)
+    log_action(db, _admin_actor(request), "accounting_invoice_draft", "invoice", invoice.id, f"transaction={transaction_id}")
+    db.commit()
+    set_flash(request, "Draft invoice created.")
+    return RedirectResponse(f"/admin/accounting/invoices/{invoice.id}", status_code=303)
+
+
+@app.post("/admin/accounting/invoices/bulk")
+@admin_required
+async def admin_accounting_invoice_bulk(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    action = str(form.get("bulk_action", "")).strip()
+    transaction_ids = [value for value in form.getlist("transaction_ids") if str(value).strip()]
+    if action != "create_drafts" or not transaction_ids:
+        set_flash(request, "Select ready transactions and a bulk action.", "error")
+        return RedirectResponse("/admin/accounting/invoices", status_code=303)
+    result = invoice_service.create_drafts_for_ready_transactions(db, transaction_ids)
+    for invoice in result["created"]:
+        log_action(db, _admin_actor(request), "accounting_invoice_bulk_draft", "invoice", invoice.id, f"transaction={invoice.transaction_id}")
+    db.commit()
+    set_flash(request, f"{len(result['created'])} draft invoice(s) created. {len(result['skipped'])} skipped.")
+    return RedirectResponse("/admin/accounting/invoices?tab=draft_exists", status_code=303)
+
+
+@app.post("/admin/accounting/transactions/{transaction_id}/billing-info")
+@admin_required
+async def admin_accounting_transaction_billing_info(request: Request, transaction_id: int, db: Session = Depends(get_db)):
+    form = await request.form()
+    return_to = str(form.get("return_to", "") or "").strip() or "/admin/accounting/invoices"
+    if not return_to.startswith("/admin/accounting/invoices"):
+        return_to = "/admin/accounting/invoices"
+    result = invoice_service.update_customer_billing_info(db, transaction_id, form)
+    if not result["ok"]:
+        set_flash(request, "Billing info not saved: " + " ".join(result["errors"]), "error")
+        return RedirectResponse(return_to, status_code=303)
+    readiness = result["readiness"]
+    log_action(db, _admin_actor(request), "accounting_customer_billing_update", "transaction", transaction_id, readiness["status"])
+    db.commit()
+    if readiness["can_create"]:
+        set_flash(request, "Billing info saved. Transaction is now ready to invoice.")
+        if "tab=missing_info" in return_to or "tab=blocked" in return_to:
+            return_to = "/admin/accounting/invoices?tab=ready"
+    else:
+        set_flash(request, f"Billing info saved. Current state: {readiness['label']}.")
+    return RedirectResponse(return_to, status_code=303)
+
+
+@app.get("/admin/accounting/invoices/{invoice_id}", response_class=HTMLResponse)
+@admin_required
+async def admin_accounting_invoice_detail(request: Request, invoice_id: int, db: Session = Depends(get_db)):
+    invoice = db.query(db_mod.Invoice).filter(db_mod.Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404)
+    return templates.TemplateResponse(request=request, name="admin/accounting/invoice_detail.html", context=_accounting_context(request, invoice=invoice))
+
+
+@app.post("/admin/accounting/invoices/{invoice_id}/{action}")
+@admin_required
+async def admin_accounting_invoice_action(request: Request, invoice_id: int, action: str, db: Session = Depends(get_db)):
+    flash_message = f"Invoice {action} completed."
+    flash_level = "success"
+    if action == "issue":
+        invoice = invoice_service.issue_invoice(db, invoice_id)
+        flash_message = "Invoice issued."
+    elif action == "generate-pdf":
+        invoice = db.query(db_mod.Invoice).filter(db_mod.Invoice.id == invoice_id).first()
+        if not invoice:
+            raise HTTPException(status_code=404)
+        try:
+            invoice_service.generate_invoice_pdf(invoice, BASE_DIR)
+            flash_message = "Invoice PDF generated."
+        except Exception:
+            logger.exception("Invoice PDF generation failed invoice_id=%s", invoice_id)
+            flash_level = "error"
+            flash_message = f"PDF generation failed: {invoice.pdf_error_message or 'Unknown error'}"
+    elif action in {"send", "retry-send"}:
+        invoice = db.query(db_mod.Invoice).filter(db_mod.Invoice.id == invoice_id).first()
+        if not invoice:
+            raise HTTPException(status_code=404)
+        if invoice_service.send_invoice_email(invoice, send_email):
+            flash_message = "Invoice sent to customer."
+        else:
+            flash_level = "error"
+            flash_message = f"Invoice send failed: {invoice.send_error_message or 'Unknown error'}"
+    elif action == "cancel":
+        invoice = invoice_service.cancel_invoice(db, invoice_id)
+        flash_message = "Invoice cancelled."
+    else:
+        raise HTTPException(status_code=404)
+    log_action(db, _admin_actor(request), f"accounting_invoice_{action}", "invoice", invoice.id, invoice.invoice_number or "")
+    db.commit()
+    set_flash(request, flash_message, flash_level)
+    return RedirectResponse(f"/admin/accounting/invoices/{invoice.id}", status_code=303)
+
+
+@app.get("/admin/accounting/invoices/{invoice_id}/download")
+@admin_required
+async def admin_accounting_invoice_download(request: Request, invoice_id: int, db: Session = Depends(get_db)):
+    invoice = db.query(db_mod.Invoice).filter(db_mod.Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404)
+    if invoice.pdf_status != "ready" or not invoice.pdf_path or not os.path.exists(invoice.pdf_path):
+        set_flash(request, "PDF is not ready yet. Generate the PDF first.", "error")
+        return RedirectResponse(f"/admin/accounting/invoices/{invoice.id}", status_code=303)
+    return FileResponse(invoice.pdf_path, media_type="application/pdf", filename=f"invoice-{invoice.id}.pdf")
+
+
+@app.get("/admin/accounting/taxes", response_class=HTMLResponse)
+@admin_required
+async def admin_accounting_taxes(request: Request, db: Session = Depends(get_db)):
+    _sync_accounting(db)
+    overview = tax_service.tax_overview(db)
+    return templates.TemplateResponse(request=request, name="admin/accounting/tax_overview.html", context=_accounting_context(request, overview=overview))
+
+
+@app.get("/admin/accounting/expenses", response_class=HTMLResponse)
+@admin_required
+async def admin_accounting_expenses(request: Request, db: Session = Depends(get_db)):
+    expenses = db.query(db_mod.Expense).order_by(db_mod.Expense.expense_date.desc()).limit(250).all()
+    return templates.TemplateResponse(request=request, name="admin/accounting/expenses.html", context=_accounting_context(request, expenses=expenses))
+
+
+@app.get("/admin/accounting/documents", response_class=HTMLResponse)
+@admin_required
+async def admin_accounting_documents(
+    request: Request,
+    db: Session = Depends(get_db),
+    year: int | None = None,
+    month: int | None = None,
+    document_type: str = "",
+    status: str = "",
+    q: str = "",
+    start_date: str = "",
+    end_date: str = "",
+    expense_only: bool = False,
+    month_close_only: bool = False,
+):
+    _sync_accounting(db)
+    documents, summary = document_service.archive_documents(
+        db,
+        base_dir=BASE_DIR,
+        year=year,
+        month=month,
+        document_type=document_type,
+        status=status,
+        q=q,
+        start_date=_parse_date_filter(start_date),
+        end_date=_parse_date_filter(end_date, end_of_day=True),
+        expense_only=expense_only,
+        month_close_only=month_close_only,
+    )
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/accounting/documents.html",
+        context=_accounting_context(
+            request,
+            documents=documents,
+            summary=summary,
+            year=year or "",
+            month=month or "",
+            document_type=document_type,
+            status=status,
+            q=q,
+            start_date=start_date,
+            end_date=end_date,
+            expense_only=expense_only,
+            month_close_only=month_close_only,
+        ),
+    )
+
+
+@app.get("/admin/accounting/documents/download")
+@admin_required
+async def admin_accounting_document_download(request: Request, path: str, db: Session = Depends(get_db)):
+    requested = Path(path)
+    if requested.is_absolute():
+        file_path = requested.resolve()
+    else:
+        file_path = (BASE_DIR / path).resolve()
+    allowed_roots = [
+        (BASE_DIR / "static").resolve(),
+    ]
+    if not any(str(file_path).startswith(str(root)) for root in allowed_roots) or not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404)
+    return FileResponse(str(file_path), filename=file_path.name)
+
+
+@app.post("/admin/accounting/expenses")
+@admin_required
+async def admin_accounting_expense_create(request: Request, receipt: UploadFile | None = File(default=None), db: Session = Depends(get_db)):
+    form = await request.form()
+    receipt_path = None
+    if receipt and receipt.filename:
+        safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "-", receipt.filename).strip("-") or "receipt"
+        receipt_dir = BASE_DIR / "static" / "accounting"
+        receipt_dir.mkdir(parents=True, exist_ok=True)
+        receipt_path_obj = receipt_dir / f"{int(time.time())}-{safe_name}"
+        receipt_path_obj.write_bytes(await receipt.read())
+        receipt_path = str(receipt_path_obj.relative_to(BASE_DIR)).replace("\\", "/")
+    expense = db_mod.Expense(
+        supplier=str(form.get("supplier", "")).strip(),
+        category=str(form.get("category", "")).strip(),
+        description=str(form.get("description", "")).strip(),
+        amount=str(form.get("amount", "0")).strip() or "0",
+        vat_amount=str(form.get("vat_amount", "0")).strip() or "0",
+        expense_date=_parse_date_filter(str(form.get("expense_date", ""))) or datetime.utcnow(),
+        receipt_path=receipt_path,
+    )
+    db.add(expense)
+    db.commit()
+    set_flash(request, "Expense recorded.")
+    return RedirectResponse("/admin/accounting/expenses", status_code=303)
+
+
+@app.get("/admin/accounting/exports", response_class=HTMLResponse)
+@admin_required
+async def admin_accounting_exports(request: Request, db: Session = Depends(get_db)):
+    return templates.TemplateResponse(request=request, name="admin/accounting/exports.html", context=_accounting_context(request))
+
+
+@app.get("/admin/accounting/exports/transactions.csv")
+@admin_required
+async def admin_accounting_export_transactions(request: Request, db: Session = Depends(get_db)):
+    _sync_accounting(db)
+    csv_text = accounting_exports.transactions_csv(db.query(db_mod.Transaction).order_by(db_mod.Transaction.paid_at.desc().nullslast()).all())
+    return Response(csv_text, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=transactions.csv"})
+
+
+@app.get("/admin/accounting/exports/monthly.zip")
+@admin_required
+async def admin_accounting_export_monthly(request: Request, db: Session = Depends(get_db), year: int | None = None, month: int | None = None):
+    _sync_accounting(db)
+    transactions_query = db.query(db_mod.Transaction)
+    invoices_query = db.query(db_mod.Invoice)
+    filename = "finance-export.zip"
+    if year and month:
+        start, end = month_close_service.month_bounds(year, month)
+        transactions_query = transactions_query.filter(db_mod.Transaction.paid_at >= start, db_mod.Transaction.paid_at < end)
+        invoices_query = invoices_query.filter(db_mod.Invoice.created_at >= start, db_mod.Invoice.created_at < end)
+        filename = f"finance-export-{int(year):04d}-{int(month):02d}.zip"
+    content = accounting_exports.monthly_finance_zip(transactions=transactions_query.all(), invoices=invoices_query.all())
+    return Response(content, media_type="application/zip", headers={"Content-Disposition": f"attachment; filename={filename}"})
+
+
+@app.get("/admin/accounting/settings", response_class=HTMLResponse)
+@admin_required
+async def admin_accounting_settings(request: Request, db: Session = Depends(get_db)):
+    rates = db.query(db_mod.TaxRate).order_by(db_mod.TaxRate.tax_type.asc(), db_mod.TaxRate.name.asc()).all()
+    return templates.TemplateResponse(request=request, name="admin/accounting/settings.html", context=_accounting_context(request, rates=rates))
+
+
+@app.post("/admin/accounting/settings/tax-rate")
+@admin_required
+async def admin_accounting_tax_rate_create(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    rate = db_mod.TaxRate(name=str(form.get("name", "")).strip(), tax_type=str(form.get("tax_type", "")).strip() or "vat", rate_percent=str(form.get("rate_percent", "0")).strip() or "0")
+    db.add(rate)
+    db.commit()
+    set_flash(request, "Tax rate saved.")
+    return RedirectResponse("/admin/accounting/settings", status_code=303)
+
+
+@app.get("/admin/contact", response_class=HTMLResponse)
+@admin_required
+async def admin_contact(request: Request, db: Session = Depends(get_db)):
+    messages = db.query(db_mod.ContactMessage).order_by(db_mod.ContactMessage.created_at.desc()).limit(200).all()
+    unread = db.query(db_mod.ContactMessage).filter(db_mod.ContactMessage.is_read.is_(False)).count()
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/contact.html",
+        context=_auth_template_context(
+            request,
+            dashboard_user=request.state.admin_user,
+            active_page="contact",
+            messages=messages,
+            unread=unread,
+        ),
+    )
+
+
+@app.post("/admin/contact/{msg_id}/read")
+@admin_required
+async def admin_contact_mark_read(request: Request, msg_id: int, db: Session = Depends(get_db)):
+    msg = db.query(db_mod.ContactMessage).filter(db_mod.ContactMessage.id == msg_id).first()
+    if msg:
+        msg.is_read = True
+        db.commit()
+        set_flash(request, "Mesaj okundu olarak işaretlendi.")
+    return RedirectResponse("/admin/contact", status_code=303)
+
+
+def _flatten_translation_rows(limit=300):
+    rows = []
+    en_root = TRANSLATIONS.get("en", {})
+    tr_root = TRANSLATIONS.get("tr", {})
+    keys = sorted({f"{group}.{key}" for root in (en_root, tr_root) for group, values in root.items() if isinstance(values, Mapping) for key in values.keys()})
+    for full_key in keys[:limit]:
+        group, key = full_key.split(".", 1)
+        rows.append({"key": full_key, "tr": tr_root.get(group, {}).get(key, ""), "en": en_root.get(group, {}).get(key, "")})
+    return rows
+
+
+@app.get("/admin/translations", response_class=HTMLResponse)
+@admin_required
+async def admin_translations(request: Request, db: Session = Depends(get_db)):
+    rows = _flatten_translation_rows()
+    keys = [row["key"] for row in rows]
+    tr_values = {row["key"]: row["tr"] for row in rows}
+    en_values = {row["key"]: row["en"] for row in rows}
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/translations.html",
+        context=_auth_template_context(
+            request,
+            dashboard_user=request.state.admin_user,
+            active_page="translations",
+            translation_rows=rows,
+            keys=keys,
+            tr_values=tr_values,
+            en_values=en_values,
+        ),
+    )
+
+
+@app.post("/admin/translations")
+@admin_required
+async def admin_translations_save(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    changed = 0
+    for field, value in form.items():
+        if "__" not in field:
+            continue
+        lang, full_key = field.split("__", 1)
+        if lang not in {"tr", "en"} or "." not in full_key:
+            continue
+        group, key = full_key.split(".", 1)
+        if group in TRANSLATIONS.get(lang, {}) and key in TRANSLATIONS[lang][group] and TRANSLATIONS[lang][group][key] != value:
+            TRANSLATIONS[lang][group][key] = str(value)
+            changed += 1
+    log_action(db, _admin_actor(request), "translations_update", "translations", None, f"{changed} values updated in memory")
+    db.commit()
+    return RedirectResponse(url="/admin/translations?notice=updated", status_code=303)
+
+
+def _media_rows():
+    rows = []
+    root = BASE_DIR / "static" / "articles"
+    if not root.exists():
+        return rows
+    for path in sorted(root.iterdir(), key=lambda item: item.name.lower()):
+        if path.is_file():
+            size_kb = max(1, path.stat().st_size // 1024)
+            rows.append({"name": path.name, "extension": path.suffix.lower().lstrip(".") or "file", "size_kb": size_kb})
+    return rows
+
+
+@app.get("/admin/media", response_class=HTMLResponse)
+@admin_required
+async def admin_media(request: Request, db: Session = Depends(get_db)):
+    return templates.TemplateResponse(request=request, name="admin/media.html", context=_auth_template_context(request, dashboard_user=request.state.admin_user, active_page="media", files=_media_rows()))
+
+
+@app.post("/admin/media/upload")
+@admin_required
+async def admin_media_upload(request: Request, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    raw_name = Path(file.filename or "upload.bin").name
+    safe_name = re.sub(r"[^a-zA-Z0-9_.-]+", "-", raw_name).strip("-") or "upload.bin"
+    target_dir = BASE_DIR / "static" / "articles"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / safe_name
+    content = await file.read()
+    target.write_bytes(content)
+    log_action(db, _admin_actor(request), "media_upload", "media", None, safe_name)
+    db.commit()
+    return RedirectResponse(url="/admin/media?notice=uploaded", status_code=303)
+
+
+@app.get("/admin/logs", response_class=HTMLResponse)
+@admin_required
+async def admin_logs(request: Request, db: Session = Depends(get_db)):
+    logs = db.query(db_mod.ActivityLog).order_by(db_mod.ActivityLog.created_at.desc()).limit(200).all()
+    return templates.TemplateResponse(request=request, name="admin/logs.html", context=_auth_template_context(request, dashboard_user=request.state.admin_user, active_page="logs", logs=logs))
+
+
+ADMIN_SETTING_LABELS = {
+    "site_instagram_url": "Instagram URL",
+    "site_maintenance_mode": "Maintenance mode",
+    "site_contact_email": "Contact email",
+    "astrologer_name": "Astrologer name",
+    "site_report_delivery_days": "Report delivery days",
+}
+
+
+@app.get("/admin/settings", response_class=HTMLResponse)
+@admin_required
+async def admin_settings(request: Request, db: Session = Depends(get_db)):
+    existing = {row.key: row.value for row in db.query(db_mod.SiteSetting).all()}
+    defaults = {"site_instagram_url": "", "site_maintenance_mode": "false", "site_contact_email": "info@focusastrology.com", "astrologer_name": "", "site_report_delivery_days": "7"}
+    settings = {key: existing.get(key, defaults[key]) for key in ADMIN_SETTING_LABELS}
+    return templates.TemplateResponse(request=request, name="admin/settings.html", context=_auth_template_context(request, dashboard_user=request.state.admin_user, active_page="settings", settings=settings, settings_labels=ADMIN_SETTING_LABELS))
+
+
+@app.post("/admin/settings")
+@admin_required
+async def admin_settings_save(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    for key in ADMIN_SETTING_LABELS:
+        row = db.query(db_mod.SiteSetting).filter(db_mod.SiteSetting.key == key).first()
+        if not row:
+            row = db_mod.SiteSetting(key=key)
+            db.add(row)
+        if key == "site_maintenance_mode":
+            row.value = "true" if key in form else "false"
+        else:
+            row.value = str(form.get(key, ""))
+        row.updated_at = datetime.utcnow()
+    log_action(db, _admin_actor(request), "settings_update", "settings", None, "site settings updated")
+    db.commit()
+    return RedirectResponse(url="/admin/settings?notice=updated", status_code=303)
 
 
 @app.get("/admin/analytics", response_class=HTMLResponse)
@@ -8200,6 +10851,650 @@ async def admin_insights(request: Request, db: Session = Depends(get_db)):
         _public_error("Admin insights sayfasi yuklenemedi.", 500)
 
 
+@app.get("/admin/ai-rules", response_class=HTMLResponse)
+@admin_required
+async def admin_ai_rules(request: Request, db: Session = Depends(get_db)):
+    ai_behavior_rules.ensure_default_rule_set(db, admin_user=get_request_user(request, db))
+    db.commit()
+    rule_set = ai_behavior_rules.get_active_rule_set(db)
+    rules = db.query(db_mod.AiBehaviorRule).filter(db_mod.AiBehaviorRule.rule_set_id == rule_set.id).order_by(db_mod.AiBehaviorRule.sort_order.asc(), db_mod.AiBehaviorRule.id.asc()).all()
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/ai_rules.html",
+        context=_auth_template_context(
+            request,
+            dashboard_user=request.state.admin_user,
+            active_page="ai_rules",
+            rule_set=rule_set,
+            sections=ai_behavior_rules.group_rules_by_section(rules),
+            immutable_rules=ai_behavior_rules.IMMUTABLE_GROUNDING_RULES,
+            prompt_block=ai_behavior_rules.build_prompt_rule_blocks(active_rules=[rule for rule in rules if rule.is_enabled])["prompt_block"],
+        ),
+    )
+
+
+@app.post("/admin/ai-rules", response_class=HTMLResponse)
+@admin_required
+async def admin_ai_rules_update(request: Request, db: Session = Depends(get_db), csrf_token: str = Form(default="")):
+    await validate_csrf_token(request, csrf_token)
+    form = await request.form()
+    ai_behavior_rules.update_rules_from_form(db, form)
+    db.commit()
+    rule_set = ai_behavior_rules.get_active_rule_set(db)
+    rules = db.query(db_mod.AiBehaviorRule).filter(db_mod.AiBehaviorRule.rule_set_id == rule_set.id).order_by(db_mod.AiBehaviorRule.sort_order.asc(), db_mod.AiBehaviorRule.id.asc()).all()
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/ai_rules.html",
+        context=_auth_template_context(
+            request,
+            dashboard_user=request.state.admin_user,
+            active_page="ai_rules",
+            rule_set=rule_set,
+            sections=ai_behavior_rules.group_rules_by_section(rules),
+            immutable_rules=ai_behavior_rules.IMMUTABLE_GROUNDING_RULES,
+            prompt_block=ai_behavior_rules.build_prompt_rule_blocks(active_rules=[rule for rule in rules if rule.is_enabled])["prompt_block"],
+            notice="AI behavior rules updated.",
+        ),
+    )
+
+
+def _workspace_report_options():
+    return [
+        {"value": key, "label": label}
+        for key, label in astro_workspace.PUBLIC_WORKSPACE_REPORT_TYPES.items()
+    ]
+
+
+def _workspace_profile_payload(prefix, form):
+    key_prefix = f"{prefix}_" if prefix else ""
+    return {
+        "full_name": form.get(f"{key_prefix}full_name"),
+        "gender": form.get(f"{key_prefix}gender"),
+        "birth_date": form.get(f"{key_prefix}birth_date"),
+        "birth_time": form.get(f"{key_prefix}birth_time"),
+        "birth_place_label": form.get(f"{key_prefix}birth_place_label"),
+        "birth_country": form.get(f"{key_prefix}birth_country"),
+        "birth_city": form.get(f"{key_prefix}birth_city") or form.get(f"{key_prefix}birth_place_label"),
+        "resolved_birth_place": form.get(f"{key_prefix}resolved_birth_place") or form.get(f"{key_prefix}birth_place_label"),
+        "resolved_latitude": form.get(f"{key_prefix}resolved_latitude"),
+        "resolved_longitude": form.get(f"{key_prefix}resolved_longitude"),
+        "resolved_timezone": form.get(f"{key_prefix}resolved_timezone"),
+        "resolved_geocode_provider": form.get(f"{key_prefix}resolved_geocode_provider"),
+        "resolved_geocode_confidence": form.get(f"{key_prefix}resolved_geocode_confidence"),
+        "notes": form.get(f"{key_prefix}notes"),
+        "is_favorite": form.get(f"{key_prefix}is_favorite") in {"1", "true", "on", "yes"},
+    }
+
+
+def _workspace_profile_from_saved(profile):
+    return {
+        "full_name": profile.full_name,
+        "gender": profile.gender,
+        "birth_date": profile.birth_date,
+        "birth_time": profile.birth_time,
+        "birth_place_label": profile.birth_place_label,
+        "birth_country": profile.birth_country,
+        "birth_city": profile.birth_city or profile.birth_place_label,
+        "notes": profile.notes,
+        "is_favorite": bool(profile.is_favorite),
+    }
+
+
+def _workspace_form_flag(form, key):
+    return str(form.get(key) or "").strip().lower() in {"1", "true", "on", "yes"}
+
+
+def _workspace_birth_context_from_profile_payload(payload, existing_profile=None):
+    date_value = f"{payload['birth_date']}T{payload['birth_time']}"
+    if existing_profile and existing_profile.birth_lat is not None and existing_profile.birth_lng is not None and existing_profile.birth_timezone:
+        return _build_birth_context_from_saved_fields(
+            date_value,
+            raw_birth_place_input=existing_profile.birth_place_label,
+            normalized_birth_place=existing_profile.birth_city or existing_profile.birth_place_label,
+            latitude=existing_profile.birth_lat,
+            longitude=existing_profile.birth_lng,
+            timezone=existing_profile.birth_timezone,
+            geocode_provider="internal_profile",
+            geocode_confidence=None,
+            fallback_place_text=existing_profile.birth_place_label,
+        )
+    has_resolved_payload = all(
+        value not in (None, "")
+        for value in (
+            payload.get("resolved_birth_place"),
+            payload.get("resolved_latitude"),
+            payload.get("resolved_longitude"),
+            payload.get("resolved_timezone"),
+        )
+    )
+    if not has_resolved_payload:
+        raise ValueError("Select the birth location from the dropdown suggestions to resolve coordinates and timezone.")
+    return _build_birth_context_from_saved_fields(
+        date_value,
+        raw_birth_place_input=payload.get("birth_city") or payload.get("birth_place_label"),
+        normalized_birth_place=payload.get("resolved_birth_place") or payload.get("birth_place_label"),
+        latitude=float(payload["resolved_latitude"]),
+        longitude=float(payload["resolved_longitude"]),
+        timezone=str(payload["resolved_timezone"]).strip(),
+        geocode_provider=(payload.get("resolved_geocode_provider") or "suggestion_selection").strip(),
+        geocode_confidence=float(payload["resolved_geocode_confidence"]) if payload.get("resolved_geocode_confidence") not in (None, "") else None,
+        fallback_place_text=payload.get("birth_place_label") or payload.get("birth_city"),
+    )
+
+
+def _prepare_admin_workspace_generation(db, form, admin_user, language="tr"):
+    report_type = astro_workspace.normalize_workspace_report_type(form.get("report_type"))
+    save_profile_requested = _workspace_form_flag(form, "save_profile")
+    debug_signals_requested = _workspace_form_flag(form, "debug_signals")
+    primary_existing = None
+    secondary_existing = None
+    primary_profile_id = str(form.get("profile_id") or "").strip()
+    secondary_profile_id = str(form.get("secondary_profile_id") or "").strip()
+    if primary_profile_id:
+        primary_existing = db.query(db_mod.InternalProfile).filter(db_mod.InternalProfile.id == int(primary_profile_id)).first()
+        if not primary_existing:
+            _public_error("Internal profile not found.", 404)
+        primary_payload = _workspace_profile_from_saved(primary_existing)
+    else:
+        primary_payload = astro_workspace.normalize_profile_input(_workspace_profile_payload("", form))
+
+    if report_type == "parent_child":
+        if secondary_profile_id:
+            secondary_existing = db.query(db_mod.InternalProfile).filter(db_mod.InternalProfile.id == int(secondary_profile_id)).first()
+            if not secondary_existing:
+                _public_error("Secondary internal profile not found.", 404)
+            secondary_payload = _workspace_profile_from_saved(secondary_existing)
+        else:
+            secondary_raw_payload = _workspace_profile_payload("secondary", form)
+            has_secondary_input = any(
+                str(secondary_raw_payload.get(field) or "").strip()
+                for field in ("full_name", "birth_date", "birth_time", "birth_city", "birth_place_label")
+            )
+            if not has_secondary_input:
+                raise ValueError("Parent-child report requires a secondary child profile with resolved birth details.")
+            secondary_payload = astro_workspace.normalize_profile_input(_workspace_profile_payload("secondary", form))
+    else:
+        secondary_payload = None
+
+    primary_birth_context = _workspace_birth_context_from_profile_payload(primary_payload, primary_existing)
+    primary_bundle = _calculate_chart_bundle_from_birth_context(primary_birth_context)
+    primary_bundle["name"] = primary_payload.get("full_name") or "Primary Profile"
+    primary_profile_record = primary_existing
+    secondary_profile_record = secondary_existing
+
+    if save_profile_requested and not primary_profile_record:
+        primary_profile_record = astro_workspace.create_or_update_internal_profile(
+            db,
+            primary_payload,
+            admin_user=admin_user,
+            location_payload=primary_birth_context,
+        )
+
+    secondary_bundle = None
+    secondary_birth_context = None
+    interpretation_context = primary_bundle.get("interpretation_context") or {}
+    if report_type == "parent_child":
+        secondary_birth_context = _workspace_birth_context_from_profile_payload(secondary_payload, secondary_existing)
+        secondary_bundle = _calculate_chart_bundle_from_birth_context(secondary_birth_context)
+        secondary_bundle["name"] = secondary_payload.get("full_name") or "Secondary Profile"
+        interpretation_context = build_parent_child_interpretation(primary_bundle, secondary_bundle)
+        interpretation_context = _localize_result_layer_text(interpretation_context, language)
+    interpretation_context = dict(interpretation_context or {})
+    if debug_signals_requested:
+        interpretation_context["debug_signals"] = True
+
+    payload = astro_workspace.build_ai_payload(
+        report_type=report_type,
+        primary_profile=primary_payload,
+        primary_bundle=primary_bundle,
+        secondary_profile=secondary_payload,
+        secondary_bundle=secondary_bundle,
+        interpretation_context=interpretation_context,
+        language=language,
+    )
+    return {
+        "report_type": report_type,
+        "primary_payload": primary_payload,
+        "secondary_payload": secondary_payload,
+        "primary_profile": primary_profile_record,
+        "secondary_profile": secondary_profile_record,
+        "primary_birth_context": primary_birth_context,
+        "secondary_birth_context": secondary_birth_context,
+        "payload": _serialize_temporal_values(payload),
+    }
+
+
+def _internal_pdf_context(request, payload, interpretation_text):
+    pdf_payload = dict(payload or {})
+    if request is not None:
+        pdf_payload["language"] = pdf_payload.get("language") or _result_language(request)
+    pdf_payload["ai_interpretation"] = interpretation_text
+    context = _filter_report_context(_prepare_report_context(pdf_payload))
+    context["request"] = request
+    context["show_ai_interpretation"] = True
+    context["show_pdf_download"] = False
+    context["report_access"] = {
+        "is_preview": False,
+        "show_unlock_cta": False,
+        "can_view_full_report": True,
+        "can_download_pdf": True,
+        "show_login_hint": False,
+        "unlock_success": False,
+        "access_label": "Internal" if context.get("language") == "en" else "İç kullanım",
+    }
+    return context
+
+
+def _workspace_chat_form_from_profiles(profile, secondary_profile=None, report_type="career"):
+    form = {
+        "report_type": "parent_child" if secondary_profile else astro_workspace.normalize_workspace_report_type(report_type),
+        "profile_id": str(profile.id),
+    }
+    if secondary_profile:
+        form["secondary_profile_id"] = str(secondary_profile.id)
+    return form
+
+
+def _workspace_chat_context_payload(db, session, admin_user):
+    profile = getattr(session, "profile", None)
+    if not profile:
+        raise ValueError("Select an internal profile before asking a chart question.")
+    prepared = _prepare_admin_workspace_generation(
+        db,
+        _workspace_chat_form_from_profiles(
+            profile,
+            getattr(session, "secondary_profile", None),
+            getattr(session, "report_type", None) or "career",
+        ),
+        admin_user,
+    )
+    payload = dict(prepared["payload"])
+    payload["chat_session_id"] = session.id
+    payload["chat_mode"] = astro_chat.normalize_chat_mode(getattr(session, "mode", None))
+    return payload
+
+
+def _chat_session_or_404(db, session_id):
+    session = db.query(db_mod.InternalChatSession).filter(db_mod.InternalChatSession.id == int(session_id)).first()
+    if not session:
+        _public_error("Internal chat session not found.", 404)
+    return session
+
+
+def _create_chat_session_from_form(db, form, admin_user):
+    profile_id = str(form.get("profile_id") or "").strip()
+    if not profile_id:
+        _public_error("Select an internal profile before asking a chart question.", 400)
+    profile = db.query(db_mod.InternalProfile).filter(db_mod.InternalProfile.id == int(profile_id)).first()
+    if not profile:
+        _public_error("Internal profile not found.", 404)
+    secondary_profile = None
+    secondary_profile_id = str(form.get("secondary_profile_id") or "").strip()
+    if secondary_profile_id:
+        secondary_profile = db.query(db_mod.InternalProfile).filter(db_mod.InternalProfile.id == int(secondary_profile_id)).first()
+        if not secondary_profile:
+            _public_error("Secondary internal profile not found.", 404)
+    session = astro_chat.create_chat_session(
+        db,
+        profile=profile,
+        secondary_profile=secondary_profile,
+        title=form.get("title"),
+        report_type=form.get("report_type") or ("parent_child" if secondary_profile else "career"),
+        mode=form.get("mode"),
+        admin_user=admin_user,
+    )
+    db.flush()
+    return session
+
+
+def _render_admin_astro_chat(request, db, *, session=None, selected_profile=None, result=None):
+    profiles = astro_workspace.list_internal_profiles(db)
+    sessions = db.query(db_mod.InternalChatSession).order_by(db_mod.InternalChatSession.updated_at.desc()).limit(30).all()
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/astro_workspace_chat.html",
+        context=_auth_template_context(
+            request,
+            dashboard_user=request.state.admin_user,
+            active_page="astro_workspace",
+            profiles=profiles,
+            sessions=sessions,
+            chat_session=session,
+            selected_profile=selected_profile or getattr(session, "profile", None),
+            chat_modes=astro_chat.CHAT_MODES,
+            report_options=_workspace_report_options(),
+            result=result,
+        ),
+    )
+
+
+def _generate_chat_reply_for_session(db, request, session, question, admin_user):
+    question = str(question or "").strip()
+    if not question:
+        _public_error("Chat question is required.", 400)
+    chart_payload = _workspace_chat_context_payload(db, session, admin_user)
+    behavior_rules = ai_behavior_rules.load_active_rules(db)
+    return astro_chat.create_grounded_reply(
+        db,
+        session=session,
+        question=question,
+        chart_payload=chart_payload,
+        admin_user=admin_user,
+        behavior_rules=behavior_rules,
+    )
+
+
+@app.get("/admin/astro-workspace", response_class=HTMLResponse)
+@admin_required
+async def admin_astro_workspace(request: Request, db: Session = Depends(get_db), profile_id: int | None = None):
+    selected_profile = db.query(db_mod.InternalProfile).filter(db_mod.InternalProfile.id == profile_id).first() if profile_id else None
+    profiles = astro_workspace.list_internal_profiles(db)
+    current_language = _result_language(request, getattr(request.state, "admin_user", None))
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/astro_workspace.html",
+        context=_auth_template_context(
+            request,
+            dashboard_user=request.state.admin_user,
+            active_page="astro_workspace",
+            report_options=_workspace_report_options(),
+            profiles=profiles,
+            form_data=astro_workspace.profile_to_form(selected_profile),
+            gender_options=astro_workspace.gender_options(current_language),
+            current_language=current_language,
+            selected_profile=selected_profile,
+            result=None,
+        ),
+    )
+
+
+@app.post("/admin/astro-workspace/generate", response_class=HTMLResponse)
+@admin_required
+async def admin_astro_workspace_generate(request: Request, db: Session = Depends(get_db), csrf_token: str = Form(default="")):
+    await validate_csrf_token(request, csrf_token)
+    form = await request.form()
+    admin_user = get_request_user(request, db)
+    current_language = _result_language(request, admin_user)
+    try:
+        save_profile_requested = _workspace_form_flag(form, "save_profile")
+        save_report_requested = _workspace_form_flag(form, "save_report") or _workspace_form_flag(form, "save_result")
+        prepared = _prepare_admin_workspace_generation(db, form, admin_user, language=current_language)
+        behavior_rules = ai_behavior_rules.load_active_rules(db)
+        interpretation_text = astro_workspace.generate_workspace_interpretation(
+            prepared["payload"],
+            behavior_rules=behavior_rules,
+        )
+        if save_profile_requested and prepared["primary_profile"]:
+            prepared["primary_profile"] = astro_workspace.create_or_update_internal_profile(
+                db,
+                prepared["primary_payload"],
+                profile=prepared["primary_profile"],
+                admin_user=admin_user,
+                location_payload=prepared.get("primary_birth_context"),
+            )
+        saved_interpretation = None
+        notices = []
+        if save_profile_requested:
+            notices.append("Profile saved.")
+        if save_report_requested:
+            if not str(interpretation_text or "").strip():
+                raise ValueError("Interpretation must be generated before the report can be saved.")
+            if not prepared["primary_profile"]:
+                prepared["primary_profile"] = astro_workspace.create_or_update_internal_profile(
+                    db,
+                    prepared["primary_payload"],
+                    admin_user=admin_user,
+                    location_payload=prepared.get("primary_birth_context"),
+                )
+                notices.append("Report saved with internal profile.")
+            if prepared.get("secondary_payload") and not prepared["secondary_profile"]:
+                prepared["secondary_profile"] = astro_workspace.create_or_update_internal_profile(
+                    db,
+                    prepared["secondary_payload"],
+                    admin_user=admin_user,
+                    location_payload=prepared.get("secondary_birth_context"),
+                )
+            saved_interpretation = astro_workspace.save_internal_interpretation(
+                db,
+                profile=prepared["primary_profile"],
+                secondary_profile=prepared["secondary_profile"],
+                report_type=prepared["report_type"],
+                payload=prepared["payload"],
+                render_context=_internal_pdf_context(request, prepared["payload"], interpretation_text),
+                interpretation_text=interpretation_text,
+                admin_user=admin_user,
+                generation_mode="saved",
+            )
+            if "Report saved with internal profile." not in notices:
+                notices.append("Report saved.")
+        db.commit()
+        if saved_interpretation:
+            db.refresh(saved_interpretation)
+        if prepared.get("primary_profile"):
+            db.refresh(prepared["primary_profile"])
+        profiles = astro_workspace.list_internal_profiles(db)
+        return templates.TemplateResponse(
+            request=request,
+            name="admin/astro_workspace_result.html",
+            context=_auth_template_context(
+                request,
+                dashboard_user=request.state.admin_user,
+                active_page="astro_workspace",
+                report_options=_workspace_report_options(),
+                profiles=profiles,
+                form_data=dict(form),
+                selected_profile=prepared["primary_profile"],
+                gender_options=astro_workspace.gender_options(current_language),
+                current_language=current_language,
+                result={
+                    "report_type": prepared["report_type"],
+                    "payload_json": json.dumps(prepared["payload"], ensure_ascii=False, default=str),
+                    "interpretation_text": interpretation_text,
+                    "interpretation": saved_interpretation,
+                    "notice": " ".join(dict.fromkeys(notices)),
+                },
+            ),
+        )
+    except ValueError as exc:
+        profiles = astro_workspace.list_internal_profiles(db)
+        return templates.TemplateResponse(
+            request=request,
+            name="admin/astro_workspace.html",
+            status_code=400,
+            context=_auth_template_context(
+                request,
+                dashboard_user=request.state.admin_user,
+                active_page="astro_workspace",
+                report_options=_workspace_report_options(),
+                profiles=profiles,
+                form_data=dict(form),
+                gender_options=astro_workspace.gender_options(current_language),
+                current_language=current_language,
+                error=str(exc),
+                result=None,
+            ),
+        )
+
+
+@app.post("/admin/astro-workspace/export")
+@admin_required
+async def admin_astro_workspace_export(
+    request: Request,
+    interpretation_id: int | None = Form(default=None),
+    payload_json: str = Form(default=""),
+    interpretation_text: str = Form(default=""),
+    csrf_token: str = Form(default=""),
+    db: Session = Depends(get_db),
+):
+    await validate_csrf_token(request, csrf_token)
+    interpretation = None
+    if interpretation_id:
+        interpretation = db.query(db_mod.InternalInterpretation).filter(db_mod.InternalInterpretation.id == interpretation_id).first()
+        if not interpretation:
+            _public_error("Internal interpretation not found.", 404)
+        payload = json.loads(interpretation.input_payload_json)
+        interpretation_text = interpretation.interpretation_text
+    else:
+        payload = json.loads(payload_json or "{}")
+    context = _internal_pdf_context(request, payload, interpretation_text)
+    pdf_bytes = _generate_pdf_bytes_from_report(context)
+    if interpretation:
+        output_path = astro_workspace.internal_pdf_output_path(BASE_DIR, interpretation.id)
+        output_path.write_bytes(pdf_bytes)
+        astro_workspace.attach_pdf_path(interpretation, output_path)
+        db.commit()
+    client_name = _sanitize_download_name(context.get("client_name") or "internal-profile", fallback="internal-profile")
+    headers = {"Content-Disposition": f'attachment; filename="{client_name}_internal_astro_{datetime.now().strftime("%Y%m%d")}.pdf"'}
+    return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
+
+
+@app.get("/admin/astro-workspace/chat", response_class=HTMLResponse)
+@admin_required
+async def admin_astro_workspace_chat(
+    request: Request,
+    db: Session = Depends(get_db),
+    session_id: int | None = None,
+    profile_id: int | None = None,
+):
+    session = _chat_session_or_404(db, session_id) if session_id else None
+    selected_profile = db.query(db_mod.InternalProfile).filter(db_mod.InternalProfile.id == profile_id).first() if profile_id else getattr(session, "profile", None)
+    return _render_admin_astro_chat(request, db, session=session, selected_profile=selected_profile)
+
+
+@app.post("/admin/astro-workspace/chat", response_class=HTMLResponse)
+@admin_required
+async def admin_astro_workspace_chat_submit(request: Request, db: Session = Depends(get_db), csrf_token: str = Form(default="")):
+    await validate_csrf_token(request, csrf_token)
+    form = await request.form()
+    admin_user = get_request_user(request, db)
+    question = str(form.get("question") or "").strip()
+    if not question:
+        _public_error("Chat question is required.", 400)
+    session = None
+    session_id = str(form.get("session_id") or "").strip()
+    if session_id:
+        session = _chat_session_or_404(db, session_id)
+        session.mode = astro_chat.normalize_chat_mode(form.get("mode") or session.mode)
+    else:
+        session = _create_chat_session_from_form(db, form, admin_user)
+
+    try:
+        reply = _generate_chat_reply_for_session(db, request, session, question, admin_user)
+        db.commit()
+        db.refresh(session)
+        return _render_admin_astro_chat(request, db, session=session, result=reply)
+    except ValueError as exc:
+        _public_error(str(exc), 400)
+
+
+@app.post("/admin/astro-workspace/chat/sessions", response_class=HTMLResponse)
+@admin_required
+async def admin_astro_workspace_chat_create_session(request: Request, db: Session = Depends(get_db), csrf_token: str = Form(default="")):
+    await validate_csrf_token(request, csrf_token)
+    form = await request.form()
+    admin_user = get_request_user(request, db)
+    session = _create_chat_session_from_form(db, form, admin_user)
+    question = str(form.get("question") or "").strip()
+    result = None
+    if question:
+        result = _generate_chat_reply_for_session(db, request, session, question, admin_user)
+    db.commit()
+    db.refresh(session)
+    return _render_admin_astro_chat(request, db, session=session, result=result)
+
+
+@app.get("/admin/astro-workspace/chat/sessions/{session_id}", response_class=HTMLResponse)
+@admin_required
+async def admin_astro_workspace_chat_session_detail(request: Request, session_id: int, db: Session = Depends(get_db)):
+    session = _chat_session_or_404(db, session_id)
+    return _render_admin_astro_chat(request, db, session=session)
+
+
+@app.post("/admin/astro-workspace/chat/sessions/{session_id}/message", response_class=HTMLResponse)
+@admin_required
+async def admin_astro_workspace_chat_session_message(
+    request: Request,
+    session_id: int,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(default=""),
+):
+    await validate_csrf_token(request, csrf_token)
+    form = await request.form()
+    admin_user = get_request_user(request, db)
+    session = _chat_session_or_404(db, session_id)
+    session.mode = astro_chat.normalize_chat_mode(form.get("mode") or session.mode)
+    result = _generate_chat_reply_for_session(db, request, session, form.get("question"), admin_user)
+    db.commit()
+    db.refresh(session)
+    return _render_admin_astro_chat(request, db, session=session, result=result)
+
+
+@app.get("/admin/astro-workspace/profiles", response_class=HTMLResponse)
+@admin_required
+async def admin_astro_workspace_profiles(request: Request, db: Session = Depends(get_db), q: str = ""):
+    profiles = astro_workspace.list_internal_profiles(db, q)
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/astro_workspace_profiles.html",
+        context=_auth_template_context(
+            request,
+            dashboard_user=request.state.admin_user,
+            active_page="astro_workspace",
+            profiles=profiles,
+            q=q,
+        ),
+    )
+
+
+@app.get("/admin/astro-workspace/profiles/{profile_id}", response_class=HTMLResponse)
+@admin_required
+async def admin_astro_workspace_profile_detail(request: Request, profile_id: int, db: Session = Depends(get_db)):
+    profile = db.query(db_mod.InternalProfile).filter(db_mod.InternalProfile.id == profile_id).first()
+    if not profile:
+        _public_error("Internal profile not found.", 404)
+    interpretations = db.query(db_mod.InternalInterpretation).filter(
+        or_(
+            db_mod.InternalInterpretation.profile_id == profile.id,
+            db_mod.InternalInterpretation.secondary_profile_id == profile.id,
+        )
+    ).order_by(db_mod.InternalInterpretation.created_at.desc()).all()
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/astro_workspace_profile_detail.html",
+        context=_auth_template_context(
+            request,
+            dashboard_user=request.state.admin_user,
+            active_page="astro_workspace",
+            profile=profile,
+            interpretations=astro_workspace.interpretation_history_views(interpretations),
+        ),
+    )
+
+
+@app.post("/admin/astro-workspace/profiles/{profile_id}/favorite")
+@admin_required
+async def admin_astro_workspace_profile_favorite(request: Request, profile_id: int, csrf_token: str = Form(default=""), db: Session = Depends(get_db)):
+    await validate_csrf_token(request, csrf_token)
+    profile = db.query(db_mod.InternalProfile).filter(db_mod.InternalProfile.id == profile_id).first()
+    if not profile:
+        _public_error("Internal profile not found.", 404)
+    profile.is_favorite = not bool(profile.is_favorite)
+    db.commit()
+    return RedirectResponse(url="/admin/astro-workspace/profiles", status_code=303)
+
+
+@app.post("/admin/astro-workspace/profiles/{profile_id}/delete")
+@admin_required
+async def admin_astro_workspace_profile_delete(request: Request, profile_id: int, csrf_token: str = Form(default=""), db: Session = Depends(get_db)):
+    await validate_csrf_token(request, csrf_token)
+    profile = db.query(db_mod.InternalProfile).filter(db_mod.InternalProfile.id == profile_id).first()
+    if not profile:
+        _public_error("Internal profile not found.", 404)
+    db.delete(profile)
+    db.commit()
+    return RedirectResponse(url="/admin/astro-workspace/profiles", status_code=303)
+
+
 @app.get("/admin/segments", response_class=HTMLResponse)
 @admin_required
 async def admin_segments(
@@ -8515,6 +11810,8 @@ async def calculate_from_form(
     csrf_token: str = Form(default=""),
     db: Session = Depends(get_db),
 ):
+    if not launch_free_calculator_enabled():
+        return _coming_soon_template_response(request)
     enforce_rate_limit(request, "calculate", limit=8, window_seconds=600)
     await validate_csrf_token(request, csrf_token)
     try:
@@ -8930,6 +12227,8 @@ async def calculate_from_form(
 
 @app.post("/interpret")
 async def interpret_from_payload(request: Request, payload_json: str | None = Form(default=None), db: Session = Depends(get_db)):
+    if not launch_ai_interpretation_enabled():
+        return _coming_soon_json_response(_result_language(request, get_request_user(request, db)))
     enforce_rate_limit(request, "interpret", limit=8, window_seconds=600)
     await validate_csrf_token(request)
     try:
@@ -8937,7 +12236,7 @@ async def interpret_from_payload(request: Request, payload_json: str | None = Fo
             payload_data = json.loads(payload_json)
         else:
             payload_data = await request.json()
-        payload_data = _serialize_temporal_values(payload_data)
+        payload_data = _attach_astro_signal_context(payload_data)
         current_user = get_request_user(request, db)
         report_id = payload_data.get("generated_report_id")
         if report_id:
@@ -9136,20 +12435,26 @@ async def get_comprehensive_report(
             timing_intelligence,
         )
 
+        ai_payload = _attach_astro_signal_context(
+            {
+                "report_type": "birth_chart_karma",
+                "natal_data": natal_data,
+                "dasha_data": dasha_data,
+                "navamsa_data": navamsa_data,
+                "transit_data": transit_impact,
+                "eclipse_data": eclipse_data,
+                "fullmoon_data": fullmoon_data,
+                "timing_data": timing_intelligence,
+                "psychological_themes": psychological_themes,
+                "life_area_analysis": life_area_analysis,
+                "narrative_analysis": narrative_analysis,
+                "interpretation_context": interpretation_context,
+            },
+            report_type="birth_chart_karma",
+        )
+
         try:
-            ai_insight = ai_logic.generate_interpretation(
-                natal_data=natal_data,
-                dasha_data=dasha_data,
-                navamsa_data=navamsa_data,
-                transit_data=transit_impact,
-                eclipse_data=eclipse_data,
-                fullmoon_data=fullmoon_data,
-                timing_data=timing_intelligence,
-                psychological_themes=psychological_themes,
-                life_area_analysis=life_area_analysis,
-                narrative_analysis=narrative_analysis,
-                interpretation_context=interpretation_context,
-            )
+            ai_insight = ai_logic.generate_interpretation(ai_payload)
         except ai_logic.AIConfigurationError:
             logger.exception("Full report AI configuration error")
             _public_error("AI yorum servisi simdilik hazir degil. Lutfen GEMINI_API_KEY ayarini kontrol edin.", 503)

@@ -1,0 +1,48 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Çeviri Editörü{% endblock %}
+
+{% block admin_content %}
+<div class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Çeviri Editörü</h1>
+    <p class="admin-page-sub">{{ keys|length }} anahtar · Kaynak dosyaya dokunulmaz; değişiklikler runtime override olarak uygulanır</p>
+  </div>
+</div>
+
+<div class="admin-filter-bar" style="margin-bottom:12px;">
+  <input type="text" id="tr-search" placeholder="Anahtar veya metin filtrele..." style="min-width:280px;" oninput="filterRows(this.value)">
+</div>
+
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="admin-table-wrap">
+    <table class="admin-table" id="tr-table">
+      <thead><tr><th style="width:280px;">Anahtar</th><th>Türkçe</th><th>İngilizce</th></tr></thead>
+      <tbody>
+        {% for key in keys %}
+        <tr data-key="{{ key }}">
+          <td style="font-family:monospace; font-size:.78rem; color:var(--muted);">{{ key }}</td>
+          <td><input type="text" name="tr__{{ key }}" value="{{ tr_values.get(key, '') }}" style="width:100%;"></td>
+          <td><input type="text" name="en__{{ key }}" value="{{ en_values.get(key, '') }}" style="width:100%;"></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div style="margin-top:16px; display:flex; gap:10px;">
+    <button class="btn-admin btn-admin-primary" type="submit">Tüm Değişiklikleri Kaydet</button>
+  </div>
+</form>
+
+<script>
+function filterRows(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('#tr-table tbody tr').forEach(function(row) {
+    const key = row.dataset.key.toLowerCase();
+    const cells = row.querySelectorAll('input');
+    const match = key.includes(q) || Array.from(cells).some(function(i) { return i.value.toLowerCase().includes(q); });
+    row.style.display = match ? '' : 'none';
+  });
+}
+</script>
+{% endblock %}

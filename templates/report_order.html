@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 
-{% block title %}{{ product.title }} Talebi{% endblock %}
+{% set lang = language if language is defined and language in ["tr", "en"] else (lang if lang is defined and lang in ["tr", "en"] else (request.state.lang if request is defined and request.state is defined and request.state.lang in ["tr", "en"] else "tr")) %}
+
+{% block title %}{{ product.title }}{{ " Request" if lang == "en" else " Talebi" }}{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -138,7 +140,7 @@
                 {% if error_message %}
                 <div class="order-error" role="alert">{{ error_message }}</div>
                 {% endif %}
-                <form class="order-form" action="{{ order_action or ('/reports/order/' ~ report_type) }}" method="post">
+                <form class="order-form" action="{{ order_action or ('/reports/order/' ~ report_type) }}" method="post" {% if not enable_payments %}data-launch-disabled="1"{% endif %}>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token or csrf_token_for(request) }}">
                     <input type="hidden" name="selected_report_type" value="{{ report_type }}">
                     {% if bundle_type %}
@@ -183,10 +185,17 @@
                         </div>
                     </div>
                     <div class="order-field-full order-actions">
+                        {% if enable_payments %}
                         <button class="btn btn-primary" type="submit">Rapor Talebini Gönder</button>
+                        {% else %}
+                        <button class="btn btn-primary disabled-launch" type="submit" disabled aria-disabled="true">{{ "Available Soon" if lang == "en" else "Yakında Açılacak" }}</button>
+                        {% endif %}
                         <a class="btn btn-secondary" href="/reports">Raporlara Dön</a>
                     </div>
                 </form>
+                {% if not enable_payments %}
+                <p class="launch-inline-note">{{ "The order and payment flow is temporarily paused until launch preparation is complete. For details, you can contact us at " if lang == "en" else "Sipariş ve ödeme akışı lansman hazırlığı tamamlanana kadar geçici olarak kapalıdır. Detaylı bilgi için " }}<a href="mailto:info@focusastrology.com">info@focusastrology.com</a>{{ "." if lang == "en" else " üzerinden bize ulaşabilirsiniz." }}</p>
+                {% endif %}
             </section>
 
             <section class="order-trust" aria-label="Rapor teslim süreci">
@@ -210,5 +219,13 @@
 document.getElementById('is_gift').addEventListener('change', function() {
     document.getElementById('gift-recipient-fields').style.display = this.checked ? 'contents' : 'none';
 });
+const launchLockedOrderForm = document.querySelector('form[data-launch-disabled="1"]');
+if (launchLockedOrderForm) {
+    launchLockedOrderForm.addEventListener('submit', function(event) {
+        event.preventDefault();
+    });
+}
 </script>
 {% endblock %}
+
+

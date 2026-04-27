@@ -1,0 +1,42 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Hediye Kartları{% endblock %}
+
+{% block admin_content %}
+<div class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Hediye Siparişleri</h1>
+    <p class="admin-page-sub">{{ total }} hediye siparişi</p>
+  </div>
+</div>
+
+<div class="admin-table-wrap">
+  <table class="admin-table">
+    <thead><tr>
+      <th>Sipariş Veren</th><th>Hediye Alan</th><th>Rapor Türü</th><th>Tarih</th><th>Durum</th>
+    </tr></thead>
+    <tbody>
+      {% for g in gifts %}
+      <tr>
+        <td>
+          <div>{{ g.full_name or '—' }}</div>
+          <div style="font-size:.75rem; color:var(--muted);">{{ g.email }}</div>
+        </td>
+        <td>
+          <div>{{ g.gift_recipient_name or '—' }}</div>
+          <div style="font-size:.75rem; color:var(--muted);">{{ g.gift_recipient_email or '—' }}</div>
+        </td>
+        <td><span class="badge badge-muted">{{ g.report_type }}</span></td>
+        <td style="font-size:.8rem; color:var(--muted);">{{ g.created_at }}</td>
+        <td>
+          {% if g.status == 'pending' %}<span class="badge badge-warning">Bekliyor</span>
+          {% elif g.status == 'delivered' %}<span class="badge badge-success">Teslim</span>
+          {% else %}<span class="badge badge-muted">{{ g.status }}</span>{% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" style="color:var(--muted); text-align:center; padding:32px;">Hediye siparişi yok</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
