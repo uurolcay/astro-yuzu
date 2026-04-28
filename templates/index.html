@@ -520,9 +520,10 @@
             </div>
 
                         <section class="section-shell hero-panel">
-                <div class="hero-layout{% if launch_mode %} hero-launch-layout{% endif %}">
-                    <div class="hero-copy{% if launch_mode %} hero-copy--launch{% endif %}">
-                        {% if launch_mode %}
+                <!-- LAUNCH_DEBUG launch_mode={{ launch_mode }} enable_payments={{ enable_payments }} enable_free_calculator={{ enable_free_calculator }} -->
+                <div class="hero-layout{% if launch_mode or not enable_payments or not enable_free_calculator %} hero-launch-layout{% endif %}">
+                    <div class="hero-copy{% if launch_mode or not enable_payments or not enable_free_calculator %} hero-copy--launch{% endif %}">
+                        {% if launch_mode or not enable_payments or not enable_free_calculator %}
                         {% set coming_soon_variant = "notice" %}
                         {% include "components/coming_soon_panel.html" %}
                         {% else %}

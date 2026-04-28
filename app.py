@@ -110,6 +110,12 @@ except ImportError:
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
 
+LAUNCH_MODE = os.getenv("LAUNCH_MODE", "true").lower() == "true"
+ENABLE_PAYMENTS = os.getenv("ENABLE_PAYMENTS", "false").lower() == "true"
+ENABLE_FREE_CALCULATOR = os.getenv("ENABLE_FREE_CALCULATOR", "false").lower() == "true"
+ENABLE_AI_INTERPRETATION = os.getenv("ENABLE_AI_INTERPRETATION", "false").lower() == "true"
+ENABLE_CONSULTATION_BOOKING = os.getenv("ENABLE_CONSULTATION_BOOKING", "false").lower() == "true"
+
 
 def _env_flag_value(name, default=False):
     raw = str(os.getenv(name, "true" if default else "false")).strip().lower()
@@ -117,23 +123,23 @@ def _env_flag_value(name, default=False):
 
 
 def launch_mode_enabled():
-    return _env_flag_value("LAUNCH_MODE", default=False)
+    return LAUNCH_MODE
 
 
 def launch_payments_enabled():
-    return _env_flag_value("ENABLE_PAYMENTS", default=True)
+    return ENABLE_PAYMENTS
 
 
 def launch_free_calculator_enabled():
-    return _env_flag_value("ENABLE_FREE_CALCULATOR", default=True)
+    return ENABLE_FREE_CALCULATOR
 
 
 def launch_ai_interpretation_enabled():
-    return _env_flag_value("ENABLE_AI_INTERPRETATION", default=True)
+    return ENABLE_AI_INTERPRETATION
 
 
 def launch_consultation_booking_enabled():
-    return _env_flag_value("ENABLE_CONSULTATION_BOOKING", default=True)
+    return ENABLE_CONSULTATION_BOOKING
 
 
 def _launch_mode_flags():
