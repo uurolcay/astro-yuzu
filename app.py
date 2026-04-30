@@ -346,20 +346,20 @@ def _bootstrap_admin_user_from_env():
         or str(os.getenv("ADMIN_USERNAME", "")).strip().lower()
     )
     admin_password = str(os.getenv("ADMIN_PASSWORD", "") or "")
-    if not admin_email or not admin_password:
+    if not admin_email:
         return {"status": "skipped", "reason": "missing_env"}
     if "@" not in admin_email:
         logger.warning("ADMIN_EMAIL/ADMIN_USERNAME must be an email address; admin bootstrap skipped.")
         return {"status": "skipped", "reason": "invalid_email"}
-    if len(admin_password) < 8:
-        logger.warning("ADMIN_PASSWORD must be at least 8 characters; admin bootstrap skipped.")
-        return {"status": "skipped", "reason": "weak_password"}
 
     db = db_mod.SessionLocal()
     try:
         user = db.query(db_mod.AppUser).filter(db_mod.AppUser.email == admin_email).first()
         created = False
         if not user:
+            if len(admin_password) < 8:
+                logger.warning("ADMIN_PASSWORD must be at least 8 characters; admin bootstrap skipped.")
+                return {"status": "skipped", "reason": "weak_password"}
             user = db_mod.AppUser(
                 email=admin_email,
                 password_hash=generate_password_hash(admin_password),
@@ -971,6 +971,17 @@ def _admin_email_allowlist():
             logger.debug("Admin allowlist entries=%s", list(_ADMIN_ALLOWLIST_CACHE))
         _ADMIN_ALLOWLIST_LOGGED = True
     return set(_ADMIN_ALLOWLIST_CACHE)
+
+
+def _safe_next_path(value, default="/dashboard"):
+    candidate = str(value or "").strip()
+    if not candidate:
+        return default
+    if not candidate.startswith("/") or candidate.startswith("//"):
+        return default
+    if "://" in candidate:
+        return default
+    return candidate
 
 
 def _client_ip(request):
@@ -1938,6 +1949,9 @@ def _safe_model_id(instance):
 def _require_admin_user(request, db):
     user = _require_authenticated_user(request, db)
     if not user:
+        request_path = _safe_next_path(getattr(request.url, "path", "/admin"), default="/admin")
+        if request_path in {"/admin", "/admin/dashboard"}:
+            return None, RedirectResponse(url=f"/login?{urlencode({'next': request_path})}", status_code=303)
         return None, RedirectResponse(url="/login", status_code=303)
     if not is_admin_user(user):
         logger.warning(
@@ -7349,8 +7363,19 @@ async def signup_submit(
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     if request.state.current_user_id:
-        return RedirectResponse(url="/dashboard", status_code=303)
-    return templates.TemplateResponse(request=request, name="login.html", context=_auth_template_context(request))
+        next_path = _safe_next_path(request.query_params.get("next"), default="/dashboard")
+        current_user = getattr(request.state, "current_user", None)
+        if next_path.startswith("/admin") and not is_admin_user(current_user):
+            next_path = "/dashboard"
+        return RedirectResponse(url=next_path, status_code=303)
+    return templates.TemplateResponse(
+        request=request,
+        name="login.html",
+        context=_auth_template_context(
+            request,
+            next_path=_safe_next_path(request.query_params.get("next"), default="/dashboard"),
+        ),
+    )
 
 
 @app.post("/login", response_class=HTMLResponse)
@@ -7358,6 +7383,7 @@ async def login_submit(
     request: Request,
     email: str = Form(...),
     password: str = Form(...),
+    next_path: str = Form(default=""),
     db: Session = Depends(get_db),
 ):
     if not check_rate_limit(f"login:{_client_ip(request)}", max_calls=10, window_seconds=300):
@@ -7378,13 +7404,17 @@ async def login_submit(
                 request,
                 error_message="E-posta veya sifre hatali.",
                 form_data={"email": normalized_email},
+                next_path=_safe_next_path(next_path or request.query_params.get("next"), default="/dashboard"),
             ),
             status_code=400,
         )
 
     request.session["user_id"] = user.id
     logger.info("Login succeeded email=%s user_id=%s", normalized_email, user.id)
-    return RedirectResponse(url="/dashboard", status_code=303)
+    redirect_target = _safe_next_path(next_path or request.query_params.get("next"), default="/dashboard")
+    if redirect_target.startswith("/admin") and not is_admin_user(user):
+        redirect_target = "/dashboard"
+    return RedirectResponse(url=redirect_target, status_code=303)
 
 
 @app.get("/logout")
@@ -8244,6 +8274,23 @@ async def admin_logout(request: Request):
     if hasattr(request, "session"):
         request.session.clear()
     return RedirectResponse(url="/admin/login", status_code=303)
+
+
+@app.get("/admin/debug/whoami")
+@admin_required
+async def admin_debug_whoami(request: Request, db: Session = Depends(get_db)):
+    user = get_request_user(request, db)
+    email = str(getattr(user, "email", "") or "").strip().lower()
+    return JSONResponse(
+        {
+            "authenticated_email": email,
+            "user_id": _safe_model_id(user),
+            "is_admin": is_admin_user(user),
+            "in_admin_allowlist": email in _admin_email_allowlist(),
+            "route_path": request.url.path,
+            "template_hint": "admin/dashboard.html" if request.url.path in {"/admin", "/admin/dashboard"} else "admin/debug/whoami",
+        }
+    )
 
 
 def _admin_order_view(order):

@@ -73,6 +73,7 @@
                     <p class="auth-error">{{ error_message }}</p>
                     {% endif %}
                     <form action="/login" method="post" class="auth-form">
+                        <input type="hidden" name="next_path" value="{{ next_path or '/dashboard' }}">
                         <div>
                             <label for="email">{{ t("auth.email_label") }}</label>
                             <input id="email" name="email" type="email" value="{{ form_data.email if form_data else '' }}" required style="width:100%; margin-top:8px;">
