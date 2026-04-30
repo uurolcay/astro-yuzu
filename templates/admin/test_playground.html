@@ -1,0 +1,53 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Test Playground{% endblock %}
+{% block admin_content %}
+<section class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Test Playground</h1>
+    <p class="admin-page-sub">Run a manual chart payload through the AI layer, inspect output, and evaluate quality without touching customer flows.</p>
+  </div>
+</section>
+
+<section class="admin-grid-2">
+  <div class="admin-card">
+    <div class="admin-card-title">Manual Input</div>
+    <form class="admin-form" method="post" action="/admin/test-playground">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="admin-field">
+        <label>Chart Data JSON</label>
+        <textarea name="chart_data_json" placeholder='{"report_type":"career","language":"tr"}'>{{ form_data.chart_data_json if form_data else "" }}</textarea>
+      </div>
+      <div class="admin-field">
+        <label>AI Output</label>
+        <textarea name="output_text">{{ form_data.output_text if form_data else "" }}</textarea>
+      </div>
+      <div class="admin-page-actions">
+        <button class="btn-admin" type="submit" name="generate_output" value="0">Evaluate Existing Output</button>
+        <button class="btn-admin btn-admin-primary" type="submit" name="generate_output" value="1">Generate + Evaluate</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="admin-card">
+    <div class="admin-card-title">Result</div>
+    {% if result %}
+    <div class="admin-context-list">
+      <div class="admin-context-link"><span>Accuracy</span><span>{{ "%.2f"|format(result.evaluation.accuracy_score or 0) }}</span></div>
+      <div class="admin-context-link"><span>Depth</span><span>{{ "%.2f"|format(result.evaluation.depth_score or 0) }}</span></div>
+      <div class="admin-context-link"><span>Safety</span><span>{{ "%.2f"|format(result.evaluation.safety_score or 0) }}</span></div>
+      <div class="admin-context-link"><span>Issues</span><span>{{ result.evaluation.detected_issues|join(", ") if result.evaluation.detected_issues else "none" }}</span></div>
+    </div>
+    <div class="admin-section" style="margin-top:14px;">
+      <div class="admin-section-title">Detected Gaps</div>
+      {% for gap in result.gaps %}
+      <div class="admin-warning-card">{{ gap.missing_entities_json }}</div>
+      {% else %}
+      <div class="admin-muted">No knowledge gaps detected from this run.</div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="admin-muted">Run a manual evaluation to see scores and gap detection.</div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

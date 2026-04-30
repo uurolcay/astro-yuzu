@@ -1,4 +1,4 @@
-import tempfile
+﻿import tempfile
 import re
 import unittest
 from datetime import datetime
@@ -385,10 +385,10 @@ class AdminAstroWorkspaceTests(unittest.TestCase):
             "report_type": "career",
             "workspace_report_type": "career",
             "render_report_type": "premium",
-            "full_name": "TÃ¼rkÃ§e Kariyer",
+            "full_name": "Türkçe Kariyer",
             "birth_date": "1990-01-02",
             "birth_time": "08:30",
-            "birth_city": "KadÄ±kÃ¶y, Ä°stanbul, TÃ¼rkiye",
+            "birth_city": "Kadıköy, İstanbul, Türkiye",
             "interpretation_context": {
                 "signal_layer": {
                     "top_anchors": [
@@ -417,12 +417,12 @@ class AdminAstroWorkspaceTests(unittest.TestCase):
                 }
             },
         }
-        context = app._internal_pdf_context(None, payload, "TÃ¼rkÃ§e yorum metni")
+        context = app._internal_pdf_context(None, payload, "Türkçe yorum metni")
         serialized = str(context)
         for leak in ("The chart is currently", "money", "nodes", "Timing"):
             self.assertNotIn(leak, serialized)
         self.assertIn("Haritada", serialized)
-        self.assertIn("Ay DÃ¼ÄŸÃ¼mleri", serialized)
+        self.assertIn("Ay Düğümleri", serialized)
         self.assertIn("zamanlama", serialized.lower())
 
     def test_workspace_parent_child_uses_specific_interpretation_path(self):
@@ -511,10 +511,10 @@ class AdminAstroWorkspaceTests(unittest.TestCase):
             "report_type": "parent_child",
             "workspace_report_type": "parent_child",
             "render_report_type": "parent_child",
-            "full_name": "Ã‡ocuk",
+            "full_name": "Çocuk",
             "birth_date": "2018-04-01",
             "birth_time": "09:15",
-            "birth_city": "KadÄ±kÃ¶y, Ä°stanbul, TÃ¼rkiye",
+            "birth_city": "Kadıköy, İstanbul, Türkiye",
             "interpretation_context": {
                 "report_type": "parent_child",
                 "primary_focus": "parent_child_guidance",
@@ -544,7 +544,7 @@ class AdminAstroWorkspaceTests(unittest.TestCase):
                 "watch_areas": ["Pressure-sensitive periods"],
             },
         }
-        context = app._internal_pdf_context(None, payload, "TÃ¼rkÃ§e metin")
+        context = app._internal_pdf_context(None, payload, "Türkçe metin")
         serialized = str(context)
         for leak in (
             "Invite questions",

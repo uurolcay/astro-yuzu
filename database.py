@@ -223,11 +223,68 @@ class InternalInterpretation(Base):
     pdf_path = Column(String, nullable=True)
     generation_mode = Column(String, default="quick", nullable=False, index=True)
     created_by_user_id = Column(Integer, ForeignKey("app_users.id"), nullable=True, index=True)
+    prompt_version = Column(String, nullable=True)
+    model_name = Column(String, nullable=True)
+    pipeline_version = Column(String, nullable=True)
+    generation_duration_s = Column(Float, nullable=True)
+    signal_summary_json = Column(Text, nullable=True)
+    used_chunk_ids_json = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     profile = relationship("InternalProfile", foreign_keys=[profile_id], back_populates="interpretations")
     secondary_profile = relationship("InternalProfile", foreign_keys=[secondary_profile_id])
+    created_by = relationship("AppUser")
+
+
+# Migration: interpretation_reviews, prompt_insights tables
+# Added: 2026-04-29
+# New nullable columns on internal_interpretations:
+#   prompt_version, model_name, pipeline_version,
+#   generation_duration_s, signal_summary_json
+class InterpretationReview(Base):
+    __tablename__ = "interpretation_reviews"
+
+    id = Column(Integer, primary_key=True, index=True)
+    interpretation_id = Column(Integer, ForeignKey("internal_interpretations.id"), nullable=False, index=True)
+    rating_overall = Column(Integer, nullable=True)
+    rating_clarity = Column(Integer, nullable=True)
+    rating_depth = Column(Integer, nullable=True)
+    rating_accuracy_feel = Column(Integer, nullable=True)
+    rating_actionability = Column(Integer, nullable=True)
+    rating_tone = Column(Integer, nullable=True)
+    admin_feedback = Column(Text, nullable=True)
+    strong_sections = Column(Text, nullable=True)
+    weak_sections = Column(Text, nullable=True)
+    improvement_notes = Column(Text, nullable=True)
+    safety_flags = Column(Text, nullable=True)
+    status = Column(String, default="draft", nullable=False, index=True)
+    version_number = Column(Integer, default=1, nullable=False)
+    parent_version_id = Column(Integer, nullable=True)
+    quality_eval_json = Column(Text, nullable=True)
+    missing_entities_json = Column(Text, nullable=True)
+    section_coverage_json = Column(Text, nullable=True)
+    reviewed_by_user_id = Column(Integer, ForeignKey("app_users.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    interpretation = relationship("InternalInterpretation", backref="reviews")
+    reviewed_by = relationship("AppUser")
+
+
+class PromptInsight(Base):
+    __tablename__ = "prompt_insights"
+
+    id = Column(Integer, primary_key=True, index=True)
+    report_type = Column(String, nullable=True, index=True)
+    insight_type = Column(String, nullable=False, index=True)
+    title = Column(String, nullable=False)
+    body = Column(Text, nullable=False)
+    source_review_ids = Column(Text, nullable=True)
+    prompt_version_ref = Column(String, nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("app_users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
     created_by = relationship("AppUser")
 
 
@@ -662,6 +719,130 @@ class RecommendationFollowup(Base):
     completed_at = Column(DateTime, nullable=True)
 
 
+# Migration: Knowledge Visibility & Coverage Layer — 2026-04-29
+# Adds:
+# - internal_interpretations.used_chunk_ids_json
+# - knowledge_items.coverage_entities_json
+# - knowledge_chunks.coverage_entities_json
+class SourceDocument(Base):
+    __tablename__ = "source_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=False, index=True)
+    file_path = Column(String, nullable=True)
+    document_type = Column(String, nullable=True, index=True)
+    source_label = Column(String, nullable=True)
+    source_uri = Column(String, nullable=True)
+    language = Column(String, nullable=False, default="tr", index=True)
+    content_text = Column(Text, nullable=True)
+    metadata_json = Column(Text, nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("app_users.id"), nullable=True, index=True)
+    uploaded_at = Column(DateTime, default=datetime.utcnow, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    created_by = relationship("AppUser")
+    knowledge_items = relationship("KnowledgeItem", back_populates="source_document", cascade="all, delete-orphan")
+
+
+class KnowledgeItem(Base):
+    __tablename__ = "knowledge_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    source_document_id = Column(Integer, ForeignKey("source_documents.id"), nullable=True, index=True)
+    title = Column(String, nullable=False, index=True)
+    item_type = Column(String, nullable=False, default="reference", index=True)
+    language = Column(String, nullable=False, default="tr", index=True)
+    summary_text = Column(Text, nullable=True)
+    body_text = Column(Text, nullable=False)
+    entities_json = Column(Text, nullable=True)
+    coverage_entities_json = Column(Text, nullable=True)
+    metadata_json = Column(Text, nullable=True)
+    status = Column(String, nullable=False, default="active", index=True)
+    created_by_user_id = Column(Integer, ForeignKey("app_users.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    source_document = relationship("SourceDocument", back_populates="knowledge_items")
+    created_by = relationship("AppUser")
+    chunks = relationship("KnowledgeChunk", back_populates="knowledge_item", cascade="all, delete-orphan")
+
+
+class KnowledgeChunk(Base):
+    __tablename__ = "knowledge_chunks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    knowledge_item_id = Column(Integer, ForeignKey("knowledge_items.id"), nullable=False, index=True)
+    chunk_index = Column(Integer, nullable=False, default=0, index=True)
+    chunk_text = Column(Text, nullable=False)
+    embedding_json = Column(Text, nullable=True)
+    entities_json = Column(Text, nullable=True)
+    coverage_entities_json = Column(Text, nullable=True)
+    token_count = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    knowledge_item = relationship("KnowledgeItem", back_populates="chunks")
+
+
+class EvaluationResult(Base):
+    __tablename__ = "evaluation_results"
+
+    id = Column(Integer, primary_key=True, index=True)
+    interpretation_id = Column(Integer, ForeignKey("internal_interpretations.id"), nullable=True, index=True)
+    report_type = Column(String, nullable=True, index=True)
+    language = Column(String, nullable=False, default="tr", index=True)
+    chart_data_json = Column(Text, nullable=True)
+    output_text = Column(Text, nullable=False)
+    accuracy_score = Column(Float, nullable=False, default=0.0)
+    depth_score = Column(Float, nullable=False, default=0.0)
+    safety_score = Column(Float, nullable=False, default=0.0)
+    detected_issues_json = Column(Text, nullable=True)
+    metadata_json = Column(Text, nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("app_users.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    interpretation = relationship("InternalInterpretation")
+    created_by = relationship("AppUser")
+    knowledge_gaps = relationship("KnowledgeGap", back_populates="evaluation_result", cascade="all, delete-orphan")
+
+
+class KnowledgeGap(Base):
+    __tablename__ = "knowledge_gaps"
+
+    id = Column(Integer, primary_key=True, index=True)
+    evaluation_result_id = Column(Integer, ForeignKey("evaluation_results.id"), nullable=True, index=True)
+    report_type = Column(String, nullable=True, index=True)
+    language = Column(String, nullable=False, default="tr", index=True)
+    missing_entities_json = Column(Text, nullable=True)
+    missing_topics_json = Column(Text, nullable=True)
+    context_json = Column(Text, nullable=True)
+    status = Column(String, nullable=False, default="open", index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    evaluation_result = relationship("EvaluationResult", back_populates="knowledge_gaps")
+    training_tasks = relationship("TrainingTask", back_populates="knowledge_gap", cascade="all, delete-orphan")
+
+
+class TrainingTask(Base):
+    __tablename__ = "training_tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    knowledge_gap_id = Column(Integer, ForeignKey("knowledge_gaps.id"), nullable=True, index=True)
+    task_type = Column(String, nullable=False, default="knowledge_gap", index=True)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    priority = Column(String, nullable=False, default="medium", index=True)
+    status = Column(String, nullable=False, default="open", index=True)
+    payload_json = Column(Text, nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("app_users.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    knowledge_gap = relationship("KnowledgeGap", back_populates="training_tasks")
+    created_by = relationship("AppUser")
+
+
 def _add_missing_columns():
     inspector = inspect(engine)
     table_columns = {
@@ -679,6 +860,8 @@ def _add_missing_columns():
         add_col("accounting_customers", "identity_number", "VARCHAR")
         add_col("accounting_customers", "tax_office", "VARCHAR")
         add_col("accounting_customers", "city", "VARCHAR")
+        add_col("source_documents", "file_path", "VARCHAR")
+        add_col("source_documents", "uploaded_at", "DATETIME")
         add_col("accounting_invoices", "pdf_status", "VARCHAR DEFAULT 'not_generated'")
         add_col("accounting_invoices", "pdf_generated_at", "DATETIME")
         add_col("accounting_invoices", "pdf_error_message", "TEXT")
@@ -821,10 +1004,18 @@ def _add_missing_columns():
                 "pdf_path": "VARCHAR",
                 "generation_mode": "VARCHAR DEFAULT 'quick' NOT NULL",
                 "created_by_user_id": "INTEGER",
+                "prompt_version": "VARCHAR",
+                "model_name": "VARCHAR",
+                "pipeline_version": "VARCHAR",
+                "generation_duration_s": "FLOAT",
+                "signal_summary_json": "TEXT",
+                "used_chunk_ids_json": "TEXT",
             }
             for column_name, column_type in internal_interpretation_columns.items():
                 if column_name not in table_columns["internal_interpretations"]:
                     connection.execute(text(f"ALTER TABLE internal_interpretations ADD COLUMN {column_name} {column_type}"))
+        add_col("knowledge_items", "coverage_entities_json", "TEXT")
+        add_col("knowledge_chunks", "coverage_entities_json", "TEXT")
         if "internal_chat_sessions" in table_columns:
             internal_chat_session_columns = {
                 "profile_id": "INTEGER",

@@ -501,8 +501,8 @@ class MonetizationFlowTests(unittest.TestCase):
         self.assertIn("Enter your email to save your reading", response.text)
         self.assertIn("Save &amp; Continue", response.text)
         self.assertIn("Get Personal Consultation", response.text)
-        self.assertIn("Bu sonuÃ§ neyi gÃ¶sterir, neyi gÃ¶stermez?", response.text)
-        self.assertIn("DanÄ±ÅŸmanlÄ±k neden farklÄ±dÄ±r?", response.text)
+        self.assertIn("Bu sonuç neyi gösterir, neyi göstermez?", response.text)
+        self.assertIn("Danışmanlık neden farklıdır?", response.text)
         self.assertGreaterEqual(response.text.count('href="/personal-consultation"'), 3)
 
     def test_beta_users_see_beta_unlock_cta(self):
@@ -527,24 +527,24 @@ class MonetizationFlowTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Preview", response.text)
         self.assertIn("Purchased", response.text)
-        self.assertIn("Ã–nizlemeyi gÃ¶rÃ¼ntÃ¼le", response.text)
-        self.assertIn("Tam raporu gÃ¶rÃ¼ntÃ¼le", response.text)
+        self.assertIn("Önizlemeyi görüntüle", response.text)
+        self.assertIn("Tam raporu görüntüle", response.text)
 
     def test_reports_page_product_cards_have_differentiated_copy(self):
         _report, user = self._create_report(email="selection@example.com")
         with patch.object(app, "get_request_user", return_value=self._bound_user(user)):
             response = self.client.get("/reports", headers={"accept-language": "tr"})
         self.assertEqual(response.status_code, 200)
-        self.assertIn("DoÄŸum HaritasÄ± Karmaâ€™sÄ±", response.text)
-        self.assertIn("YÄ±llÄ±k Transit", response.text)
+        self.assertIn("Doğum Haritası Karma’sı", response.text)
+        self.assertIn("Yıllık Transit", response.text)
         self.assertIn("Kariyer", response.text)
-        self.assertIn("Ebeveyn-Ã‡ocuk", response.text)
-        self.assertIn("YaÅŸam temalarÄ±nÄ±zÄ±, karmik Ã¶rÃ¼ntÃ¼lerinizi", response.text)
-        self.assertIn("Ã–nÃ¼mÃ¼zdeki dÃ¶nemin vurgu alanlarÄ±nÄ±", response.text)
-        self.assertIn("Mesleki yÃ¶nÃ¼nÃ¼zÃ¼, Ã§alÄ±ÅŸma biÃ§iminizi", response.text)
-        self.assertIn("Ã‡ocuÄŸun doÄŸasÄ±nÄ±, ebeveyn-Ã§ocuk iliÅŸkisindeki akÄ±ÅŸÄ±", response.text)
+        self.assertIn("Ebeveyn-Çocuk", response.text)
+        self.assertIn("Yaşam temalarınızı, karmik örüntülerinizi", response.text)
+        self.assertIn("Önümüzdeki dönemin vurgu alanlarını", response.text)
+        self.assertIn("Mesleki yönünüzü, çalışma biçiminizi", response.text)
+        self.assertIn("Çocuğun doğasını, ebeveyn-çocuk ilişkisindeki akışı", response.text)
         self.assertIn("Bu Raporu Al", response.text)
-        self.assertIn("DanÄ±ÅŸmanlÄ±kla DerinleÅŸtir", response.text)
+        self.assertIn("Danışmanlıkla Derinleştir", response.text)
         self.assertNotIn("Start With Calculator", response.text)
         self.assertIn('class="btn btn-primary" href="/reports/order/birth_chart_karma">Bu Raporu Al', response.text)
         self.assertIn('class="btn btn-primary" href="/reports/order/annual_transit">Bu Raporu Al', response.text)
@@ -557,18 +557,18 @@ class MonetizationFlowTests(unittest.TestCase):
             response = self.client.get("/reports")
         self.assertEqual(response.status_code, 200)
         self.assertIn("Paket mimarisi", response.text)
-        self.assertIn("â‚º1.900", response.text)
-        self.assertIn("â‚º1.490", response.text)
-        self.assertIn("â‚º1.690", response.text)
-        self.assertIn("â‚º1.790", response.text)
+        self.assertIn("₺1.900", response.text)
+        self.assertIn("₺1.490", response.text)
+        self.assertIn("₺1.690", response.text)
+        self.assertIn("₺1.790", response.text)
         self.assertIn("Astrology Deep Dive", response.text)
         self.assertIn("Life Path Bundle", response.text)
         self.assertIn("Full Year Insight Bundle", response.text)
         self.assertIn("Deep Family Insight", response.text)
-        self.assertIn("â‚º7.900", response.text)
-        self.assertIn("â‚º3.290", response.text)
-        self.assertIn("â‚º2.890", response.text)
-        self.assertIn("â‚º3.390", response.text)
+        self.assertIn("₺7.900", response.text)
+        self.assertIn("₺3.290", response.text)
+        self.assertIn("₺2.890", response.text)
+        self.assertIn("₺3.390", response.text)
         self.assertIn("/reports/order/bundle/life_path_bundle", response.text)
 
     def test_bundle_order_submission_records_bundle_metadata(self):
@@ -579,7 +579,7 @@ class MonetizationFlowTests(unittest.TestCase):
             "birth_date": "1990-01-02",
             "birth_time": "08:30",
             "birth_city": "Istanbul, Turkey",
-            "optional_note": "YaÅŸam yÃ¶nÃ¼ ve kariyer",
+            "optional_note": "Yaşam yönü ve kariyer",
         }
         payload["csrf_token"] = csrf_token
         response = self.client.post("/reports/order/bundle/life_path_bundle", data=payload, follow_redirects=False)
@@ -592,7 +592,7 @@ class MonetizationFlowTests(unittest.TestCase):
         self.assertEqual(order.bundle_type, "life_path_bundle")
         self.assertIn("birth_chart_karma", order.included_products_json)
         self.assertIn("career", order.included_products_json)
-        self.assertEqual(order.amount_label, "â‚º3.290")
+        self.assertEqual(order.amount_label, "₺3.290")
 
     def test_reports_page_includes_decision_guidance_block(self):
         _report, user = self._create_report(email="decision@example.com")
@@ -601,8 +601,8 @@ class MonetizationFlowTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('aria-label="Hangi rapor size uygun?"', response.text)
         self.assertIn("Hangi rapor size uygun?", response.text)
-        self.assertIn("Genel yaÅŸam temalarÄ±", response.text)
-        self.assertIn("Ebeveyn-Ã§ocuk dinamiÄŸi", response.text)
+        self.assertIn("Genel yaşam temaları", response.text)
+        self.assertIn("Ebeveyn-çocuk dinamiği", response.text)
         self.assertIn("Birden fazla soru", response.text)
 
     def test_reports_page_references_consultation_without_major_spotlight(self):
@@ -611,17 +611,17 @@ class MonetizationFlowTests(unittest.TestCase):
             response = self.client.get("/reports", headers={"accept-language": "tr"})
         self.assertEqual(response.status_code, 200)
         self.assertIn("/personal-consultation", response.text)
-        self.assertIn("KiÅŸisel DanÄ±ÅŸmanlÄ±k Al", response.text)
-        self.assertIn("Rapor mu, danÄ±ÅŸmanlÄ±k mÄ±?", response.text)
+        self.assertIn("Kişisel Danışmanlık Al", response.text)
+        self.assertIn("Rapor mu, danışmanlık mı?", response.text)
         self.assertNotIn('class="reports-consultation-feature"', response.text)
 
     def test_reports_decision_guidance_stays_short_and_does_not_break_cards(self):
         template = Path("C:\\Users\\uolca\\Documents\\Chatgpt Codex\\astro-yuzu\\templates\\reports.html").read_text(encoding="utf-8")
-        self.assertIn("DoÄŸum HaritasÄ± Karmaâ€™sÄ±", template)
-        self.assertIn("YÄ±llÄ±k Transit", template)
+        self.assertIn("Doğum Haritası Karma’sı", template)
+        self.assertIn("Yıllık Transit", template)
         self.assertIn("Kariyer", template)
-        self.assertIn("Ebeveyn-Ã‡ocuk", template)
-        self.assertIn("60 dk birebir danÄ±ÅŸmanlÄ±k", template)
+        self.assertIn("Ebeveyn-Çocuk", template)
+        self.assertIn("60 dk birebir danışmanlık", template)
         self.assertNotIn("data-reports-i18n", template)
         self.assertIn(".reports-card {", template)
         self.assertIn(".reports-card-actions {", template)
@@ -629,13 +629,13 @@ class MonetizationFlowTests(unittest.TestCase):
         self.assertIn("justify-content:center;", template)
         self.assertIn('href="/reports/parent-child">{{ t("common.cta_report_buy") }}', template)
         self.assertNotIn('class="reports-consultation-feature"', template)
-        self.assertNotIn("HesaplayÄ±cÄ± ile BaÅŸla", template)
+        self.assertNotIn("Hesaplayıcı ile Başla", template)
 
     def test_reports_template_includes_tr_and_en_product_copy_support(self):
         translations_module = Path("C:\\Users\\uolca\\Documents\\Chatgpt Codex\\astro-yuzu\\translations.py").read_text(encoding="utf-8")
-        self.assertIn('"order_cta": "SipariÅŸ Ver"', translations_module)
+        self.assertIn('"order_cta": "Sipariş Ver"', translations_module)
         self.assertIn('"order_cta": "Order Now"', translations_module)
-        self.assertIn('"price_placeholder": "YakÄ±nda paylaÅŸÄ±lacak"', translations_module)
+        self.assertIn('"price_placeholder": "Yakında paylaşılacak"', translations_module)
         self.assertIn('"price_placeholder": "Available soon"', translations_module)
 
     def test_reports_page_renders_turkish_order_cta_without_old_label(self):
@@ -668,7 +668,7 @@ class MonetizationFlowTests(unittest.TestCase):
             "birth_time": "08:30",
             "birth_city": "Istanbul, Turkey",
             "selected_report_type": "career",
-            "optional_note": "Kariyer yÃ¶nÃ¼",
+            "optional_note": "Kariyer yönü",
         }
         payload["csrf_token"] = csrf_token
         with (
@@ -693,16 +693,16 @@ class MonetizationFlowTests(unittest.TestCase):
             status="awaiting_payment",
             customer_name="Aylin Test",
             customer_email="customer@example.com",
-            amount_label="â‚º1.690",
+            amount_label="₺1.690",
             currency="TRY",
         )
         self.db.add(order)
         self.db.commit()
         response = self.client.get("/checkout/report/report_test_token")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Rapor talebiniz Ã¶deme sonrasÄ± inceleme sÃ¼recine alÄ±nÄ±r.", response.text)
-        self.assertIn("yalnÄ±zca yÃ¶netici incelemesine gÃ¶nderilir", response.text)
-        self.assertIn("Rapor Ã–demesini BaÅŸlat", response.text)
+        self.assertIn("Rapor talebiniz ödeme sonrası inceleme sürecine alınır.", response.text)
+        self.assertIn("yalnızca yönetici incelemesine gönderilir", response.text)
+        self.assertIn("Rapor Ödemesini Başlat", response.text)
         self.assertIn("Full Year Insight Bundle", response.text)
 
     def test_parent_child_order_uses_existing_parent_child_flow(self):
@@ -713,13 +713,13 @@ class MonetizationFlowTests(unittest.TestCase):
     def test_consultation_checkout_page_precedes_booking_handoff(self):
         response = self.client.get("/checkout/consultation")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Randevu seÃ§iminizi Ã¶deme adÄ±mÄ±yla kesinleÅŸtirin.", response.text)
-        self.assertIn("Ã–nce Calendly Ã¼zerinden uygun zamanÄ± seÃ§ersiniz.", response.text)
-        self.assertIn("Ã–demeyi BaÅŸlat", response.text)
+        self.assertIn("Randevu seçiminizi ödeme adımıyla kesinleştirin.", response.text)
+        self.assertIn("Önce Calendly üzerinden uygun zamanı seçersiniz.", response.text)
+        self.assertIn("Ödemeyi Başlat", response.text)
         booking = self.client.get("/personal-consultation/book")
         self.assertEqual(booking.status_code, 200)
         self.assertIn('href="/checkout/consultation"', booking.text)
-        self.assertIn("Randevu seÃ§imi tek baÅŸÄ±na satÄ±n alma tamamlandÄ±ÄŸÄ± anlamÄ±na gelmez.", booking.text)
+        self.assertIn("Randevu seçimi tek başına satın alma tamamlandığı anlamına gelmez.", booking.text)
 
     def test_calendly_invitee_created_creates_consultation_order(self):
         payload = self._calendly_payload()
@@ -1364,7 +1364,7 @@ class MonetizationFlowTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("monitor-consult@example.com", response.text)
-        self.assertTrue("Yes" in response.text or "Ã–dendi" in response.text or "Ãƒâ€“dendi" in response.text)
+        self.assertTrue("Yes" in response.text or "Ödendi" in response.text)
         self.assertNotIn("not-consult@example.com", response.text)
         self.assertIn(f"/admin/orders/{consultation.id}", response.text)
 
@@ -1974,7 +1974,7 @@ class MonetizationFlowTests(unittest.TestCase):
             service_type="consultation",
             product_type="consultation_60_min",
             status="booking_pending_payment",
-            amount_label="â‚º4.900",
+            amount_label="₺4.900",
             currency="TRY",
         )
         with patch.dict(

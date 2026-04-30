@@ -1,0 +1,154 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Yorum Değerlendirme{% endblock %}
+{% block admin_content %}
+<section class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Yorum Değerlendirme — #{{ interpretation.id }}</h1>
+    <p class="admin-page-sub">{{ interpretation.report_type }} kalite kontrol ekranı.</p>
+  </div>
+</section>
+
+{% if notice %}<div class="admin-alert admin-alert-success">{{ notice }}</div>{% endif %}
+{% if error %}<div class="admin-alert admin-alert-danger">{{ error }}</div>{% endif %}
+<div class="admin-page-actions" style="margin-bottom:1rem;">
+  <a href="/admin/astro-workspace/quality/{{ interpretation.id }}/knowledge">
+    Knowledge Trace →
+  </a>
+  <a href="/admin/knowledge/review" style="margin-left:1rem;">
+    Knowledge Review →
+  </a>
+</div>
+
+<details class="admin-card" open>
+  <summary class="admin-card-title" style="cursor:pointer;">Interpretation Text</summary>
+  <div style="max-height:420px; overflow:auto; white-space:pre-wrap; line-height:1.7;">{{ interpretation.interpretation_text }}</div>
+</details>
+
+<details class="admin-card">
+  <summary class="admin-card-title" style="cursor:pointer;">Otomatik Kalite Analizi</summary>
+  {% if quality_eval_data %}
+  <div class="admin-grid-2">
+    <div><strong>repetition_score</strong><div class="admin-muted">{{ quality_eval_data.repetition_score }}</div></div>
+    <div><strong>advisory_tone_score</strong><div class="admin-muted">{{ quality_eval_data.advisory_tone_score }}</div></div>
+    <div><strong>language_quality</strong><div class="admin-muted">{{ quality_eval_data.language_quality }}</div></div>
+    <div><strong>flags</strong><div class="admin-muted">{{ quality_eval_data.flags|join(", ") if quality_eval_data.flags else "-" }}</div></div>
+  </div>
+  {% else %}
+  <div class="admin-muted">Henüz otomatik kalite analizi yok.</div>
+  {% endif %}
+</details>
+
+<details class="admin-card">
+  <summary class="admin-card-title" style="cursor:pointer;">Kapsam Analizi</summary>
+  {% if section_coverage_data %}
+    <div class="admin-page-actions">
+      {% for section in section_coverage_data.covered_sections or [] %}<span class="badge badge-success">{{ section }}</span>{% endfor %}
+      {% for section in section_coverage_data.missing_sections or [] %}<span class="badge badge-danger">{{ section }}</span>{% endfor %}
+    </div>
+    <div class="admin-muted" style="margin-top:8px;">coverage_score: {{ section_coverage_data.coverage_score }}</div>
+  {% else %}
+    <div class="admin-muted">Henüz kapsam analizi yok.</div>
+  {% endif %}
+</details>
+
+<details class="admin-card">
+  <summary class="admin-card-title" style="cursor:pointer;">Eksik İçgörüler</summary>
+  {% if missing_entities_data %}
+    <p class="admin-section-sub">AI şu unsurları yeterince açıklamadı:</p>
+    <div class="admin-page-actions">
+      {% for entity in missing_entities_data %}
+      <span class="badge badge-danger">{{ entity }}</span>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="admin-muted">Tüm tespit edilen unsurlar kapsanmış.</div>
+  {% endif %}
+</details>
+
+<section class="admin-card">
+  <div class="admin-card-title">Review Form</div>
+  <form class="admin-form" method="post" action="/admin/astro-workspace/quality/{{ interpretation.id }}/review">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="admin-grid-2">
+      <div class="admin-field">
+        <label>Status</label>
+        <select name="status">
+          {% set current_status = (form_data.status if form_data else (review.status if review else "draft")) %}
+          {% for status in valid_statuses %}
+          <option value="{{ status }}" {% if current_status == status %}selected{% endif %}>{{ status }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="admin-field">
+        <label>Language</label>
+        <select name="language">
+          {% set current_lang = form_data.language if form_data else "tr" %}
+          <option value="tr" {% if current_lang == "tr" %}selected{% endif %}>tr</option>
+          <option value="en" {% if current_lang == "en" %}selected{% endif %}>en</option>
+        </select>
+      </div>
+    </div>
+    <div class="admin-grid-2">
+      {% for field, label in [
+        ("rating_overall","Overall"),
+        ("rating_clarity","Clarity"),
+        ("rating_depth","Depth"),
+        ("rating_accuracy_feel","Accuracy Feel"),
+        ("rating_actionability","Actionability"),
+        ("rating_tone","Tone")
+      ] %}
+      <div class="admin-field">
+        <label>{{ label }}</label>
+        <select name="{{ field }}">
+          {% set current_val = form_data[field] if form_data and field in form_data else "" %}
+          <option value="">-</option>
+          {% for n in range(1, 6) %}
+          <option value="{{ n }}" {% if current_val|string == n|string %}selected{% endif %}>{{ n }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="admin-grid-2">
+      <div class="admin-field">
+        <label>Strong Sections</label>
+        <div class="admin-page-actions">
+          {% for section in valid_sections %}
+          {% set selected = (form_data and form_data.get('strong_section_' ~ section)) or (review and review.strong_sections and section in review.strong_sections) %}
+          <label><input type="checkbox" name="strong_section_{{ section }}" value="1" {% if selected %}checked{% endif %}> {{ section }}</label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="admin-field">
+        <label>Weak Sections</label>
+        <div class="admin-page-actions">
+          {% for section in valid_sections %}
+          {% set selected = (form_data and form_data.get('weak_section_' ~ section)) or (review and review.weak_sections and section in review.weak_sections) %}
+          <label><input type="checkbox" name="weak_section_{{ section }}" value="1" {% if selected %}checked{% endif %}> {{ section }}</label>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    <div class="admin-field">
+      <label>Admin Feedback</label>
+      <textarea name="admin_feedback">{{ form_data.admin_feedback if form_data else (review.admin_feedback if review else "") }}</textarea>
+    </div>
+    <div class="admin-field">
+      <label>Improvement Notes</label>
+      <textarea name="improvement_notes">{{ form_data.improvement_notes if form_data else (review.improvement_notes if review else "") }}</textarea>
+    </div>
+    <div class="admin-field">
+      <label>Safety Flags</label>
+      <div class="admin-page-actions">
+        {% for flag in valid_safety_flags %}
+        {% set selected = (form_data and form_data.get('safety_flag_' ~ flag)) or (review and review.safety_flags and flag in review.safety_flags) %}
+        <label><input type="checkbox" name="safety_flag_{{ flag }}" value="1" {% if selected %}checked{% endif %}> {{ flag }}</label>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="admin-page-actions">
+      <button class="btn-admin btn-admin-primary" type="submit">Değerlendirmeyi Kaydet</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

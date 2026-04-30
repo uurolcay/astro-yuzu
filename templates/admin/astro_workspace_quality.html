@@ -1,0 +1,85 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}AI Yorum Kalitesi{% endblock %}
+{% block admin_content %}
+<section class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">AI Yorum Kalitesi</h1>
+    <p class="admin-page-sub">Admin Astro Workspace yorumlarının kalite takibi, zayıf alanları ve prompt içgörüleri.</p>
+  </div>
+  <div class="admin-page-actions">
+    <a class="btn-admin" href="/admin/astro-workspace/quality/insights">Prompt İçgörüleri</a>
+  </div>
+</section>
+
+{% if notice %}
+<div class="admin-alert admin-alert-success">{{ notice }}</div>
+{% endif %}
+
+<section class="admin-stats">
+  <article class="admin-stat"><div class="admin-stat-label">Toplam Review</div><div class="admin-stat-value">{{ dashboard.total_reviews }}</div></article>
+  <article class="admin-stat"><div class="admin-stat-label">Ortalama Puan</div><div class="admin-stat-value">{{ dashboard.avg_rating_overall if dashboard.avg_rating_overall is not none else "-" }}</div></article>
+  <article class="admin-stat"><div class="admin-stat-label">Prompt İçgörüleri</div><div class="admin-stat-value"><a href="/admin/astro-workspace/quality/insights" style="color:inherit; text-decoration:none;">Aç</a></div></article>
+</section>
+
+<section class="admin-grid-2">
+  <div class="admin-card">
+    <div class="admin-card-title">Rapor Türüne Göre</div>
+    <table class="admin-table">
+      <thead><tr><th>Rapor</th><th>Adet</th><th>Ort.</th><th>Onay</th><th>Red</th><th>Regen</th></tr></thead>
+      <tbody>
+      {% for report_type, row in dashboard.by_report_type.items() %}
+        <tr>
+          <td>{{ report_type }}</td>
+          <td>{{ row.count }}</td>
+          <td>{{ row.avg_overall if row.avg_overall is not none else "-" }}</td>
+          <td>{{ row.approved_count }}</td>
+          <td>{{ row.rejected_count }}</td>
+          <td>{{ row.needs_regen_count }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="admin-muted">Henüz kalite verisi yok.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="admin-card">
+    <div class="admin-card-title">Sinyal Özetleri</div>
+    <div class="admin-section">
+      <div class="admin-section-title">Top Weak Sections</div>
+      <div class="admin-page-actions">{% for item in dashboard.top_weak_sections %}<span class="badge badge-warning">{{ item }}</span>{% else %}<span class="admin-muted">-</span>{% endfor %}</div>
+      <div class="admin-section-title">Sık Eksik Kalan</div>
+      <div class="admin-page-actions">{% for item in dashboard.top_missing_entities %}<span class="badge badge-danger">{{ item }}</span>{% else %}<span class="admin-muted">-</span>{% endfor %}</div>
+      <div class="admin-section-title">Top Safety Flags</div>
+      <div class="admin-page-actions">{% for item in dashboard.top_safety_flags %}<span class="badge badge-info">{{ item }}</span>{% else %}<span class="admin-muted">-</span>{% endfor %}</div>
+    </div>
+  </div>
+</section>
+
+<section class="admin-table-wrap">
+  <div class="admin-table-header"><div class="admin-table-title">Interpretations</div></div>
+  <table class="admin-table">
+    <thead><tr><th>ID</th><th>Profile</th><th>Rapor Türü</th><th>Oluşturulma</th><th>Status</th><th>Overall</th><th></th></tr></thead>
+    <tbody>
+      {% for row in interpretations %}
+      <tr>
+        <td>{{ row.interpretation.id }}</td>
+        <td>{{ row.profile_name }}</td>
+        <td>{{ row.interpretation.report_type }}</td>
+        <td>{{ row.interpretation.created_at.strftime("%Y-%m-%d %H:%M") if row.interpretation.created_at else "-" }}</td>
+        <td>
+          {% if row.review %}
+          <span class="badge badge-info">{{ row.review.status }}</span>
+          {% else %}
+          <span class="badge badge-muted">unreviewed</span>
+          {% endif %}
+        </td>
+        <td>{{ row.review.rating_overall if row.review and row.review.rating_overall is not none else "-" }}</td>
+        <td><a class="btn-admin" href="/admin/astro-workspace/quality/{{ row.interpretation.id }}/review">Değerlendir</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="admin-muted">Henüz yorum bulunmuyor.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

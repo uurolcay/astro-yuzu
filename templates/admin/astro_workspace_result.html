@@ -176,5 +176,16 @@
     })();
   </script>
 </section>
+<div class="workspace-quality-links" style="margin-top:1rem;">
+  <a href="/admin/astro-workspace/quality">
+    AI Yorum Kalitesi →
+  </a>
+  {% if result and result.interpretation and result.interpretation.id %}
+  <a href="/admin/astro-workspace/quality/{{ result.interpretation.id }}/review"
+     style="margin-left:1rem;">
+    Bu yorumu değerlendir →
+  </a>
+  {% endif %}
+</div>
 {% endif %}
 {% endblock %}

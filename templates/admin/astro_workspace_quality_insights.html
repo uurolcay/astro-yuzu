@@ -1,0 +1,67 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Prompt İçgörüleri{% endblock %}
+{% block admin_content %}
+<section class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Prompt İçgörüleri</h1>
+    <p class="admin-page-sub">Tekrarlayan kalite problemlerini, güçlü örüntüleri ve admin gözlemlerini prompt iterasyonu için toplayın.</p>
+  </div>
+</section>
+
+{% if notice %}<div class="admin-alert admin-alert-success">{{ notice }}</div>{% endif %}
+{% if error %}<div class="admin-alert admin-alert-danger">{{ error }}</div>{% endif %}
+
+<section class="admin-grid-2">
+  <section class="admin-card">
+    <div class="admin-card-title">Yeni İçgörü</div>
+    <form class="admin-form" method="post" action="/admin/astro-workspace/quality/insights/new">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="admin-grid-2">
+        <div class="admin-field">
+          <label>Report Type</label>
+          <select name="report_type">
+            <option value="">All</option>
+            {% for option in report_type_options %}
+            <option value="{{ option.value }}">{{ option.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="admin-field">
+          <label>Insight Type</label>
+          <select name="insight_type">
+            {% for insight_type in valid_insight_types %}
+            <option value="{{ insight_type }}">{{ insight_type }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="admin-field"><label>Title</label><input type="text" name="title" required></div>
+      <div class="admin-field"><label>Body</label><textarea name="body" required></textarea></div>
+      <div class="admin-field"><label>source_review_ids</label><input type="text" name="source_review_ids" placeholder="12,14,20"></div>
+      <div class="admin-field"><label>prompt_version_ref</label><input type="text" name="prompt_version_ref"></div>
+      <div class="admin-page-actions"><button class="btn-admin btn-admin-primary" type="submit">İçgörü Ekle</button></div>
+    </form>
+  </section>
+
+  <section class="admin-card">
+    <div class="admin-card-title">İçgörü Grupları</div>
+    {% for insight_type, items in insights_by_type.items() %}
+    <details open style="margin-bottom:10px;">
+      <summary style="cursor:pointer; font-weight:600;">{{ insight_type }} ({{ items|length }})</summary>
+      <div class="admin-context-list" style="margin-top:10px;">
+        {% for item in items %}
+        <div class="admin-context-card">
+          <div style="font-weight:600;">{{ item.title }}</div>
+          <div class="admin-muted" style="margin-top:6px; line-height:1.6;">{{ item.body }}</div>
+          <div class="admin-muted" style="margin-top:8px; font-size:.8rem;">{{ item.report_type or "all" }} · {{ item.prompt_version_ref or "-" }} · {{ item.created_at.strftime("%Y-%m-%d %H:%M") if item.created_at else "-" }}</div>
+          <div class="admin-muted" style="font-size:.8rem;">{{ item.source_review_ids or "[]" }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </details>
+    {% else %}
+    <div class="admin-muted">Henüz prompt içgörüsü yok.</div>
+    {% endfor %}
+  </section>
+</section>
+{% endblock %}

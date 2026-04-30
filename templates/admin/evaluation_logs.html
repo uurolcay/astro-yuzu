@@ -1,0 +1,31 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Evaluation Logs{% endblock %}
+{% block admin_content %}
+<section class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Evaluation Logs</h1>
+    <p class="admin-page-sub">Heuristic scoring and detected issue traces for internal interpretation outputs.</p>
+  </div>
+</section>
+
+<section class="admin-table-wrap">
+  <div class="admin-table-header"><div class="admin-table-title">Evaluation Results</div></div>
+  <table class="admin-table">
+    <thead><tr><th>Created</th><th>Report Type</th><th>Accuracy</th><th>Depth</th><th>Safety</th><th>Issues</th></tr></thead>
+    <tbody>
+      {% for row in evaluations %}
+      <tr>
+        <td>{{ row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "-" }}</td>
+        <td>{{ row.report_type or "-" }}</td>
+        <td>{{ "%.2f"|format(row.accuracy_score or 0) }}</td>
+        <td>{{ "%.2f"|format(row.depth_score or 0) }}</td>
+        <td>{{ "%.2f"|format(row.safety_score or 0) }}</td>
+        <td>{{ row.detected_issues_json }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="admin-muted">No evaluation results yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

@@ -1,0 +1,113 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Knowledge Documents{% endblock %}
+{% block admin_content %}
+<section class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Knowledge Documents</h1>
+    <p class="admin-page-sub">PDF kaynakları yükleyin, parse edin ve knowledge chunk akışına kontrollü şekilde alın.</p>
+  </div>
+</section>
+
+{% set upload_ok = notice.startswith('uploaded:') if notice else false %}
+{% set parse_empty = notice == 'parse_empty' %}
+{% set invalid_pdf = notice == 'invalid_pdf' %}
+{% set missing_file = notice == 'missing_file' %}
+{% set extraction_notice = notice.startswith('nakshatra_extracted:') if notice else false %}
+
+{% if upload_ok %}
+  {% set parts = notice.split(':') %}
+  <div class="admin-alert admin-alert-success">Upload başarılı. {{ parts[1] }} chunk üretildi.</div>
+{% elif parse_empty %}
+  <div class="admin-alert admin-alert-warning">PDF yüklendi ancak parse sonucu boş döndü.</div>
+{% elif invalid_pdf %}
+  <div class="admin-alert admin-alert-danger">Sadece PDF yüklenebilir.</div>
+{% elif missing_file %}
+  <div class="admin-alert admin-alert-danger">PDF seçilmedi.</div>
+{% elif extraction_notice %}
+  {% set parts = notice.split(':') %}
+  <div class="admin-alert admin-alert-success">Nakshatra extraction tamamlandı: {{ parts[1] }} bölüm, {{ parts[2] }} suggested chunk üretildi.</div>
+{% elif notice %}
+  <div class="admin-alert admin-alert-success">{{ notice }}</div>
+{% endif %}
+
+<section class="admin-grid-2">
+  <article class="admin-card">
+    <div class="admin-card-title">PDF / Document Upload</div>
+    <form class="admin-form" method="post" action="/admin/documents/upload" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="admin-field">
+        <label>Title</label>
+        <input type="text" name="title" placeholder="Document title">
+      </div>
+      <div class="admin-field">
+        <label>Document Type</label>
+        <select name="document_type">
+          <option value="book">book</option>
+          <option value="notes">notes</option>
+          <option value="article">article</option>
+          <option value="internal_training">internal_training</option>
+        </select>
+      </div>
+      <div class="admin-field">
+        <label>PDF File</label>
+        <input type="file" name="file" accept=".pdf">
+      </div>
+      <div class="admin-page-actions">
+        <button class="btn-admin btn-admin-primary" type="submit">Upload PDF</button>
+      </div>
+    </form>
+  </article>
+
+  <article class="admin-card">
+    <div class="admin-card-title">Import Flow</div>
+    <ul class="admin-list">
+      <li>PDF sayfaları text block’lara ayrılır.</li>
+      <li>Chunk üretimi mevcut document parser ve chunker üstünden ilerler.</li>
+      <li>Nakshatra extraction suggested chunk’ları review_required olarak saklar.</li>
+      <li>Review queue üzerinden onaylanan içerik retrieval görünürlüğü kazanır.</li>
+    </ul>
+    <div class="admin-page-actions" style="margin-top:1rem;">
+      <a href="/admin/knowledge/review">View Review Queue →</a>
+    </div>
+  </article>
+</section>
+
+<section class="admin-table-wrap">
+  <div class="admin-table-header"><div class="admin-table-title">Uploaded Documents</div></div>
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>Type</th>
+        <th>File</th>
+        <th>Uploaded At</th>
+        <th>Processing status</th>
+        <th>Chunk count</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in documents %}
+      <tr>
+        <td>{{ row.document.title }}</td>
+        <td>{{ row.document.document_type or "-" }}</td>
+        <td>{{ row.file_name or "-" }}</td>
+        <td>{{ row.document.uploaded_at.strftime("%Y-%m-%d %H:%M") if row.document.uploaded_at else "-" }}</td>
+        <td>{{ row.processing_status }}</td>
+        <td>{{ row.chunk_count }}</td>
+        <td>
+          <span class="badge badge-success">Parse / Import Chunks</span>
+          <form method="post" action="/admin/documents/{{ row.document.id }}/extract-nakshatra" style="display:inline; margin-left:.5rem;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="btn-admin btn-admin-secondary" type="submit">Nakshatra Extract</button>
+          </form>
+          <a href="/admin/knowledge/review" style="margin-left:.75rem;">View Review Queue</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="admin-muted">Henüz yüklenmiş doküman yok.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

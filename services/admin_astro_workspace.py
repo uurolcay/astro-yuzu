@@ -316,20 +316,27 @@ def build_ai_payload(*, report_type, primary_profile, primary_bundle, secondary_
     return payload
 
 
-def build_workspace_prompt_payload(payload, *, behavior_rules=None, runtime_overrides=None):
+def build_workspace_prompt_payload(payload, *, behavior_rules=None, runtime_overrides=None, db=None):
     report_type = normalize_workspace_report_type(
         payload.get("workspace_report_type") or payload.get("report_order_type") or payload.get("report_type")
     )
     report_meta = localized_workspace_report_meta(report_type, payload.get("language"))
-    return ai_behavior_rules.inject_rules_into_payload(
+    prompt_payload = ai_behavior_rules.inject_rules_into_payload(
         payload,
         active_rules=behavior_rules,
         runtime_overrides=runtime_overrides,
         task_instruction=report_meta["task"],
     )
+    augment = getattr(ai_logic, "_augment_payload_with_knowledge", None)
+    if callable(augment):
+        prompt_payload = augment(prompt_payload, db=db)
+        chunk_ids = prompt_payload.get("_used_chunk_ids")
+        if isinstance(chunk_ids, list):
+            payload["_used_chunk_ids"] = [cid for cid in chunk_ids if cid is not None]
+    return prompt_payload
 
 
-def generate_workspace_interpretation(payload, *, generator=None, behavior_rules=None, runtime_overrides=None):
+def generate_workspace_interpretation(payload, *, generator=None, behavior_rules=None, runtime_overrides=None, db=None):
     report_type = normalize_workspace_report_type(
         payload.get("workspace_report_type") or payload.get("report_order_type") or payload.get("report_type")
     )
@@ -347,6 +354,7 @@ def generate_workspace_interpretation(payload, *, generator=None, behavior_rules
         payload,
         behavior_rules=behavior_rules,
         runtime_overrides=runtime_overrides,
+        db=db,
     )
     return (generator or ai_logic.generate_interpretation)(prompt_payload)
 
@@ -367,6 +375,12 @@ def save_internal_interpretation(db, *, profile=None, secondary_profile=None, re
         profile.last_generated_at = datetime.utcnow()
     if secondary_profile:
         secondary_profile.last_generated_at = datetime.utcnow()
+    chunk_ids = payload.get("_used_chunk_ids") if isinstance(payload, dict) else None
+    if isinstance(chunk_ids, list) and chunk_ids:
+        interpretation.used_chunk_ids_json = json.dumps(
+            [cid for cid in chunk_ids if cid is not None],
+            ensure_ascii=False,
+        )
     return interpretation
 
 

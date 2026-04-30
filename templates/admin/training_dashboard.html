@@ -1,0 +1,84 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}AI Quality Lab{% endblock %}
+{% block admin_content %}
+<section class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">AI Quality Lab</h1>
+    <p class="admin-page-sub">Internal knowledge coverage, evaluation health, and training backlog for the interpretation system.</p>
+  </div>
+  <div class="admin-page-actions">
+    <a class="btn-admin" href="/admin/knowledge">Knowledge Library</a>
+    <a class="btn-admin" href="/admin/test-playground">Test Playground</a>
+  </div>
+</section>
+
+<section class="admin-stats">
+  <article class="admin-stat"><div class="admin-stat-label">Knowledge Items</div><div class="admin-stat-value">{{ summary.knowledge_items }}</div></article>
+  <article class="admin-stat"><div class="admin-stat-label">Evaluations</div><div class="admin-stat-value">{{ summary.evaluations }}</div></article>
+  <article class="admin-stat"><div class="admin-stat-label">Open Gaps</div><div class="admin-stat-value">{{ summary.open_gaps }}</div></article>
+  <article class="admin-stat"><div class="admin-stat-label">Open Tasks</div><div class="admin-stat-value">{{ summary.open_tasks }}</div></article>
+</section>
+
+<section class="admin-grid-2">
+  <div class="admin-table-wrap">
+    <div class="admin-table-header"><div class="admin-table-title">Report Performance</div></div>
+    <table class="admin-table">
+      <thead><tr><th>Report Type</th><th>Runs</th><th>Accuracy</th><th>Depth</th><th>Safety</th></tr></thead>
+      <tbody>
+        {% for row in report_metrics %}
+        <tr><td>{{ row.report_type }}</td><td>{{ row.count }}</td><td>{{ "%.2f"|format(row.avg_accuracy) }}</td><td>{{ "%.2f"|format(row.avg_depth) }}</td><td>{{ "%.2f"|format(row.avg_safety) }}</td></tr>
+        {% else %}
+        <tr><td colspan="5" class="admin-muted">No evaluation data yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="admin-table-wrap">
+    <div class="admin-table-header"><div class="admin-table-title">Issue Frequency</div></div>
+    <table class="admin-table">
+      <thead><tr><th>Issue</th><th>Count</th></tr></thead>
+      <tbody>
+        {% for issue, count in issue_frequency %}
+        <tr><td>{{ issue }}</td><td>{{ count }}</td></tr>
+        {% else %}
+        <tr><td colspan="2" class="admin-muted">No issue patterns recorded.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="admin-grid-2">
+  <div class="admin-table-wrap">
+    <div class="admin-table-header"><div class="admin-table-title">Recent Evaluations</div></div>
+    <table class="admin-table">
+      <thead><tr><th>Created</th><th>Report</th><th>Accuracy</th><th>Issues</th></tr></thead>
+      <tbody>
+        {% for row in recent_evaluations %}
+        <tr>
+          <td>{{ row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "-" }}</td>
+          <td>{{ row.report_type or "-" }}</td>
+          <td>{{ "%.2f"|format(row.accuracy_score or 0) }}</td>
+          <td>{{ (row.detected_issues_json or "[]")[:70] }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="admin-muted">No evaluations yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="admin-table-wrap">
+    <div class="admin-table-header"><div class="admin-table-title">Recent Training Tasks</div></div>
+    <table class="admin-table">
+      <thead><tr><th>Task</th><th>Priority</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for row in recent_tasks %}
+        <tr><td>{{ row.title }}</td><td>{{ row.priority }}</td><td>{{ row.status }}</td></tr>
+        {% else %}
+        <tr><td colspan="3" class="admin-muted">No training tasks yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

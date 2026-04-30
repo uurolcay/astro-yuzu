@@ -1,0 +1,65 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Knowledge Library{% endblock %}
+{% block admin_content %}
+<section class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Knowledge Library</h1>
+    <p class="admin-page-sub">Atomic internal doctrine, reference notes, and embedded chunks used to ground interpretation prompts.</p>
+  </div>
+</section>
+
+<div class="admin-grid-2">
+  <section class="admin-card">
+    <div class="admin-card-title">Add Knowledge Item</div>
+    <form class="admin-form" method="post" action="/admin/knowledge">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="admin-field"><label>Title</label><input type="text" name="title" required></div>
+      <div class="admin-field"><label>Summary</label><input type="text" name="summary_text"></div>
+      <div class="admin-field"><label>Entities (comma separated)</label><input type="text" name="entities" placeholder="saturn, career, dasha"></div>
+      <div class="admin-grid-2">
+        <div class="admin-field"><label>Language</label><select name="language"><option value="tr">TR</option><option value="en">EN</option></select></div>
+        <div class="admin-field"><label>Item Type</label><input type="text" name="item_type" value="reference"></div>
+      </div>
+      <div class="admin-field"><label>Source Title</label><input type="text" name="source_title"></div>
+      <div class="admin-grid-2">
+        <div class="admin-field"><label>Source Label</label><input type="text" name="source_label"></div>
+        <div class="admin-field"><label>Source URI</label><input type="text" name="source_uri"></div>
+      </div>
+      <div class="admin-field"><label>Body</label><textarea name="body_text" required></textarea></div>
+      <div class="admin-page-actions"><button class="btn-admin btn-admin-primary" type="submit">Save Knowledge</button></div>
+    </form>
+  </section>
+
+  <section class="admin-card">
+    <div class="admin-card-title">Source Documents</div>
+    <div class="admin-context-list">
+      {% for doc in documents %}
+      <div class="admin-context-link"><span>{{ doc.title }}</span><span>{{ doc.document_type or "doc" }}</span></div>
+      {% else %}
+      <div class="admin-muted">No source documents yet.</div>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+
+<section class="admin-table-wrap">
+  <div class="admin-table-header"><div class="admin-table-title">Knowledge Items</div></div>
+  <table class="admin-table">
+    <thead><tr><th>Title</th><th>Language</th><th>Type</th><th>Entities</th><th>Chunks</th><th>Updated</th></tr></thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td>{{ item.title }}</td>
+        <td>{{ item.language }}</td>
+        <td>{{ item.item_type }}</td>
+        <td>{{ item.entities_json }}</td>
+        <td>{{ item.chunks|length }}</td>
+        <td>{{ item.updated_at.strftime("%Y-%m-%d %H:%M") if item.updated_at else "-" }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="admin-muted">No knowledge items yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

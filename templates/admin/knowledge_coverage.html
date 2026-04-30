@@ -1,0 +1,68 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Knowledge Coverage Haritası{% endblock %}
+{% block admin_content %}
+<section class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Knowledge Coverage Haritası</h1>
+    <p class="admin-page-sub">Knowledge base içinde hangi Vedik astroloji konularının güçlü, zayıf veya eksik olduğunu görün.</p>
+  </div>
+  <div class="admin-page-actions">
+    <a class="btn-admin btn-admin-secondary" href="/admin/astro-workspace/quality">AI Yorum Kalitesi</a>
+  </div>
+</section>
+
+{% if notice %}<div class="admin-alert admin-alert-success">{{ notice }}</div>{% endif %}
+
+{% set summary = coverage.summary or {} %}
+<section class="admin-grid-3">
+  <article class="admin-card"><div class="admin-card-title">Total entities</div><div class="admin-stat">{{ summary.total_entities or 0 }}</div></article>
+  <article class="admin-card"><div class="admin-card-title">Missing</div><div class="admin-stat">{{ summary.missing_count or 0 }}</div></article>
+  <article class="admin-card"><div class="admin-card-title">Weak</div><div class="admin-stat">{{ summary.weak_count or 0 }}</div></article>
+  <article class="admin-card"><div class="admin-card-title">Moderate</div><div class="admin-stat">{{ summary.moderate_count or 0 }}</div></article>
+  <article class="admin-card"><div class="admin-card-title">Strong</div><div class="admin-stat">{{ summary.strong_count or 0 }}</div></article>
+  <article class="admin-card"><div class="admin-card-title">Overall coverage %</div><div class="admin-stat">{{ summary.overall_pct or 0 }}</div></article>
+</section>
+
+<section class="admin-grid-2">
+  <article class="admin-card">
+    <div class="admin-card-title">Eksik Konular</div>
+    <div class="admin-page-actions">
+      {% for entity in coverage.missing_entities or [] %}<span class="badge badge-danger">{{ entity }}</span>{% else %}<span class="admin-muted">Yok.</span>{% endfor %}
+    </div>
+  </article>
+  <article class="admin-card">
+    <div class="admin-card-title">Zayıf Konular</div>
+    <div class="admin-page-actions">
+      {% for entity in coverage.weak_entities or [] %}<span class="badge badge-warning">{{ entity }}</span>{% else %}<span class="admin-muted">Yok.</span>{% endfor %}
+    </div>
+  </article>
+</section>
+
+{% for category, rows in (coverage.by_category or {}).items() %}
+<details class="admin-card" {% if loop.first %}open{% endif %}>
+  <summary class="admin-card-title" style="cursor:pointer;">{{ category }}</summary>
+  <div class="table-wrap">
+    <table class="admin-table">
+      <thead>
+        <tr><th>Entity</th><th>Chunk count</th><th>Coverage level</th><th>Coverage %</th></tr>
+      </thead>
+      <tbody>
+        {% for entity, info in rows.items() %}
+        <tr>
+          <td>{{ entity }}</td>
+          <td>{{ info.chunk_count }}</td>
+          <td>
+            {% set level = info.level or 'unknown' %}
+            <span class="badge {% if level == 'missing' %}badge-danger{% elif level == 'weak' %}badge-warning{% elif level == 'moderate' %}badge-info{% elif level == 'strong' %}badge-success{% else %}badge-secondary{% endif %}">
+              {{ level }}
+            </span>
+          </td>
+          <td>{{ info.pct }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</details>
+{% endfor %}
+{% endblock %}

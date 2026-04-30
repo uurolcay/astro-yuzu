@@ -1,0 +1,30 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Training Tasks{% endblock %}
+{% block admin_content %}
+<section class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Training Tasks</h1>
+    <p class="admin-page-sub">Human action queue for filling knowledge gaps and improving prompt support quality.</p>
+  </div>
+</section>
+
+<section class="admin-table-wrap">
+  <div class="admin-table-header"><div class="admin-table-title">Task Queue</div></div>
+  <table class="admin-table">
+    <thead><tr><th>Created</th><th>Title</th><th>Priority</th><th>Status</th><th>Payload</th></tr></thead>
+    <tbody>
+      {% for task in tasks %}
+      <tr>
+        <td>{{ task.created_at.strftime("%Y-%m-%d %H:%M") if task.created_at else "-" }}</td>
+        <td>{{ task.title }}</td>
+        <td>{{ task.priority }}</td>
+        <td>{{ task.status }}</td>
+        <td>{{ task.payload_json }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="admin-muted">No training tasks yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

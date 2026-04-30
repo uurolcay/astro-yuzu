@@ -1,0 +1,31 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Knowledge Gaps{% endblock %}
+{% block admin_content %}
+<section class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Knowledge Gaps</h1>
+    <p class="admin-page-sub">Coverage mismatches detected between chart entities and generated explanations.</p>
+  </div>
+</section>
+
+<section class="admin-table-wrap">
+  <div class="admin-table-header"><div class="admin-table-title">Gap Log</div></div>
+  <table class="admin-table">
+    <thead><tr><th>Created</th><th>Report Type</th><th>Language</th><th>Missing Entities</th><th>Missing Topics</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for gap in gaps %}
+      <tr>
+        <td>{{ gap.created_at.strftime("%Y-%m-%d %H:%M") if gap.created_at else "-" }}</td>
+        <td>{{ gap.report_type or "-" }}</td>
+        <td>{{ gap.language }}</td>
+        <td>{{ gap.missing_entities_json }}</td>
+        <td>{{ gap.missing_topics_json }}</td>
+        <td>{{ gap.status }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="admin-muted">No knowledge gaps recorded.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

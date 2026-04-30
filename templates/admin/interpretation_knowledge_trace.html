@@ -1,0 +1,157 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Knowledge Trace{% endblock %}
+{% block admin_content %}
+<section class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Knowledge Trace — Interpretation #{{ interpretation.id }}</h1>
+    <p class="admin-page-sub">Bu yorumun hangi bilgi parçalarına dayandığını ve knowledge base kapsama durumunu izleyin.</p>
+  </div>
+  <div class="admin-page-actions">
+    <a href="/admin/astro-workspace/quality">Kalite paneline dön</a>
+    <a href="/admin/astro-workspace/quality/{{ interpretation.id }}/review">Bu yorumu değerlendir</a>
+    <a href="/admin/knowledge/coverage">Knowledge coverage</a>
+  </div>
+</section>
+
+{% if notice %}<div class="admin-alert admin-alert-success">{{ notice }}</div>{% endif %}
+
+<section class="admin-card">
+  <div class="admin-card-title">Kullanılan Bilgiler</div>
+  <div class="table-wrap">
+    <table class="admin-table">
+      <thead><tr><th>chunk_id</th><th>knowledge_item_title</th><th>entities</th><th>coverage_level</th><th>text preview</th></tr></thead>
+      <tbody>
+        {% for chunk in trace.used_chunks or [] %}
+        <tr>
+          <td>{{ chunk.chunk_id }}</td>
+          <td>{{ chunk.knowledge_item_title }}</td>
+          <td>{% for entity in chunk.entities or [] %}<span class="badge badge-secondary">{{ entity }}</span>{% endfor %}</td>
+          <td>{{ chunk.coverage_level }}</td>
+          <td>{{ chunk.chunk_text_preview }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="admin-muted">Kayıtlı chunk trace bulunamadı.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="admin-card">
+  <div class="admin-card-title">Chart’ta Beklenen Varlıklar</div>
+  <div class="admin-page-actions">
+    {% for entity in trace.chart_expected_entities or [] %}<span class="badge badge-secondary">{{ entity }}</span>{% else %}<span class="admin-muted">Tespit edilen varlık yok.</span>{% endfor %}
+  </div>
+</section>
+
+<section class="admin-card">
+  <div class="admin-card-title">Yorumda Görünen Varlıklar</div>
+  <div class="admin-page-actions">
+    {% for entity in trace.output_entities or [] %}<span class="badge badge-info">{{ entity }}</span>{% else %}<span class="admin-muted">Final yorumda eşleşen varlık tespit edilmedi.</span>{% endfor %}
+  </div>
+</section>
+
+<section class="admin-card">
+  <div class="admin-card-title">Knowledge Base’de Eksik Olanlar</div>
+  {% if trace.missing_from_knowledge %}
+  <p class="admin-section-sub">Bu yorum için beklenen ancak knowledge base’de yeterli kaynağı bulunmayan konular:</p>
+  <div class="admin-page-actions">
+    {% for entity in trace.missing_from_knowledge %}<span class="badge badge-danger">{{ entity }}</span>{% endfor %}
+  </div>
+  {% else %}
+  <div class="admin-muted">Tespit edilen beklenen varlıklar knowledge base’de mevcut.</div>
+  {% endif %}
+</section>
+
+<section class="admin-card">
+  <div class="admin-card-title">Zayıf Derinlikte Olanlar</div>
+  {% if trace.retrieved_but_weak %}
+  <p class="admin-section-sub">Bu konular knowledge base’de var ancak derinlik düşük görünüyor.</p>
+  <div class="admin-page-actions">
+    {% for entity in trace.retrieved_but_weak %}<span class="badge badge-warning">{{ entity }}</span>{% endfor %}
+  </div>
+  {% else %}
+  <div class="admin-muted">Düşük derinlikte tespit edilen konu yok.</div>
+  {% endif %}
+</section>
+
+<section class="admin-card">
+  <div class="admin-card-title">Çekilip Yoruma Yansımayanlar</div>
+  {% if trace.not_in_output %}
+  <p class="admin-section-sub">Bu varlıklar knowledge context’e alınmış ancak final yorumda açıkça görünmüyor.</p>
+  <div class="admin-page-actions">
+    {% for entity in trace.not_in_output %}<span class="badge badge-secondary">{{ entity }}</span>{% endfor %}
+  </div>
+  {% else %}
+  <div class="admin-muted">Kullanılan bilgi varlıkları yorumda görünür durumda.</div>
+  {% endif %}
+</section>
+
+<details class="admin-card">
+  <summary class="admin-card-title" style="cursor:pointer;">Unused Chunks</summary>
+  {% if trace.unused_chunks %}
+  <div class="table-wrap">
+    <table class="admin-table">
+      <thead><tr><th>chunk_id</th><th>entities</th><th>reason</th><th>preview</th></tr></thead>
+      <tbody>
+        {% for chunk in trace.unused_chunks %}
+        <tr>
+          <td>{{ chunk.chunk_id }}</td>
+          <td>{% for entity in chunk.entities or [] %}<span class="badge badge-secondary">{{ entity }}</span>{% endfor %}</td>
+          <td>{{ chunk.reason }}</td>
+          <td>{{ chunk.chunk_text_preview }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="admin-muted">Unused chunk tespit edilmedi.</div>
+  {% endif %}
+</details>
+
+<section class="admin-card">
+  <div class="admin-card-title">Gap Analizi</div>
+  <div class="table-wrap">
+    <table class="admin-table">
+      <thead><tr><th>entity</th><th>gap_type</th></tr></thead>
+      <tbody>
+        {% for entity, gap_type in (trace.gap_types or {}).items() %}
+        <tr>
+          <td>{{ entity }}</td>
+          <td>
+            {% if gap_type == "missing_knowledge" %}Kaynak eksik
+            {% elif gap_type == "low_depth" %}Derinlik zayıf
+            {% elif gap_type == "unused_knowledge" %}Bilgi çekildi ama kullanılmadı
+            {% else %}{{ gap_type }}
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="2" class="admin-muted">Gap bulunmadı.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="admin-card">
+  <div class="admin-card-title">Suggested Training Tasks</div>
+  <div class="table-wrap">
+    <table class="admin-table">
+      <thead><tr><th>priority</th><th>title</th><th>reason / entity</th></tr></thead>
+      <tbody>
+        {% for task in suggested_tasks or [] %}
+        <tr>
+          <td>{{ task.priority }}</td>
+          <td>{{ task.title }}</td>
+          <td>{{ task.reason }}{% if task.entity %} / {{ task.entity }}{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3" class="admin-muted">Öneri üretilmedi.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

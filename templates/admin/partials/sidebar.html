@@ -33,6 +33,16 @@
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="5"/><path d="M8 1v3M8 12v3M1 8h3M12 8h3M4.5 4.5l2 2M9.5 9.5l2 2"/></svg>
       Astro Workspace
     </a>
+    <a class="admin-nav-link {% if active_page == 'training_dashboard' %}active{% endif %}" href="/admin/training/dashboard">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 13h12"/><path d="M4 11V7M8 11V4M12 11V8"/></svg>
+      AI Quality Lab
+    </a>
+    <a class="admin-nav-link admin-nav-child {% if active_page == 'knowledge_library' %}active{% endif %}" href="/admin/knowledge">Knowledge</a>
+    <a class="admin-nav-link admin-nav-child {% if active_page == 'documents' %}active{% endif %}" href="/admin/documents">Documents</a>
+    <a class="admin-nav-link admin-nav-child {% if active_page == 'knowledge_gaps' %}active{% endif %}" href="/admin/gaps">Knowledge Gaps</a>
+    <a class="admin-nav-link admin-nav-child {% if active_page == 'evaluation_logs' %}active{% endif %}" href="/admin/evaluations">Evaluations</a>
+    <a class="admin-nav-link admin-nav-child {% if active_page == 'training_tasks' %}active{% endif %}" href="/admin/tasks">Training Tasks</a>
+    <a class="admin-nav-link admin-nav-child {% if active_page == 'test_playground' %}active{% endif %}" href="/admin/test-playground">Test Playground</a>
 
     <div class="admin-nav-section">Finance</div>
     <a class="admin-nav-link {% if active_page == 'accounting' and path == '/admin/accounting' %}active{% endif %}" href="/admin/accounting">

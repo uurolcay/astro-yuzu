@@ -1,0 +1,48 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Knowledge Review{% endblock %}
+{% block admin_content %}
+<section class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Knowledge Review</h1>
+    <p class="admin-page-sub">Review-required bilgi parçalarını düzenleyin, onaylayın veya reddedin.</p>
+  </div>
+</section>
+
+{% if notice %}<div class="admin-alert admin-alert-success">{{ notice }}</div>{% endif %}
+
+<section class="admin-table-wrap">
+  <div class="admin-table-header">
+    <div class="admin-table-title">Bekleyen Bilgi Parçaları</div>
+  </div>
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>Category</th>
+        <th>Primary Entity</th>
+        <th>Source Title</th>
+        <th>Confidence</th>
+        <th>Sensitivity</th>
+        <th>Created</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in items %}
+      <tr>
+        <td>{{ row.title }}</td>
+        <td>{{ row.category }}</td>
+        <td>{{ row.primary_entity }}</td>
+        <td>{{ row.source_title }}</td>
+        <td>{{ row.confidence_level }}</td>
+        <td>{{ row.sensitivity_level }}</td>
+        <td>{{ row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "-" }}</td>
+        <td><a href="/admin/knowledge/review/{{ row.item.id }}">İncele →</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="admin-muted">Review bekleyen knowledge item yok.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

@@ -1,0 +1,74 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Knowledge Review Detail{% endblock %}
+{% block admin_content %}
+<section class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Knowledge Review — #{{ item.id }}</h1>
+    <p class="admin-page-sub">{{ metadata.category or item.item_type or "reference" }} inceleme ekranı.</p>
+  </div>
+</section>
+
+{% if notice %}<div class="admin-alert admin-alert-success">{{ notice }}</div>{% endif %}
+{% if error %}<div class="admin-alert admin-alert-danger">{{ error }}</div>{% endif %}
+
+<div class="admin-page-actions" style="margin-bottom:1rem;">
+  <a href="/admin/knowledge/review">← Review listesi</a>
+</div>
+
+<details class="admin-card" open>
+  <summary class="admin-card-title" style="cursor:pointer;">Current Body</summary>
+  <div style="max-height:320px; overflow:auto; white-space:pre-wrap; line-height:1.7;">{{ item.body_text }}</div>
+</details>
+
+<section class="admin-card">
+  <div class="admin-card-title">Edit Knowledge Item</div>
+  <form class="admin-form" method="post" action="/admin/knowledge/review/{{ item.id }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="admin-grid-2">
+      <div class="admin-field"><label>Title</label><input type="text" name="title" value="{{ (form_data.title if form_data else metadata.title) or item.title }}"></div>
+      <div class="admin-field"><label>Coverage Entities</label><input type="text" name="coverage_entities" value="{{ (form_data.coverage_entities if form_data else (metadata.coverage_entities|join(', '))) if metadata.coverage_entities else '' }}"></div>
+    </div>
+    <div class="admin-grid-2">
+      <div class="admin-field"><label>Confidence Level</label><input type="text" name="confidence_level" value="{{ (form_data.confidence_level if form_data else metadata.confidence_level) or '' }}"></div>
+      <div class="admin-field"><label>Sensitivity Level</label><input type="text" name="sensitivity_level" value="{{ (form_data.sensitivity_level if form_data else metadata.sensitivity_level) or '' }}"></div>
+    </div>
+    <div class="admin-field"><label>Tags</label><input type="text" name="tags" value="{{ (form_data.tags if form_data else (metadata.tags|join(', '))) if metadata.tags else '' }}"></div>
+    {% for field, label in [
+      ("classical_view", "Classical View"),
+      ("modern_synthesis", "Modern Synthesis"),
+      ("interpretation_logic", "Interpretation Logic"),
+      ("strong_condition", "Strong Condition"),
+      ("weak_condition", "Weak Condition"),
+      ("risk_pattern", "Risk Pattern"),
+      ("opportunity_pattern", "Opportunity Pattern"),
+      ("dasha_activation", "Dasha Activation"),
+      ("transit_activation", "Transit Activation"),
+      ("safe_language_notes", "Safe Language Notes"),
+      ("what_not_to_say", "What Not To Say"),
+      ("premium_synthesis_sentence", "Premium Synthesis Sentence")
+    ] %}
+    <div class="admin-field">
+      <label>{{ label }}</label>
+      <textarea name="{{ field }}">{{ (form_data[field] if form_data and field in form_data else metadata.get(field, "")) or "" }}</textarea>
+    </div>
+    {% endfor %}
+    <div class="admin-page-actions">
+      <button class="btn-admin btn-admin-primary" type="submit">Kaydet</button>
+    </div>
+  </form>
+</section>
+
+<section class="admin-card">
+  <div class="admin-card-title">Publish / Reject</div>
+  <div class="admin-page-actions">
+    <form method="post" action="/admin/knowledge/review/{{ item.id }}/publish" style="display:inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn-admin btn-admin-primary" type="submit">Publish</button>
+    </form>
+    <form method="post" action="/admin/knowledge/review/{{ item.id }}/reject" style="display:inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn-admin btn-admin-secondary" type="submit">Reject</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

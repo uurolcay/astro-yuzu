@@ -1,10 +1,10 @@
-{% extends "admin/base_admin.html" %}
-{% block admin_title %}DanÄ±ÅŸmanlÄ±k RandevularÄ±{% endblock %}
+﻿{% extends "admin/base_admin.html" %}
+{% block admin_title %}DanÃ„Â±Ã…Å¸manlÃ„Â±k RandevularÃ„Â±{% endblock %}
 
 {% block admin_content %}
 <div class="admin-page-header">
   <div>
-    <h1 class="admin-page-title">DanÄ±ÅŸmanlÄ±k RandevularÄ±</h1>
+    <h1 class="admin-page-title">DanÃ„Â±Ã…Å¸manlÃ„Â±k RandevularÃ„Â±</h1>
     <p class="admin-page-sub">{{ total }} randevu</p>
   </div>
 </div>
@@ -12,11 +12,11 @@
 <form class="admin-filter-bar" method="get">
   <input type="text" name="q" value="{{ q or '' }}" placeholder="E-posta ara...">
   <select name="status">
-    <option value="">TÃ¼m durumlar</option>
+    <option value="">TÃƒÂ¼m durumlar</option>
     <option value="pending" {% if status == 'pending' %}selected{% endif %}>Bekliyor</option>
-    <option value="confirmed" {% if status == 'confirmed' %}selected{% endif %}>OnaylandÄ±</option>
-    <option value="completed" {% if status == 'completed' %}selected{% endif %}>TamamlandÄ±</option>
-    <option value="cancelled" {% if status == 'cancelled' %}selected{% endif %}>Ä°ptal</option>
+    <option value="confirmed" {% if status == 'confirmed' %}selected{% endif %}>OnaylandÃ„Â±</option>
+    <option value="completed" {% if status == 'completed' %}selected{% endif %}>TamamlandÃ„Â±</option>
+    <option value="cancelled" {% if status == 'cancelled' %}selected{% endif %}>Ã„Â°ptal</option>
   </select>
   <button class="btn-admin btn-admin-primary" type="submit">Filtrele</button>
 </form>
@@ -24,44 +24,44 @@
 <div class="admin-table-wrap">
   <table class="admin-table">
     <thead><tr>
-      <th>MÃ¼ÅŸteri</th><th>Randevu Tarihi</th><th>Ã–deme</th><th>Durum</th><th>Not</th><th></th>
+      <th>MÃƒÂ¼Ã…Å¸teri</th><th>Randevu Tarihi</th><th>Ãƒâ€“deme</th><th>Durum</th><th>Not</th><th></th>
     </tr></thead>
     <tbody>
       {% for c in consultations %}
       <tr>
         <td>
-          <div><a href="/admin/orders/{{ c.id }}">{{ c.name or 'â€”' }}</a></div>
+          <div><a href="/admin/orders/{{ c.id }}">{{ c.name or 'Ã¢â‚¬â€' }}</a></div>
           <div style="font-size:.75rem; color:var(--muted);">{{ c.email }}</div>
         </td>
-        <td style="font-size:.85rem;">{{ c.booking_date or 'â€”' }}</td>
+        <td style="font-size:.85rem;">{{ c.booking_date or '—' }}</td>
         <td>
-          {% if c.payment_status == 'paid' %}<span class="badge badge-success">Ã–dendi</span>
+          {% if c.payment_status == 'paid' %}<span class="badge badge-success">Ödendi</span>
           {% elif c.payment_status == 'pending' %}<span class="badge badge-warning">Bekliyor</span>
-          {% else %}<span class="badge badge-muted">{{ c.payment_status or 'â€”' }}</span>{% endif %}
+          {% else %}<span class="badge badge-muted">{{ c.payment_status or '—' }}</span>{% endif %}
         </td>
         <td>
           {% if c.status == 'pending' %}<span class="badge badge-warning">Bekliyor</span>
-          {% elif c.status == 'confirmed' %}<span class="badge badge-info">OnaylandÄ±</span>
-          {% elif c.status == 'completed' %}<span class="badge badge-success">TamamlandÄ±</span>
-          {% elif c.status == 'cancelled' %}<span class="badge badge-danger">Ä°ptal</span>
+          {% elif c.status == 'confirmed' %}<span class="badge badge-info">OnaylandÃ„Â±</span>
+          {% elif c.status == 'completed' %}<span class="badge badge-success">TamamlandÃ„Â±</span>
+          {% elif c.status == 'cancelled' %}<span class="badge badge-danger">Ã„Â°ptal</span>
           {% else %}<span class="badge badge-muted">{{ c.status }}</span>{% endif %}
         </td>
-        <td style="font-size:.8rem; color:var(--muted); max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ c.notes or 'â€”' }}</td>
+        <td style="font-size:.8rem; color:var(--muted); max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ c.notes or 'Ã¢â‚¬â€' }}</td>
         <td>
           <form method="post" action="/admin/consultations/{{ c.id }}/status" style="display:flex; gap:6px; align-items:center;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <select name="status" style="font-size:.8rem; padding:4px 8px; background:var(--surface2); border:1px solid var(--border); color:var(--text); border-radius:6px;">
               <option value="pending">Bekliyor</option>
-              <option value="confirmed">OnaylandÄ±</option>
-              <option value="completed">TamamlandÄ±</option>
-              <option value="cancelled">Ä°ptal</option>
+              <option value="confirmed">OnaylandÃ„Â±</option>
+              <option value="completed">TamamlandÃ„Â±</option>
+              <option value="cancelled">Ã„Â°ptal</option>
             </select>
-            <button class="btn-admin" type="submit" style="padding:4px 10px; font-size:.8rem;">GÃ¼ncelle</button>
+            <button class="btn-admin" type="submit" style="padding:4px 10px; font-size:.8rem;">GÃƒÂ¼ncelle</button>
           </form>
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="6" style="color:var(--muted); text-align:center; padding:32px;">Randevu bulunamadÄ±</td></tr>
+      <tr><td colspan="6" style="color:var(--muted); text-align:center; padding:32px;">Randevu bulunamadÃ„Â±</td></tr>
       {% endfor %}
     </tbody>
   </table>

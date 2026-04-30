@@ -1,4 +1,4 @@
-import csv
+﻿import csv
 import copy
 import base64
 import html as html_lib
@@ -37,6 +37,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 from itsdangerous import BadSignature, TimestampSigner
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from weasyprint import HTML as WeasyHTML
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -89,7 +90,17 @@ from services import admin_astro_workspace as astro_workspace
 from services import admin_astro_chat as astro_chat
 from services import ai_behavior_rules
 from services import astro_signal_enrichment
+from services import evaluation_service
+from services import gap_detector
+from services import interpretation_quality_service as quality_svc
+from services import knowledge_coverage_service as coverage_svc
+from services import knowledge_import_service
+from services import knowledge_service
 from services import report_structure_v3
+from services import retrieval_service
+from services import training_service
+from services import document_parser, document_chunker
+from services import nakshatra_extraction_service
 from services.geocoding import BirthPlaceResolutionError, search_birth_places
 from services import payments
 from engines import engines_dasha, engines_eclipses, engines_natal, engines_navamsa, engines_transits
@@ -110,36 +121,40 @@ except ImportError:
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
 
-LAUNCH_MODE = os.getenv("LAUNCH_MODE", "true").lower() == "true"
-ENABLE_PAYMENTS = os.getenv("ENABLE_PAYMENTS", "false").lower() == "true"
-ENABLE_FREE_CALCULATOR = os.getenv("ENABLE_FREE_CALCULATOR", "false").lower() == "true"
-ENABLE_AI_INTERPRETATION = os.getenv("ENABLE_AI_INTERPRETATION", "false").lower() == "true"
-ENABLE_CONSULTATION_BOOKING = os.getenv("ENABLE_CONSULTATION_BOOKING", "false").lower() == "true"
+def get_bool_env(key, default):
+    return os.getenv(key, str(default)).lower() == "true"
+
+
+LAUNCH_MODE = get_bool_env("LAUNCH_MODE", True)
+ENABLE_PAYMENTS = get_bool_env("ENABLE_PAYMENTS", False)
+ENABLE_FREE_CALCULATOR = get_bool_env("ENABLE_FREE_CALCULATOR", False)
+ENABLE_AI_INTERPRETATION = get_bool_env("ENABLE_AI_INTERPRETATION", False)
+ENABLE_CONSULTATION_BOOKING = get_bool_env("ENABLE_CONSULTATION_BOOKING", False)
+PORT = int(os.getenv("PORT", 8000))
 
 
 def _env_flag_value(name, default=False):
-    raw = str(os.getenv(name, "true" if default else "false")).strip().lower()
-    return raw in {"1", "true", "yes", "on"}
+    return get_bool_env(name, default)
 
 
 def launch_mode_enabled():
-    return LAUNCH_MODE
+    return _env_flag_value("LAUNCH_MODE", default=True)
 
 
 def launch_payments_enabled():
-    return ENABLE_PAYMENTS
+    return _env_flag_value("ENABLE_PAYMENTS", default=False)
 
 
 def launch_free_calculator_enabled():
-    return ENABLE_FREE_CALCULATOR
+    return _env_flag_value("ENABLE_FREE_CALCULATOR", default=False)
 
 
 def launch_ai_interpretation_enabled():
-    return ENABLE_AI_INTERPRETATION
+    return _env_flag_value("ENABLE_AI_INTERPRETATION", default=False)
 
 
 def launch_consultation_booking_enabled():
-    return ENABLE_CONSULTATION_BOOKING
+    return _env_flag_value("ENABLE_CONSULTATION_BOOKING", default=False)
 
 
 def _launch_mode_flags():
@@ -162,6 +177,9 @@ SESSION_SECRET_KEY = (
 app = FastAPI(title="Astro-Yuzu Intelligence Core", version="5.3")
 templates = Jinja2Templates(directory="templates")
 
+print("LAUNCH_MODE:", LAUNCH_MODE)
+print("ENABLE_PAYMENTS:", ENABLE_PAYMENTS)
+
 
 @pass_context
 def _template_translate(context, key, lang=None, **kwargs):
@@ -178,6 +196,7 @@ def _template_translate(context, key, lang=None, **kwargs):
 templates.env.globals["t"] = _template_translate
 templates.env.globals["translation_namespace"] = translation_namespace
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET_KEY, max_age=int(timedelta(days=30).total_seconds()))
 
 app.add_middleware(
@@ -4861,7 +4880,7 @@ def maybe_send_report_order_confirmation_email(db, order):
         db,
         email_type="report_order_confirmation",
         to_email=order.customer_email,
-        subject="Rapor talebiniz alÃ„Â±ndÃ„Â± Ã¢â‚¬â€ Focus Astrology",
+        subject="Rapor talebiniz alÃ„Â±ndÃ„Â± ââ‚¬â€ Focus Astrology",
         html_body=html,
         event_type="report_order",
         event_key=f"report_order_confirmation:{order.id}",
@@ -6471,6 +6490,91 @@ def _auth_template_context(request, **extra):
     return context
 
 
+def _json_loads_safe(value, default):
+    try:
+        return json.loads(value or "null")
+    except Exception:
+        return default
+
+
+def _ai_quality_context(request, **extra):
+    active_page = extra.pop("active_page", "training_dashboard")
+    return _auth_template_context(
+        request,
+        dashboard_user=request.state.admin_user,
+        active_page=active_page,
+        **extra,
+    )
+
+
+def _knowledge_item_metadata(item):
+    metadata = _json_loads_safe(getattr(item, "metadata_json", None), {}) or {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    return metadata
+
+
+def _csv_to_list(value):
+    items = []
+    for part in str(value or "").split(","):
+        cleaned = str(part or "").strip()
+        if cleaned and cleaned not in items:
+            items.append(cleaned)
+    return items
+
+
+def _knowledge_review_body(metadata):
+    blocks = []
+    for label, key in [
+        ("Classical View", "classical_view"),
+        ("Modern Synthesis", "modern_synthesis"),
+        ("Interpretation Logic", "interpretation_logic"),
+        ("Strong Condition", "strong_condition"),
+        ("Weak Condition", "weak_condition"),
+        ("Risk Pattern", "risk_pattern"),
+        ("Opportunity Pattern", "opportunity_pattern"),
+        ("Dasha Activation", "dasha_activation"),
+        ("Transit Activation", "transit_activation"),
+        ("Safe Language Notes", "safe_language_notes"),
+        ("What Not To Say", "what_not_to_say"),
+        ("Premium Synthesis", "premium_synthesis_sentence"),
+    ]:
+        value = str(metadata.get(key) or "").strip()
+        if value:
+            blocks.append(f"{label}: {value}")
+    return "\n\n".join(blocks).strip()
+
+
+def _knowledge_review_rows(items):
+    rows = []
+    for item in items:
+        metadata = _knowledge_item_metadata(item)
+        rows.append(
+            {
+                "item": item,
+                "metadata": metadata,
+                "title": item.title,
+                "category": metadata.get("category") or item.item_type or "-",
+                "primary_entity": metadata.get("primary_entity") or "-",
+                "source_title": metadata.get("source_title") or (item.source_document.title if item.source_document else "-"),
+                "confidence_level": metadata.get("confidence_level") or "-",
+                "sensitivity_level": metadata.get("sensitivity_level") or "-",
+                "created_at": item.created_at,
+            }
+        )
+    return rows
+
+
+def _review_required_items(db):
+    items = db.query(db_mod.KnowledgeItem).order_by(db_mod.KnowledgeItem.created_at.desc()).all()
+    results = []
+    for item in items:
+        metadata = _knowledge_item_metadata(item)
+        if str(item.status or "").strip().lower() == "review_required" or bool(metadata.get("review_required")):
+            results.append(item)
+    return results
+
+
 def slugify_article_title(value):
     translated = str(value or "").translate(ARTICLE_SLUG_CHAR_MAP)
     normalized = normalize("NFKD", translated).encode("ascii", "ignore").decode("ascii")
@@ -6698,7 +6802,7 @@ def _match_related_articles_for_result(db, interpretation_context, language=None
     return matched[:3]
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def index(request: Request, db: Session = Depends(get_db)):
     current_language = getattr(getattr(request, "state", None), "lang", None) or "en"
     return templates.TemplateResponse(
@@ -6710,6 +6814,11 @@ async def index(request: Request, db: Session = Depends(get_db)):
             latest_articles=get_homepage_latest_articles(db, limit=3, language=current_language),
         ),
     )
+
+
+@app.api_route("/health", methods=["GET", "HEAD"])
+async def health():
+    return {"status": "ok"}
 
 
 @app.get("/calculator", response_class=HTMLResponse)
@@ -6802,7 +6911,7 @@ async def contact_submit(request: Request, db: Session = Depends(get_db)):
         db,
         email_type="contact_autoreply",
         to_email=email,
-        subject="MesajÃ„Â±nÃ„Â±z alÃ„Â±ndÃ„Â± Ã¢â‚¬â€ Focus Astrology",
+        subject="MesajÃ„Â±nÃ„Â±z alÃ„Â±ndÃ„Â± ââ‚¬â€ Focus Astrology",
         html_body=html,
         event_type="contact_message",
         event_key=f"contact:{msg.id}",
@@ -8976,17 +9085,17 @@ def _pdf_context_for_service_order(order):
         "report_label": product.get("title") or order.product_type,
         "prepared_date": date.today().strftime("%d %B %Y") if lang == "en" else date.today().strftime("%d.%m.%Y"),
         "chart": {
-            "lagna": "Ã¢â‚¬â€",
-            "moon_sign": "Ã¢â‚¬â€",
-            "moon_house": "Ã¢â‚¬â€",
-            "sun_sign": "Ã¢â‚¬â€",
-            "sun_house": "Ã¢â‚¬â€",
-            "atmakaraka": "Ã¢â‚¬â€",
-            "mahadasha": "Ã¢â‚¬â€",
-            "mahadasha_end": "Ã¢â‚¬â€",
-            "antardasha": "Ã¢â‚¬â€",
+            "lagna": "ââ‚¬â€",
+            "moon_sign": "ââ‚¬â€",
+            "moon_house": "ââ‚¬â€",
+            "sun_sign": "ââ‚¬â€",
+            "sun_house": "ââ‚¬â€",
+            "atmakaraka": "ââ‚¬â€",
+            "mahadasha": "ââ‚¬â€",
+            "mahadasha_end": "ââ‚¬â€",
+            "antardasha": "ââ‚¬â€",
             "planets": [
-                {"name": planet, "sign": "Ã¢â‚¬â€", "house": "Ã¢â‚¬â€", "retrograde": False}
+                {"name": planet, "sign": "ââ‚¬â€", "house": "ââ‚¬â€", "retrograde": False}
                 for planet in planet_names
             ],
         },
@@ -9064,7 +9173,7 @@ async def admin_report_status(request: Request, report_id: int, status: str = Fo
             db,
             email_type="report_delivery",
             to_email=order.customer_email,
-            subject=f"Raporunuz hazÃ„Â±r Ã¢â‚¬â€ {report_type_label}",
+            subject=f"Raporunuz hazÃ„Â±r ââ‚¬â€ {report_type_label}",
             html_body=html,
             event_type="report_delivery",
             event_key=f"report_delivery:{order.id}",
@@ -11229,6 +11338,7 @@ async def admin_astro_workspace_generate(request: Request, db: Session = Depends
         interpretation_text = astro_workspace.generate_workspace_interpretation(
             prepared["payload"],
             behavior_rules=behavior_rules,
+            db=db,
         )
         if save_profile_requested and prepared["primary_profile"]:
             prepared["primary_profile"] = astro_workspace.create_or_update_internal_profile(
@@ -11435,6 +11545,186 @@ async def admin_astro_workspace_chat_session_message(
     return _render_admin_astro_chat(request, db, session=session, result=result)
 
 
+@app.get("/admin/astro-workspace/quality/insights", response_class=HTMLResponse)
+@admin_required
+async def admin_astro_workspace_quality_insights(request: Request, db: Session = Depends(get_db), notice: str = ""):
+    insights = quality_svc.list_prompt_insights(db)
+    grouped = defaultdict(list)
+    for item in insights:
+        grouped[item.insight_type].append(item)
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/astro_workspace_quality_insights.html",
+        context=_auth_template_context(
+            request,
+            dashboard_user=request.state.admin_user,
+            active_page="astro_workspace",
+            insights=insights,
+            insights_by_type=dict(grouped),
+            valid_insight_types=sorted(quality_svc.VALID_INSIGHT_TYPES),
+            report_type_options=_workspace_report_options(),
+            notice=notice,
+        ),
+    )
+
+
+@app.post("/admin/astro-workspace/quality/insights/new", response_class=HTMLResponse)
+@admin_required
+async def admin_astro_workspace_quality_insights_new(request: Request, db: Session = Depends(get_db), csrf_token: str = Form(default="")):
+    await validate_csrf_token(request, csrf_token)
+    form = await request.form()
+    admin_user = get_request_user(request, db)
+    try:
+        quality_svc.save_prompt_insight(db, dict(form), admin_user=admin_user)
+        db.commit()
+        return RedirectResponse(url="/admin/astro-workspace/quality/insights?notice=saved", status_code=303)
+    except ValueError as exc:
+        insights = quality_svc.list_prompt_insights(db)
+        grouped = defaultdict(list)
+        for item in insights:
+            grouped[item.insight_type].append(item)
+        return templates.TemplateResponse(
+            request=request,
+            name="admin/astro_workspace_quality_insights.html",
+            status_code=400,
+            context=_auth_template_context(
+                request,
+                dashboard_user=request.state.admin_user,
+                active_page="astro_workspace",
+                insights=insights,
+                insights_by_type=dict(grouped),
+                valid_insight_types=sorted(quality_svc.VALID_INSIGHT_TYPES),
+                report_type_options=_workspace_report_options(),
+                error=str(exc),
+                form_data=dict(form),
+            ),
+        )
+
+
+@app.get("/admin/astro-workspace/quality", response_class=HTMLResponse)
+@admin_required
+async def admin_astro_workspace_quality(request: Request, db: Session = Depends(get_db), notice: str = ""):
+    dashboard = quality_svc.build_quality_dashboard(db)
+    interpretations = db.query(db_mod.InternalInterpretation).order_by(db_mod.InternalInterpretation.created_at.desc()).limit(30).all()
+    review_map = {review.interpretation_id: review for review in quality_svc.list_reviews(db, limit=200)}
+    rows = []
+    for interpretation in interpretations:
+        profile_name = None
+        if interpretation.profile:
+            profile_name = interpretation.profile.full_name
+        rows.append(
+            {
+                "interpretation": interpretation,
+                "review": review_map.get(interpretation.id),
+                "profile_name": profile_name or "Internal profile",
+            }
+        )
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/astro_workspace_quality.html",
+        context=_auth_template_context(
+            request,
+            dashboard_user=request.state.admin_user,
+            active_page="astro_workspace",
+            dashboard=dashboard,
+            interpretations=rows,
+            notice=notice,
+        ),
+    )
+
+
+@app.get("/admin/astro-workspace/quality/{interpretation_id}/review", response_class=HTMLResponse)
+@admin_required
+async def admin_astro_workspace_quality_review(request: Request, interpretation_id: int, db: Session = Depends(get_db), notice: str = ""):
+    interpretation = db.query(db_mod.InternalInterpretation).filter(db_mod.InternalInterpretation.id == interpretation_id).first()
+    if not interpretation:
+        _public_error("Internal interpretation not found.", 404)
+    review = quality_svc.get_review_for_interpretation(db, interpretation_id)
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/astro_workspace_quality_review.html",
+        context=_auth_template_context(
+            request,
+            dashboard_user=request.state.admin_user,
+            active_page="astro_workspace",
+            interpretation=interpretation,
+            review=review,
+            valid_sections=sorted(quality_svc.VALID_SECTION_NAMES),
+            valid_safety_flags=sorted(quality_svc.VALID_SAFETY_FLAGS),
+            valid_statuses=sorted(quality_svc.VALID_STATUSES),
+            quality_eval_data=_json_loads_safe(getattr(review, "quality_eval_json", None), {}),
+            section_coverage_data=_json_loads_safe(getattr(review, "section_coverage_json", None), {}),
+            missing_entities_data=_json_loads_safe(getattr(review, "missing_entities_json", None), []),
+            notice=notice,
+        ),
+    )
+
+
+@app.post("/admin/astro-workspace/quality/{interpretation_id}/review", response_class=HTMLResponse)
+@admin_required
+async def admin_astro_workspace_quality_review_save(
+    request: Request,
+    interpretation_id: int,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(default=""),
+):
+    await validate_csrf_token(request, csrf_token)
+    form = await request.form()
+    admin_user = get_request_user(request, db)
+    try:
+        quality_svc.save_review(db, interpretation_id, dict(form), admin_user=admin_user)
+        db.commit()
+        return RedirectResponse(url=f"/admin/astro-workspace/quality/{interpretation_id}/review?notice=saved", status_code=303)
+    except ValueError as exc:
+        interpretation = db.query(db_mod.InternalInterpretation).filter(db_mod.InternalInterpretation.id == interpretation_id).first()
+        if not interpretation:
+            _public_error("Internal interpretation not found.", 404)
+        review = quality_svc.get_review_for_interpretation(db, interpretation_id)
+        return templates.TemplateResponse(
+            request=request,
+            name="admin/astro_workspace_quality_review.html",
+            status_code=400,
+            context=_auth_template_context(
+                request,
+                dashboard_user=request.state.admin_user,
+                active_page="astro_workspace",
+                interpretation=interpretation,
+                review=review,
+                valid_sections=sorted(quality_svc.VALID_SECTION_NAMES),
+                valid_safety_flags=sorted(quality_svc.VALID_SAFETY_FLAGS),
+                valid_statuses=sorted(quality_svc.VALID_STATUSES),
+                quality_eval_data=_json_loads_safe(getattr(review, "quality_eval_json", None), {}),
+                section_coverage_data=_json_loads_safe(getattr(review, "section_coverage_json", None), {}),
+                missing_entities_data=_json_loads_safe(getattr(review, "missing_entities_json", None), []),
+                error=str(exc),
+                form_data=dict(form),
+            ),
+        )
+
+
+@app.get("/admin/astro-workspace/quality/{interpretation_id}/knowledge", response_class=HTMLResponse)
+@admin_required
+async def admin_astro_workspace_quality_knowledge_trace(request: Request, interpretation_id: int, db: Session = Depends(get_db), notice: str = ""):
+    interpretation = db.query(db_mod.InternalInterpretation).filter(db_mod.InternalInterpretation.id == interpretation_id).first()
+    if not interpretation:
+        _public_error("Internal interpretation not found.", 404)
+    trace = coverage_svc.get_knowledge_trace_for_interpretation(db, interpretation)
+    suggested_tasks = coverage_svc.build_suggested_training_tasks_from_trace(trace)
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/interpretation_knowledge_trace.html",
+        context=_auth_template_context(
+            request,
+            dashboard_user=request.state.admin_user,
+            active_page="astro_workspace",
+            interpretation=interpretation,
+            trace=trace,
+            suggested_tasks=suggested_tasks,
+            notice=notice,
+        ),
+    )
+
+
 @app.get("/admin/astro-workspace/profiles", response_class=HTMLResponse)
 @admin_required
 async def admin_astro_workspace_profiles(request: Request, db: Session = Depends(get_db), q: str = ""):
@@ -11499,6 +11789,600 @@ async def admin_astro_workspace_profile_delete(request: Request, profile_id: int
     db.delete(profile)
     db.commit()
     return RedirectResponse(url="/admin/astro-workspace/profiles", status_code=303)
+
+
+@app.get("/admin/training/dashboard", response_class=HTMLResponse)
+@admin_required
+async def admin_training_dashboard(request: Request, db: Session = Depends(get_db)):
+    evaluations = db.query(db_mod.EvaluationResult).order_by(db_mod.EvaluationResult.created_at.desc()).all()
+    tasks = db.query(db_mod.TrainingTask).order_by(db_mod.TrainingTask.created_at.desc()).all()
+    gaps = db.query(db_mod.KnowledgeGap).order_by(db_mod.KnowledgeGap.created_at.desc()).all()
+    knowledge_items = db.query(db_mod.KnowledgeItem).order_by(db_mod.KnowledgeItem.updated_at.desc()).all()
+    by_report_type = defaultdict(lambda: {"count": 0, "accuracy_total": 0.0, "depth_total": 0.0, "safety_total": 0.0})
+    issue_frequency = defaultdict(int)
+    for row in evaluations:
+        key = str(row.report_type or "unknown")
+        by_report_type[key]["count"] += 1
+        by_report_type[key]["accuracy_total"] += float(row.accuracy_score or 0)
+        by_report_type[key]["depth_total"] += float(row.depth_score or 0)
+        by_report_type[key]["safety_total"] += float(row.safety_score or 0)
+        for issue in _json_loads_safe(row.detected_issues_json, []):
+            issue_frequency[str(issue)] += 1
+    report_metrics = []
+    for report_type, values in sorted(by_report_type.items()):
+        count = max(values["count"], 1)
+        report_metrics.append(
+            {
+                "report_type": report_type,
+                "count": values["count"],
+                "avg_accuracy": round(values["accuracy_total"] / count, 3),
+                "avg_depth": round(values["depth_total"] / count, 3),
+                "avg_safety": round(values["safety_total"] / count, 3),
+            }
+        )
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/training_dashboard.html",
+        context=_ai_quality_context(
+            request,
+            active_page="training_dashboard",
+            summary={
+                "knowledge_items": len(knowledge_items),
+                "evaluations": len(evaluations),
+                "open_gaps": len([gap for gap in gaps if gap.status == "open"]),
+                "open_tasks": len([task for task in tasks if task.status == "open"]),
+            },
+            report_metrics=report_metrics,
+            issue_frequency=sorted(issue_frequency.items(), key=lambda item: item[1], reverse=True),
+            recent_evaluations=evaluations[:12],
+            recent_tasks=tasks[:12],
+        ),
+    )
+
+
+@app.get("/admin/knowledge/coverage", response_class=HTMLResponse)
+@admin_required
+async def admin_knowledge_coverage(request: Request, db: Session = Depends(get_db), notice: str = ""):
+    coverage = coverage_svc.compute_knowledge_coverage(db)
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/knowledge_coverage.html",
+        context=_auth_template_context(
+            request,
+            dashboard_user=request.state.admin_user,
+            active_page="astro_workspace",
+            coverage=coverage,
+            notice=notice,
+        ),
+    )
+
+
+@app.post("/admin/knowledge/import-json")
+@admin_required
+async def admin_knowledge_import_json(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(default=""),
+    payload_json: str = Form(default=""),
+):
+    await validate_csrf_token(request, csrf_token)
+    admin_user = get_request_user(request, db)
+    try:
+        parsed = json.loads(payload_json or "[]")
+    except Exception:
+        return JSONResponse({"ok": False, "error": "invalid_json", "message": "payload_json must be valid JSON."}, status_code=400)
+    payloads = parsed.get("items") if isinstance(parsed, dict) and isinstance(parsed.get("items"), list) else parsed
+    try:
+        imported = knowledge_import_service.import_deep_knowledge_items(db, payloads, admin_user=admin_user)
+        db.commit()
+        return JSONResponse(
+            {
+                "ok": True,
+                "imported_count": len(imported),
+                "knowledge_item_ids": [item.id for item in imported],
+            }
+        )
+    except ValueError as exc:
+        db.rollback()
+        return JSONResponse({"ok": False, "error": "validation_error", "message": str(exc)}, status_code=400)
+
+
+@app.get("/admin/knowledge/review", response_class=HTMLResponse)
+@admin_required
+async def admin_knowledge_review_list(request: Request, db: Session = Depends(get_db), notice: str = ""):
+    items = _review_required_items(db)
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/knowledge_review.html",
+        context=_ai_quality_context(
+            request,
+            active_page="knowledge_library",
+            items=_knowledge_review_rows(items),
+            notice=notice,
+        ),
+    )
+
+
+@app.get("/admin/knowledge/review/{knowledge_id}", response_class=HTMLResponse)
+@admin_required
+async def admin_knowledge_review_detail(request: Request, knowledge_id: int, db: Session = Depends(get_db), notice: str = ""):
+    item = db.query(db_mod.KnowledgeItem).filter(db_mod.KnowledgeItem.id == knowledge_id).first()
+    if not item:
+        _public_error("Knowledge item not found.", 404)
+    metadata = _knowledge_item_metadata(item)
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/knowledge_review_detail.html",
+        context=_ai_quality_context(
+            request,
+            active_page="knowledge_library",
+            item=item,
+            metadata=metadata,
+            form_data={},
+            notice=notice,
+            error="",
+        ),
+    )
+
+
+@app.post("/admin/knowledge/review/{knowledge_id}", response_class=HTMLResponse)
+@admin_required
+async def admin_knowledge_review_save(
+    request: Request,
+    knowledge_id: int,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(default=""),
+):
+    await validate_csrf_token(request, csrf_token)
+    item = db.query(db_mod.KnowledgeItem).filter(db_mod.KnowledgeItem.id == knowledge_id).first()
+    if not item:
+        _public_error("Knowledge item not found.", 404)
+    form = await request.form()
+    metadata = _knowledge_item_metadata(item)
+    for field in [
+        "category",
+        "entity_type",
+        "primary_entity",
+        "secondary_entity",
+        "source_type",
+        "source_title",
+        "source_reference",
+        "classical_view",
+        "modern_synthesis",
+        "interpretation_logic",
+        "strong_condition",
+        "weak_condition",
+        "risk_pattern",
+        "opportunity_pattern",
+        "dasha_activation",
+        "transit_activation",
+        "safe_language_notes",
+        "what_not_to_say",
+        "premium_synthesis_sentence",
+        "confidence_level",
+        "sensitivity_level",
+    ]:
+        metadata[field] = str(form.get(field) or "").strip()
+    metadata["tags"] = _csv_to_list(form.get("tags"))
+    coverage_entities = [value.lower() for value in _csv_to_list(form.get("coverage_entities"))]
+    metadata["coverage_entities"] = coverage_entities
+    metadata["review_required"] = True
+    title = str(form.get("title") or "").strip() or item.title
+    item = knowledge_service.update_knowledge_item(
+        db,
+        item,
+        title=title,
+        body_text=_knowledge_review_body(metadata) or item.body_text,
+        summary_text=metadata.get("premium_synthesis_sentence") or item.summary_text,
+        entities=coverage_entities,
+        metadata=metadata,
+        status=str(item.status or "review_required").strip() or "review_required",
+    )
+    db.commit()
+    return RedirectResponse(url=f"/admin/knowledge/review/{knowledge_id}?notice=saved", status_code=303)
+
+
+@app.post("/admin/knowledge/review/{knowledge_id}/publish")
+@admin_required
+async def admin_knowledge_review_publish(
+    request: Request,
+    knowledge_id: int,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(default=""),
+):
+    await validate_csrf_token(request, csrf_token)
+    item = db.query(db_mod.KnowledgeItem).filter(db_mod.KnowledgeItem.id == knowledge_id).first()
+    if not item:
+        _public_error("Knowledge item not found.", 404)
+    metadata = _knowledge_item_metadata(item)
+    metadata["review_required"] = False
+    metadata["status"] = "published"
+    coverage_entities = [str(value).lower() for value in (metadata.get("coverage_entities") or _json_loads_safe(item.coverage_entities_json, [])) if str(value or "").strip()]
+    knowledge_service.update_knowledge_item(
+        db,
+        item,
+        title=item.title,
+        body_text=_knowledge_review_body(metadata) or item.body_text,
+        summary_text=metadata.get("premium_synthesis_sentence") or item.summary_text,
+        entities=coverage_entities,
+        metadata=metadata,
+        status="published",
+    )
+    db.commit()
+    return RedirectResponse(url="/admin/knowledge/review?notice=published", status_code=303)
+
+
+@app.post("/admin/knowledge/review/{knowledge_id}/reject")
+@admin_required
+async def admin_knowledge_review_reject(
+    request: Request,
+    knowledge_id: int,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(default=""),
+):
+    await validate_csrf_token(request, csrf_token)
+    item = db.query(db_mod.KnowledgeItem).filter(db_mod.KnowledgeItem.id == knowledge_id).first()
+    if not item:
+        _public_error("Knowledge item not found.", 404)
+    metadata = _knowledge_item_metadata(item)
+    metadata["review_required"] = False
+    metadata["status"] = "rejected"
+    coverage_entities = [str(value).lower() for value in (metadata.get("coverage_entities") or _json_loads_safe(item.coverage_entities_json, [])) if str(value or "").strip()]
+    knowledge_service.update_knowledge_item(
+        db,
+        item,
+        title=item.title,
+        body_text=_knowledge_review_body(metadata) or item.body_text,
+        summary_text=metadata.get("premium_synthesis_sentence") or item.summary_text,
+        entities=coverage_entities,
+        metadata=metadata,
+        status="rejected",
+    )
+    db.commit()
+    return RedirectResponse(url="/admin/knowledge/review?notice=rejected", status_code=303)
+
+
+@app.get("/admin/knowledge", response_class=HTMLResponse)
+@admin_required
+async def admin_knowledge_library(request: Request, db: Session = Depends(get_db), q: str = "", entity: str = ""):
+    query = db.query(db_mod.KnowledgeItem)
+    if str(q or "").strip():
+        like = f"%{str(q).strip()}%"
+        query = query.filter(or_(db_mod.KnowledgeItem.title.ilike(like), db_mod.KnowledgeItem.body_text.ilike(like)))
+    items = query.order_by(db_mod.KnowledgeItem.updated_at.desc()).all()
+    if str(entity or "").strip():
+        items = [
+            item
+            for item in items
+            if str(entity).strip().lower() in (_json_loads_safe(item.entities_json, []) or [])
+        ]
+    documents = db.query(db_mod.SourceDocument).order_by(db_mod.SourceDocument.updated_at.desc()).limit(50).all()
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/knowledge_library.html",
+        context=_ai_quality_context(
+            request,
+            active_page="knowledge_library",
+            items=items,
+            documents=documents,
+            filters={"q": q, "entity": entity},
+        ),
+    )
+
+
+@app.get("/admin/documents", response_class=HTMLResponse)
+@admin_required
+async def admin_documents(request: Request, db: Session = Depends(get_db), notice: str = ""):
+    documents = db.query(db_mod.SourceDocument).order_by(db_mod.SourceDocument.updated_at.desc()).all()
+    rows = []
+    for document in documents:
+        chunk_count = sum(len(item.chunks or []) for item in (document.knowledge_items or []))
+        status = "processed" if chunk_count else "uploaded"
+        rows.append(
+            {
+                "document": document,
+                "processing_status": status,
+                "chunk_count": chunk_count,
+                "file_name": Path(str(document.file_path or "")).name if str(document.file_path or "").strip() else None,
+            }
+        )
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/documents.html",
+        context=_ai_quality_context(
+            request,
+            active_page="documents",
+            documents=rows,
+            notice=notice,
+        ),
+    )
+
+
+@app.post("/admin/documents/upload")
+@admin_required
+async def admin_documents_upload(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(default=""),
+    title: str = Form(default=""),
+    document_type: str = Form(default="book"),
+    file: UploadFile | None = File(default=None),
+):
+    await validate_csrf_token(request, csrf_token)
+    admin_user = get_request_user(request, db)
+    if file is None or not str(getattr(file, "filename", "") or "").strip():
+        return RedirectResponse(url="/admin/documents?notice=missing_file", status_code=303)
+    filename = str(getattr(file, "filename", "") or "")
+    if not filename.lower().endswith(".pdf"):
+        return RedirectResponse(url="/admin/documents?notice=invalid_pdf", status_code=303)
+    upload_dir = Path("uploads")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    stored_name = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}.pdf"
+    destination = upload_dir / stored_name
+    contents = await file.read()
+    destination.write_bytes(contents)
+    source_document = db_mod.SourceDocument(
+        title=str(title or "").strip() or Path(filename).stem or "Uploaded document",
+        file_path=str(destination),
+        document_type=str(document_type or "book").strip() or "book",
+        source_label=filename,
+        content_text=None,
+        created_by_user_id=getattr(admin_user, "id", None),
+        uploaded_at=datetime.utcnow(),
+    )
+    db.add(source_document)
+    db.flush()
+
+    text_blocks = document_parser.parse_pdf(destination)
+    meaningful_chunks = document_chunker.chunk_text_blocks(text_blocks)
+    source_document.content_text = "\n\n".join(text_blocks) if text_blocks else None
+    source_document.metadata_json = json.dumps(
+        {
+            "processing_status": "processed" if meaningful_chunks else "uploaded",
+            "block_count": len(text_blocks),
+            "chunk_count": len(meaningful_chunks),
+        },
+        ensure_ascii=False,
+    )
+    for index, chunk in enumerate(meaningful_chunks, start=1):
+        chunk_title = str(chunk.get("title") or f"{source_document.title} {index}").strip()
+        coverage_entities = chunk.get("coverage_entities") or []
+        knowledge_service.create_knowledge_item(
+            db,
+            title=chunk_title,
+            body_text=str(chunk.get("text") or "").strip(),
+            language="tr",
+            item_type=str(chunk.get("category") or "reference"),
+            summary_text=str(chunk.get("topic") or "").strip() or chunk_title,
+            entities=coverage_entities,
+            source_document=source_document,
+            metadata={
+                "document_id": source_document.id,
+                "document_type": source_document.document_type,
+                "topic": chunk.get("topic"),
+                "primary_entity": chunk.get("entity"),
+                "category": chunk.get("category"),
+                "source_file_path": str(destination),
+            },
+            created_by_user_id=getattr(admin_user, "id", None),
+        )
+    db.commit()
+    if not meaningful_chunks:
+        return RedirectResponse(url="/admin/documents?notice=parse_empty", status_code=303)
+    return RedirectResponse(url=f"/admin/documents?notice=uploaded:{len(meaningful_chunks)}", status_code=303)
+
+
+@app.post("/admin/documents/{document_id}/extract-nakshatra")
+@admin_required
+async def admin_document_extract_nakshatra(
+    request: Request,
+    document_id: int,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(default=""),
+):
+    await validate_csrf_token(request, csrf_token)
+    admin_user = get_request_user(request, db)
+    document = db.query(db_mod.SourceDocument).filter(db_mod.SourceDocument.id == document_id).first()
+    if not document:
+        _public_error("Document not found.", 404)
+    text_blocks = document_parser.parse_pdf(document.file_path)
+    extracted = nakshatra_extraction_service.extract_nakshatra_knowledge_from_document(
+        text_blocks,
+        document.title,
+    )
+    created_count = 0
+    for section in extracted.get("sections") or []:
+        for chunk in section.get("suggested_chunks") or []:
+            coverage_entities = [entity for entity in (chunk.get("coverage_entities") or []) if str(entity or "").strip()]
+            knowledge_service.create_knowledge_item(
+                db,
+                title=chunk.get("title") or "Nakshatra review chunk",
+                body_text=chunk.get("classical_view") or "",
+                language="tr",
+                item_type="nakshatra",
+                summary_text=chunk.get("premium_synthesis_sentence") or "",
+                entities=coverage_entities,
+                source_document=document,
+                metadata={**chunk, "review_required": True, "status": "review_required"},
+                created_by_user_id=getattr(admin_user, "id", None),
+                status="review_required",
+            )
+            created_count += 1
+    metadata = _json_loads_safe(document.metadata_json, {}) or {}
+    metadata["nakshatra_extraction"] = {
+        "section_count": extracted.get("section_count", 0),
+        "chunk_count": created_count,
+    }
+    document.metadata_json = json.dumps(metadata, ensure_ascii=False)
+    db.commit()
+    return RedirectResponse(
+        url=f"/admin/documents?notice=nakshatra_extracted:{extracted.get('section_count', 0)}:{created_count}",
+        status_code=303,
+    )
+
+
+@app.post("/admin/knowledge")
+@admin_required
+async def admin_knowledge_library_create(request: Request, db: Session = Depends(get_db), csrf_token: str = Form(default="")):
+    await validate_csrf_token(request, csrf_token)
+    form = await request.form()
+    admin_user = get_request_user(request, db)
+    title = str(form.get("title") or "").strip()
+    body_text = str(form.get("body_text") or "").strip()
+    if not title or not body_text:
+        raise HTTPException(status_code=400, detail="Knowledge title and body are required.")
+    source_title = str(form.get("source_title") or "").strip()
+    source_document = None
+    if source_title:
+        source_document = db_mod.SourceDocument(
+            title=source_title,
+            document_type=str(form.get("document_type") or "note").strip() or "note",
+            source_label=str(form.get("source_label") or "").strip() or None,
+            source_uri=str(form.get("source_uri") or "").strip() or None,
+            language="en" if str(form.get("language") or "tr").lower() == "en" else "tr",
+            content_text=body_text,
+            created_by_user_id=getattr(admin_user, "id", None),
+        )
+        db.add(source_document)
+        db.flush()
+    knowledge_service.create_knowledge_item(
+        db,
+        title=title,
+        body_text=body_text,
+        language=form.get("language") or "tr",
+        item_type=form.get("item_type") or "reference",
+        summary_text=form.get("summary_text") or "",
+        entities=[part.strip() for part in str(form.get("entities") or "").split(",") if part.strip()],
+        source_document=source_document,
+        metadata={"source_hint": str(form.get("source_label") or "").strip() or None},
+        created_by_user_id=getattr(admin_user, "id", None),
+    )
+    db.commit()
+    return RedirectResponse(url="/admin/knowledge", status_code=303)
+
+
+@app.get("/admin/gaps", response_class=HTMLResponse)
+@admin_required
+async def admin_knowledge_gaps(request: Request, db: Session = Depends(get_db), status: str = "open"):
+    query = db.query(db_mod.KnowledgeGap)
+    if str(status or "").strip():
+        query = query.filter(db_mod.KnowledgeGap.status == str(status).strip())
+    gaps = query.order_by(db_mod.KnowledgeGap.created_at.desc()).all()
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/knowledge_gaps.html",
+        context=_ai_quality_context(
+            request,
+            active_page="knowledge_gaps",
+            gaps=gaps,
+            status=status,
+        ),
+    )
+
+
+@app.get("/admin/evaluations", response_class=HTMLResponse)
+@admin_required
+async def admin_evaluation_logs(request: Request, db: Session = Depends(get_db), report_type: str = ""):
+    query = db.query(db_mod.EvaluationResult)
+    if str(report_type or "").strip():
+        query = query.filter(db_mod.EvaluationResult.report_type == str(report_type).strip())
+    evaluations = query.order_by(db_mod.EvaluationResult.created_at.desc()).all()
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/evaluation_logs.html",
+        context=_ai_quality_context(
+            request,
+            active_page="evaluation_logs",
+            evaluations=evaluations,
+            report_type=report_type,
+        ),
+    )
+
+
+@app.get("/admin/tasks", response_class=HTMLResponse)
+@admin_required
+async def admin_training_tasks(request: Request, db: Session = Depends(get_db), status: str = ""):
+    if not str(status or "").strip():
+        training_service.generate_training_tasks_from_gaps(db, created_by_user_id=getattr(request.state.admin_user, "id", None))
+        db.commit()
+    query = db.query(db_mod.TrainingTask)
+    if str(status or "").strip():
+        query = query.filter(db_mod.TrainingTask.status == str(status).strip())
+    tasks = query.order_by(db_mod.TrainingTask.created_at.desc()).all()
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/training_tasks.html",
+        context=_ai_quality_context(
+            request,
+            active_page="training_tasks",
+            tasks=tasks,
+            status=status,
+        ),
+    )
+
+
+@app.get("/admin/test-playground", response_class=HTMLResponse)
+@admin_required
+async def admin_test_playground(request: Request, db: Session = Depends(get_db)):
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/test_playground.html",
+        context=_ai_quality_context(
+            request,
+            active_page="test_playground",
+            result=None,
+            form_data={},
+        ),
+    )
+
+
+@app.post("/admin/test-playground", response_class=HTMLResponse)
+@admin_required
+async def admin_test_playground_submit(request: Request, db: Session = Depends(get_db), csrf_token: str = Form(default="")):
+    await validate_csrf_token(request, csrf_token)
+    form = await request.form()
+    admin_user = get_request_user(request, db)
+    chart_data = _json_loads_safe(form.get("chart_data_json"), {}) if str(form.get("chart_data_json") or "").strip() else {}
+    output_text = str(form.get("output_text") or "").strip()
+    if _workspace_form_flag(form, "generate_output") and chart_data:
+        try:
+            output_text = ai_logic.generate_interpretation(chart_data)
+        except Exception as exc:
+            output_text = output_text or f"[generation unavailable: {exc}]"
+    evaluation = evaluation_service.evaluate_interpretation(output_text, chart_data)
+    evaluation_row = db_mod.EvaluationResult(
+        report_type=str(chart_data.get("report_type") or "").strip() or None,
+        language="en" if str(chart_data.get("language") or "tr").lower() == "en" else "tr",
+        chart_data_json=json.dumps(chart_data, ensure_ascii=False, default=str),
+        output_text=output_text or "",
+        accuracy_score=float(evaluation.get("accuracy_score") or 0.0),
+        depth_score=float(evaluation.get("depth_score") or 0.0),
+        safety_score=float(evaluation.get("safety_score") or 0.0),
+        detected_issues_json=json.dumps(evaluation.get("detected_issues") or [], ensure_ascii=False),
+        metadata_json=json.dumps(evaluation.get("metadata") or {}, ensure_ascii=False),
+        created_by_user_id=getattr(admin_user, "id", None),
+    )
+    db.add(evaluation_row)
+    db.flush()
+    gaps = gap_detector.detect_knowledge_gaps(
+        db,
+        chart_data=chart_data,
+        output=output_text,
+        evaluation_result=evaluation,
+        report_type=chart_data.get("report_type"),
+        language=chart_data.get("language") or "tr",
+    )
+    db.commit()
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/test_playground.html",
+        context=_ai_quality_context(
+            request,
+            active_page="test_playground",
+            form_data={"chart_data_json": json.dumps(chart_data, ensure_ascii=False, indent=2), "output_text": output_text},
+            result={"evaluation": evaluation, "evaluation_row": evaluation_row, "gaps": gaps},
+        ),
+    )
 
 
 @app.get("/admin/segments", response_class=HTMLResponse)
@@ -12515,5 +13399,10 @@ async def get_comprehensive_report(
         _public_error("Rapor hazirlanirken beklenmeyen bir hata olustu.", 400)
 
 
+# Production run:
+# gunicorn app:app -k uvicorn.workers.UvicornWorker
+#
+# Local development:
+# uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 if __name__ == "__main__":
-    uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("app:app", host="0.0.0.0", port=PORT, reload=True)
