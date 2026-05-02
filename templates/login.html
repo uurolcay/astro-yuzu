@@ -73,6 +73,7 @@
                     <p class="auth-error">{{ error_message }}</p>
                     {% endif %}
                     <form action="/login" method="post" class="auth-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <input type="hidden" name="next_path" value="{{ next_path or '/dashboard' }}">
                         <div>
                             <label for="email">{{ t("auth.email_label") }}</label>

@@ -175,6 +175,32 @@ SESSION_SECRET_KEY = (
     or "jyotish-dev-secret-change-me"
 )
 
+
+def _is_production_runtime():
+    env_name = str(
+        os.getenv("APP_ENV")
+        or os.getenv("ENVIRONMENT")
+        or os.getenv("ENV")
+        or os.getenv("FASTAPI_ENV")
+        or ""
+    ).strip().lower()
+    if env_name in {"prod", "production"}:
+        return True
+    return any(str(os.getenv(key, "")).strip() for key in ("RENDER", "RENDER_SERVICE_ID", "RENDER_EXTERNAL_URL"))
+
+
+def _configured_admin_emails():
+    values = [
+        str(os.getenv("ADMIN_EMAIL", "")).strip().lower(),
+        str(os.getenv("ADMIN_USERNAME", "")).strip().lower(),
+    ]
+    values.extend(item.strip().lower() for item in str(os.getenv("ADMIN_EMAILS", "")).split(","))
+    return {value for value in values if value}
+
+
+def _admin_password_configured():
+    return bool(str(os.getenv("ADMIN_PASSWORD", "") or "").strip())
+
 app = FastAPI(title="Astro-Yuzu Intelligence Core", version="5.3")
 templates = Jinja2Templates(directory="templates")
 
@@ -385,6 +411,12 @@ finally:
 logger = logging.getLogger(__name__)
 if SESSION_SECRET_KEY == "jyotish-dev-secret-change-me":
     logger.warning("Using development session secret. Set SECRET_KEY or APP_SECRET_KEY in production.")
+if _is_production_runtime() and not str(os.getenv("SECRET_KEY", "") or os.getenv("APP_SECRET_KEY", "")).strip():
+    logger.warning("Production runtime detected without SECRET_KEY/APP_SECRET_KEY; session cookies are using the development fallback.")
+if not _configured_admin_emails():
+    logger.warning("ADMIN_EMAIL/ADMIN_USERNAME/ADMIN_EMAILS is not configured; admin login bootstrap may be unavailable.")
+if not _admin_password_configured():
+    logger.warning("ADMIN_PASSWORD is not configured; env-based admin login/bootstrap password is not configured.")
 if payments.payments_enabled() and payments.payment_provider() == "iyzico":
     missing_iyzico_config = [
         name
@@ -7563,35 +7595,72 @@ async def login_submit(
     request: Request,
     email: str = Form(...),
     password: str = Form(...),
+    csrf_token: str = Form(default=""),
     next_path: str = Form(default=""),
     db: Session = Depends(get_db),
 ):
-    if not check_rate_limit(f"login:{_client_ip(request)}", max_calls=10, window_seconds=300):
-        return templates.TemplateResponse(
-            request=request,
-            name="login.html",
-            context=_auth_template_context(request, error_message="Çok fazla giriş denemesi. Lütfen 5 dakika bekleyin."),
-            status_code=429,
-        )
     normalized_email = str(email or "").strip().lower()
-    user = db.query(db_mod.AppUser).filter(db_mod.AppUser.email == normalized_email, db_mod.AppUser.is_active.is_(True)).first()
-    if not user or not check_password_hash(user.password_hash, password):
-        logger.info("Login failed email=%s", normalized_email)
+    admin_email_match = normalized_email in _configured_admin_emails()
+    password_configured = _admin_password_configured()
+    safe_next = _safe_next_path(next_path or request.query_params.get("next"), default="/dashboard")
+    try:
+        await validate_csrf_token(request, csrf_token)
+    except HTTPException:
+        logger.warning(
+            "Login failed email=%s admin_email_match=%s password_configured=%s reason=csrf_invalid",
+            normalized_email,
+            admin_email_match,
+            password_configured,
+        )
+        raise
+
+    if not check_rate_limit(f"login:{_client_ip(request)}", max_calls=10, window_seconds=300):
+        logger.warning(
+            "Login failed email=%s admin_email_match=%s password_configured=%s reason=rate_limited",
+            normalized_email,
+            admin_email_match,
+            password_configured,
+        )
         return templates.TemplateResponse(
             request=request,
             name="login.html",
             context=_auth_template_context(
                 request,
-                error_message="E-posta veya sifre hatali.",
+                error_message="Çok fazla giriş denemesi. Lütfen 5 dakika bekleyin.",
                 form_data={"email": normalized_email},
-                next_path=_safe_next_path(next_path or request.query_params.get("next"), default="/dashboard"),
+                next_path=safe_next,
+            ),
+            status_code=429,
+        )
+    user = db.query(db_mod.AppUser).filter(db_mod.AppUser.email == normalized_email, db_mod.AppUser.is_active.is_(True)).first()
+    if not user or not check_password_hash(user.password_hash, password):
+        logger.info(
+            "Login failed email=%s admin_email_match=%s password_configured=%s reason=invalid_credentials",
+            normalized_email,
+            admin_email_match,
+            password_configured,
+        )
+        return templates.TemplateResponse(
+            request=request,
+            name="login.html",
+            context=_auth_template_context(
+                request,
+                error_message="E-posta veya şifre hatalı.",
+                form_data={"email": normalized_email},
+                next_path=safe_next,
             ),
             status_code=400,
         )
 
     request.session["user_id"] = user.id
-    logger.info("Login succeeded email=%s user_id=%s", normalized_email, user.id)
-    redirect_target = _safe_next_path(next_path or request.query_params.get("next"), default="/dashboard")
+    logger.info(
+        "Login succeeded email=%s user_id=%s admin_email_match=%s password_configured=%s reason=success",
+        normalized_email,
+        user.id,
+        admin_email_match,
+        password_configured,
+    )
+    redirect_target = safe_next
     if redirect_target.startswith("/admin") and not is_admin_user(user):
         redirect_target = "/dashboard"
     return RedirectResponse(url=redirect_target, status_code=303)

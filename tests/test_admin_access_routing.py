@@ -1,3 +1,4 @@
+import re
 import unittest
 from unittest.mock import patch
 
@@ -41,14 +42,34 @@ class AdminAccessRoutingTests(unittest.TestCase):
         self.db.refresh(user)
         return user
 
+    def _login_csrf_token(self, next_path="/admin"):
+        response = self.client.get(f"/login?next={next_path}")
+        self.assertEqual(response.status_code, 200)
+        match = re.search(r'name=["\']csrf_token["\'][^>]*value=["\']([^"\']+)["\']', response.text)
+        self.assertIsNotNone(match, response.text[:500])
+        self.assertIn('method="post"', response.text)
+        self.assertIn('action="/login"', response.text)
+        self.assertIn('name="next_path"', response.text)
+        return match.group(1)
+
+    def _login(self, *, email, password="password123", next_path="/admin", csrf_token=None):
+        if csrf_token is None:
+            csrf_token = self._login_csrf_token(next_path)
+        return self.client.post(
+            f"/login?next={next_path}",
+            data={
+                "email": email,
+                "password": password,
+                "csrf_token": csrf_token,
+                "next_path": next_path,
+            },
+            follow_redirects=False,
+        )
+
     def test_allowlisted_user_reaches_admin_dashboard_from_admin_login_flow(self):
         self._create_user(email="admin-allow@example.com", is_admin=False)
         with patch.dict("os.environ", {"ADMIN_EMAILS": "admin-allow@example.com"}, clear=False):
-            response = self.client.post(
-                "/login?next=/admin",
-                data={"email": "admin-allow@example.com", "password": "password123", "next_path": "/admin"},
-                follow_redirects=False,
-            )
+            response = self._login(email="admin-allow@example.com")
             self.assertEqual(response.status_code, 303)
             self.assertEqual(response.headers["location"], "/admin")
 
@@ -67,11 +88,7 @@ class AdminAccessRoutingTests(unittest.TestCase):
 
     def test_non_admin_user_does_not_see_admin_dashboard(self):
         self._create_user(email="member@example.com", is_admin=False)
-        response = self.client.post(
-            "/login?next=/admin",
-            data={"email": "member@example.com", "password": "password123", "next_path": "/admin"},
-            follow_redirects=False,
-        )
+        response = self._login(email="member@example.com")
         self.assertEqual(response.status_code, 303)
         self.assertEqual(response.headers["location"], "/dashboard")
 
@@ -81,11 +98,7 @@ class AdminAccessRoutingTests(unittest.TestCase):
 
     def test_dashboard_route_remains_distinct_from_admin_route(self):
         self._create_user(email="real-admin@example.com", is_admin=True)
-        login_response = self.client.post(
-            "/login?next=/admin",
-            data={"email": "real-admin@example.com", "password": "password123", "next_path": "/admin"},
-            follow_redirects=False,
-        )
+        login_response = self._login(email="real-admin@example.com")
         self.assertEqual(login_response.status_code, 303)
         self.assertEqual(login_response.headers["location"], "/admin")
 
@@ -105,6 +118,35 @@ class AdminAccessRoutingTests(unittest.TestCase):
         self.assertEqual(result["status"], "verified")
         self.assertTrue(user.is_admin)
         self.assertTrue(user.is_active)
+
+    def test_admin_credentials_login_redirects_to_admin(self):
+        self._create_user(email="admin@example.com", is_admin=True)
+        response = self._login(email="admin@example.com")
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers["location"], "/admin")
+
+    def test_wrong_password_shows_clear_error_message(self):
+        self._create_user(email="admin@example.com", is_admin=True)
+        response = self._login(email="admin@example.com", password="wrong-password")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("E-posta veya şifre hatalı.", response.text)
+        self.assertIn('value="/admin"', response.text)
+
+    def test_login_rejects_missing_csrf_token(self):
+        self._create_user(email="admin@example.com", is_admin=True)
+        response = self.client.post(
+            "/login?next=/admin",
+            data={"email": "admin@example.com", "password": "password123", "next_path": "/admin"},
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_login_preserves_admin_next_path(self):
+        self._create_user(email="admin-next@example.com", is_admin=True)
+        csrf_token = self._login_csrf_token("/admin")
+        response = self._login(email="admin-next@example.com", next_path="/admin", csrf_token=csrf_token)
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers["location"], "/admin")
 
 
 if __name__ == "__main__":
