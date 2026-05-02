@@ -415,6 +415,19 @@ class BirthLocationPipelineTests(unittest.TestCase):
         self.assertIn("Raporunuzu Seçin", response.text)
         self.assertIn("Seçili Makaleler", response.text)
 
+    def test_homepage_instagram_links_use_feruze_account(self):
+        client = TestClient(app.app)
+        response = client.get("/")
+        self.assertEqual(response.status_code, 200)
+
+        instagram_links = re.findall(r"<a\b[^>]*instagram[^>]*>", response.text, flags=re.IGNORECASE)
+        self.assertGreaterEqual(len(instagram_links), 1)
+        for link in instagram_links:
+            self.assertIn('href="https://www.instagram.com/feruze.olcay/"', link)
+            self.assertNotIn('href="#"', link)
+            self.assertIn('target="_blank"', link)
+            self.assertIn('rel="noopener noreferrer"', link)
+
     def test_logged_out_header_account_dropdown_shows_auth_routes(self):
         client = TestClient(app.app)
         response = client.get("/")

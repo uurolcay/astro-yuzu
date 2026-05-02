@@ -296,7 +296,7 @@ def _send_logged_email(
 def base_context(request: Request, db: Session, **kwargs) -> dict:
     return _auth_template_context(
         request,
-        instagram_url=get_setting(db, "site_instagram_url", "https://www.instagram.com/focusastrology/"),
+        instagram_url=get_setting(db, "site_instagram_url", "https://www.instagram.com/feruze.olcay/"),
         **kwargs,
     )
 
