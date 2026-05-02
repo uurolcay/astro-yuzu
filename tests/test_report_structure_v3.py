@@ -39,6 +39,29 @@ def _signal_context():
                 {"planet": "Jupiter", "effect": "activate", "duration": "next 3 months", "explanation": "A supported opening is being delivered."}
             ]
         },
+        "prediction_fusion": {
+            "available": True,
+            "timing_summary": [{"label": "Dasha aktivasyonu", "value": "Saturn"}],
+            "active_dasha_signals": [{"title": "Saturn", "dasha_driver": "Saturn", "domain": "career"}],
+            "active_transit_signals": [{"title": "Jupiter", "transit_trigger": "Jupiter", "domain": "career"}],
+            "fusion_signals": [
+                {
+                    "title": "Career signal",
+                    "theme": "Career signal",
+                    "domain": "career",
+                    "dasha_driver": "Saturn",
+                    "transit_trigger": "Jupiter",
+                    "strength": "high",
+                    "timing_type": "opportunity",
+                    "interpretation_hint": "Career timing may activate.",
+                    "safe_language_note": "Use soft timing language.",
+                }
+            ],
+            "risk_windows": [],
+            "opportunity_windows": [{"title": "Career signal", "domain": "career", "timing_type": "opportunity", "note": "Career timing may activate."}],
+            "confidence_notes": ["Soft timing context available."],
+            "report_type_focus": {"primary_domain": "career"},
+        },
         "confidence_notes": ["Signals are consistent."],
     }
 
@@ -84,10 +107,29 @@ class ReportStructureV3Tests(unittest.TestCase):
         self.assertTrue(structure["timing_engine"]["active_period"])
         self.assertTrue(structure["timing_engine"]["transit_triggers"])
         self.assertTrue(structure["identity_layer"]["short_reference_only"])
+        self.assertTrue(structure["timing_engine"]["fusion_available"])
+        self.assertTrue(structure["timing_engine"]["fusion_signals"])
 
     def test_missing_signals_does_not_crash(self):
         structure = report_structure_v3.build_report_structure_v3({}, "career", "tr")
         self.assertEqual(structure, {})
+
+    def test_fusion_unavailable_preserves_prior_timing_behavior(self):
+        context = _signal_context()
+        context["prediction_fusion"] = {
+            "available": False,
+            "timing_summary": [],
+            "active_dasha_signals": [],
+            "active_transit_signals": [],
+            "fusion_signals": [],
+            "risk_windows": [],
+            "opportunity_windows": [],
+            "confidence_notes": [],
+            "report_type_focus": {},
+        }
+        structure = report_structure_v3.build_report_structure_v3(context, "career", "en")
+        self.assertNotIn("fusion_available", structure["timing_engine"])
+        self.assertEqual(structure["timing_engine"]["active_period"], "Saturn")
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ pytz
 python-dotenv
 requests
 sqlalchemy
+psycopg2-binary
 python-multipart
 geopy
 geonamescache
@@ -18,3 +19,4 @@ google-api-python-client
 weasyprint
 celery
 redis
+pypdf

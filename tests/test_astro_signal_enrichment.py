@@ -62,6 +62,7 @@ class AstroSignalEnrichmentTests(unittest.TestCase):
         self.assertIn("dasha_activation_signals", context)
         self.assertIn("transit_trigger_signals", context)
         self.assertIn("chart_relationships", context)
+        self.assertIn("prediction_fusion", context)
         self.assertTrue(context["dominant_signals"])
         self.assertTrue(any(signal["source"] == "nakshatra" for signal in context["dominant_signals"]))
 

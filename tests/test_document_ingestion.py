@@ -1,6 +1,9 @@
 import io
 import re
+import sys
+import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -58,6 +61,22 @@ class DocumentIngestionTests(unittest.TestCase):
     def test_parse_pdf_missing_file_returns_empty_list(self):
         self.assertEqual(document_parser.parse_pdf("missing-file.pdf"), [])
 
+    def test_parse_pdf_with_diagnostics_returns_blocks_when_parser_reads_text(self):
+        class _FakePage:
+            def extract_text(self):
+                return "ASHWINI\nRuler: Ketu"
+
+        class _FakeReader:
+            def __init__(self, _path):
+                self.pages = [_FakePage()]
+
+        fake_module = SimpleNamespace(PdfReader=_FakeReader)
+        with tempfile.NamedTemporaryFile(suffix=".pdf") as handle, patch.dict(sys.modules, {"pypdf": fake_module}):
+            diagnostics = document_parser.parse_pdf_with_diagnostics(handle.name)
+        self.assertGreater(diagnostics["block_count"], 0)
+        self.assertEqual(diagnostics["page_count"], 1)
+        self.assertEqual(diagnostics["parser_used"], "pypdf")
+
     def test_chunk_text_blocks_splits_and_classifies(self):
         chunks = document_chunker.chunk_text_blocks(
             [
@@ -76,6 +95,8 @@ class DocumentIngestionTests(unittest.TestCase):
         self.assertIn('name="file"', response.text)
         self.assertIn('enctype="multipart/form-data"', response.text)
         self.assertIn("/admin/documents", response.text)
+        self.assertIn("Parser", response.text)
+        self.assertIn("Preview", response.text)
 
     def test_sidebar_contains_documents_link(self):
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
@@ -88,11 +109,18 @@ class DocumentIngestionTests(unittest.TestCase):
         before_orders = self.db.query(db_mod.ServiceOrder).count()
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair), patch.object(
             app.document_parser,
-            "parse_pdf",
-            return_value=[
-                "MARS DASHA\n\nMars dasha in the 6th house supports decisive work output.",
-                "ASHWINI\n\nAshwini can indicate quick response and initiative.",
-            ],
+            "parse_pdf_with_diagnostics",
+            return_value={
+                "blocks": [
+                    "MARS DASHA\n\nMars dasha in the 6th house supports decisive work output.",
+                    "ASHWINI\n\nAshwini can indicate quick response and initiative.",
+                ],
+                "page_count": 2,
+                "block_count": 2,
+                "preview": "MARS DASHA",
+                "parser_used": "pypdf",
+                "error": None,
+            },
         ):
             response = self.client.post(
                 "/admin/documents/upload",
@@ -110,6 +138,35 @@ class DocumentIngestionTests(unittest.TestCase):
         self.assertGreaterEqual(self.db.query(db_mod.KnowledgeItem).count(), 1)
         self.assertGreaterEqual(self.db.query(db_mod.KnowledgeChunk).count(), 1)
         self.assertEqual(self.db.query(db_mod.ServiceOrder).count(), before_orders)
+
+    def test_parse_empty_notice_is_shown_and_document_metadata_keeps_diagnostics(self):
+        csrf = self._csrf()
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair), patch.object(
+            app.document_parser,
+            "parse_pdf_with_diagnostics",
+            return_value={
+                "blocks": [],
+                "page_count": 3,
+                "block_count": 0,
+                "preview": "",
+                "parser_used": "none",
+                "error": "no_pdf_parser_available",
+            },
+        ):
+            response = self.client.post(
+                "/admin/documents/upload",
+                data={"csrf_token": csrf, "title": "Empty Parse", "document_type": "book"},
+                files={"file": ("import.pdf", io.BytesIO(b"%PDF-1.4 fake pdf"), "application/pdf")},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("parse_empty", response.headers.get("location", ""))
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            page = self.client.get("/admin/documents?notice=parse_empty")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("parse sonucu bos dondu", page.text)
+        self.assertIn("Parser", page.text)
+        self.assertIn("Diagnostics", page.text)
 
     def test_upload_route_rejects_non_pdf(self):
         csrf = self._csrf()

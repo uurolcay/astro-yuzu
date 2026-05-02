@@ -1,10 +1,14 @@
 {% extends "admin/base_admin.html" %}
-{% block admin_title %}Knowledge Documents{% endblock %}
+{% block admin_title %}PDF Kaynaklari{% endblock %}
 {% block admin_content %}
 <section class="admin-page-header">
   <div>
     <h1 class="admin-page-title">Knowledge Documents</h1>
-    <p class="admin-page-sub">PDF kaynakları yükleyin, parse edin ve knowledge chunk akışına kontrollü şekilde alın.</p>
+    <p class="admin-page-sub">PDF yukle, parse et, nakshatra extraction calistir</p>
+  </div>
+  <div class="admin-page-actions">
+    <a class="btn-admin btn-admin-secondary" href="/admin/training">Training Hub →</a>
+    <a class="btn-admin btn-admin-primary" href="/admin/knowledge/review">Review Queue →</a>
   </div>
 </section>
 
@@ -13,19 +17,22 @@
 {% set invalid_pdf = notice == 'invalid_pdf' %}
 {% set missing_file = notice == 'missing_file' %}
 {% set extraction_notice = notice.startswith('nakshatra_extracted:') if notice else false %}
+{% set sections_empty = notice == 'nakshatra_sections_empty' %}
 
 {% if upload_ok %}
   {% set parts = notice.split(':') %}
-  <div class="admin-alert admin-alert-success">Upload başarılı. {{ parts[1] }} chunk üretildi.</div>
+  <div class="admin-alert admin-alert-success">Upload basarili. {{ parts[1] }} chunk uretildi.</div>
 {% elif parse_empty %}
-  <div class="admin-alert admin-alert-warning">PDF yüklendi ancak parse sonucu boş döndü.</div>
+  <div class="admin-alert admin-alert-warning">PDF metni okunamadi veya parse sonucu bos dondu. Parser/preview alanini kontrol edin.</div>
 {% elif invalid_pdf %}
-  <div class="admin-alert admin-alert-danger">Sadece PDF yüklenebilir.</div>
+  <div class="admin-alert admin-alert-danger">Sadece PDF yuklenebilir.</div>
 {% elif missing_file %}
-  <div class="admin-alert admin-alert-danger">PDF seçilmedi.</div>
+  <div class="admin-alert admin-alert-danger">PDF secilmedi.</div>
+{% elif sections_empty %}
+  <div class="admin-alert admin-alert-warning">PDF metni okundu ama nakshatra basliklari bulunamadi. Baslik varyasyonlari veya OCR bozuk olabilir.</div>
 {% elif extraction_notice %}
   {% set parts = notice.split(':') %}
-  <div class="admin-alert admin-alert-success">Nakshatra extraction tamamlandı: {{ parts[1] }} bölüm, {{ parts[2] }} suggested chunk üretildi.</div>
+  <div class="admin-alert admin-alert-success">Nakshatra extraction tamamlandi: {{ parts[1] }} bolum, {{ parts[2] }} suggested chunk uretildi.</div>
 {% elif notice %}
   <div class="admin-alert admin-alert-success">{{ notice }}</div>
 {% endif %}
@@ -36,44 +43,48 @@
     <form class="admin-form" method="post" action="/admin/documents/upload" enctype="multipart/form-data">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <div class="admin-field">
-        <label>Title</label>
-        <input type="text" name="title" placeholder="Document title">
+        <label for="title">Title</label>
+        <input id="title" type="text" name="title" placeholder="orn: Brihat Parashara Notes">
       </div>
       <div class="admin-field">
-        <label>Document Type</label>
-        <select name="document_type">
+        <label for="document_type">Document Type</label>
+        <select id="document_type" name="document_type">
           <option value="book">book</option>
           <option value="notes">notes</option>
           <option value="article">article</option>
           <option value="internal_training">internal_training</option>
+          <option value="classical_text">classical_text</option>
         </select>
       </div>
       <div class="admin-field">
-        <label>PDF File</label>
-        <input type="file" name="file" accept=".pdf">
+        <label for="file">PDF File</label>
+        <input id="file" type="file" name="file" accept=".pdf">
       </div>
       <div class="admin-page-actions">
         <button class="btn-admin btn-admin-primary" type="submit">Upload PDF</button>
       </div>
     </form>
+    <div class="admin-alert" style="margin-top:14px;">
+      PDF → text block'lara ayrilir → chunk uretilir → Nakshatra Extract butonu ile nakshatra bolumleri ayrica islenebilir → Review Queue'da onaylanir → aktif olur
+    </div>
   </article>
 
   <article class="admin-card">
-    <div class="admin-card-title">Import Flow</div>
-    <ul class="admin-list">
-      <li>PDF sayfaları text block’lara ayrılır.</li>
-      <li>Chunk üretimi mevcut document parser ve chunker üstünden ilerler.</li>
-      <li>Nakshatra extraction suggested chunk’ları review_required olarak saklar.</li>
-      <li>Review queue üzerinden onaylanan içerik retrieval görünürlüğü kazanır.</li>
-    </ul>
-    <div class="admin-page-actions" style="margin-top:1rem;">
-      <a href="/admin/knowledge/review">View Review Queue →</a>
+    <div class="admin-card-title">Akis Ozeti</div>
+    <div class="admin-muted" style="line-height:1.7;">
+      Bu ekran gercek PDF ingestion akisina ayrilmistir. Upload sonrasi parser tanisi, block sayisi ve preview burada gorunur. Boylece 0 chunk / 0 section durumlari kolayca ayiklanir.
+    </div>
+    <div class="admin-page-actions" style="margin-top:16px;">
+      <a class="btn-admin btn-admin-secondary" href="/admin/knowledge/review">Review Queue →</a>
+      <a class="btn-admin btn-admin-secondary" href="/admin/knowledge/coverage">Coverage →</a>
     </div>
   </article>
 </section>
 
 <section class="admin-table-wrap">
-  <div class="admin-table-header"><div class="admin-table-title">Uploaded Documents</div></div>
+  <div class="admin-table-header">
+    <div class="admin-table-title">Uploaded Documents</div>
+  </div>
   <table class="admin-table">
     <thead>
       <tr>
@@ -81,8 +92,9 @@
         <th>Type</th>
         <th>File</th>
         <th>Uploaded At</th>
-        <th>Processing status</th>
-        <th>Chunk count</th>
+        <th>Status</th>
+        <th>Chunk</th>
+        <th>Diagnostics / Parser / Preview</th>
         <th>Actions</th>
       </tr>
     </thead>
@@ -93,19 +105,43 @@
         <td>{{ row.document.document_type or "-" }}</td>
         <td>{{ row.file_name or "-" }}</td>
         <td>{{ row.document.uploaded_at.strftime("%Y-%m-%d %H:%M") if row.document.uploaded_at else "-" }}</td>
-        <td>{{ row.processing_status }}</td>
-        <td>{{ row.chunk_count }}</td>
         <td>
-          <span class="badge badge-success">Parse / Import Chunks</span>
-          <form method="post" action="/admin/documents/{{ row.document.id }}/extract-nakshatra" style="display:inline; margin-left:.5rem;">
+          {% if row.processing_status == "processed" %}
+          <span class="badge badge-success">processed</span>
+          {% elif row.processing_status == "parse_empty" %}
+          <span class="badge badge-warning">parse_empty</span>
+          {% else %}
+          <span class="badge badge-warning">uploaded</span>
+          {% endif %}
+        </td>
+        <td>{{ row.chunk_count }}</td>
+        <td style="min-width:240px;">
+          <div class="admin-muted">Parser: {{ row.parser_used }}</div>
+          <div class="admin-muted">Pages: {{ row.page_count }}</div>
+          <div class="admin-muted">Blocks: {{ row.block_count }}</div>
+          {% if row.parse_error %}
+          <div class="admin-muted">Error: {{ row.parse_error }}</div>
+          {% endif %}
+          {% if row.preview %}
+          <details style="margin-top:6px;">
+            <summary>Preview</summary>
+            <div class="admin-muted" style="white-space:pre-wrap; max-width:420px;">{{ row.preview[:200] }}</div>
+          </details>
+          {% endif %}
+        </td>
+        <td>
+          <form method="post" action="/admin/documents/{{ row.document.id }}/extract-nakshatra" style="display:inline;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <button class="btn-admin btn-admin-secondary" type="submit">Nakshatra Extract</button>
           </form>
-          <a href="/admin/knowledge/review" style="margin-left:.75rem;">View Review Queue</a>
+          <a href="/admin/knowledge/review" style="margin-left:.6rem;">Review Queue →</a>
+          <a href="/admin/knowledge/coverage" style="margin-left:.6rem;">Coverage →</a>
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="7" class="admin-muted">Henüz yüklenmiş doküman yok.</td></tr>
+      <tr>
+        <td colspan="8" class="admin-muted">Henuz yuklenmis dokuman yok.</td>
+      </tr>
       {% endfor %}
     </tbody>
   </table>

@@ -28,6 +28,10 @@ try:
     from services.parent_child_interaction_engine import build_parent_child_interaction_bundle
 except Exception:  # pragma: no cover - import failure is handled at runtime
     build_parent_child_interaction_bundle = None
+try:
+    from services.prediction_fusion_engine import build_prediction_fusion_context
+except Exception:  # pragma: no cover - import failure is handled at runtime
+    build_prediction_fusion_context = None
 
 REPORT_TYPE_FOCUS = {
     "birth_chart_karma": {"identity", "emotional", "karmic", "spiritual", "relationship", "life_direction"},
@@ -143,7 +147,7 @@ def build_astro_signal_context(
     confidence_notes.extend(parent_child_interaction_signals.get("confidence_notes") or [])
     confidence_notes.extend(chart_relationships.get("confidence_notes") or [])
 
-    signal_context = {
+    base_signal_context = {
         "nakshatra_signals": nakshatra_signals,
         "yoga_signals": yoga_signals,
         "atmakaraka_signals": atmakaraka_signals,
@@ -158,6 +162,20 @@ def build_astro_signal_context(
         "report_type_signals": report_type_signals,
         "confidence_notes": confidence_notes,
     }
+    prediction_fusion_context = _build_prediction_fusion_context_safe(
+        natal_data=natal_data,
+        dasha_data=dasha_data,
+        transit_context=transit_context,
+        signal_context=base_signal_context,
+        report_type=report_type,
+    )
+    confidence_notes.extend(prediction_fusion_context.get("confidence_notes") or [])
+
+    signal_context = {
+        **base_signal_context,
+        "prediction_fusion": prediction_fusion_context,
+    }
+    _merge_prediction_fusion_into_signal_context(signal_context, prediction_fusion_context)
     return filter_signal_context_by_report_type(signal_context, report_type)
 
 
@@ -209,6 +227,97 @@ def _build_nakshatra_signals(natal_data, *, report_type="birth_chart_karma"):
         **profile,
         "signals": _dedupe_signal_rows(signals),
         "source_count": len(signals),
+    }
+
+
+def _build_prediction_fusion_context_safe(
+    *,
+    natal_data,
+    dasha_data,
+    transit_context,
+    signal_context,
+    report_type,
+):
+    if build_prediction_fusion_context is None:
+        return _empty_prediction_fusion_context()
+    try:
+        return build_prediction_fusion_context(
+            natal_data=natal_data,
+            dasha_data=dasha_data,
+            transit_data=transit_context,
+            signal_context=signal_context,
+            report_type=report_type,
+            language="tr",
+        )
+    except Exception:  # pragma: no cover - defensive guard
+        return _empty_prediction_fusion_context()
+
+
+def _empty_prediction_fusion_context():
+    return {
+        "available": False,
+        "timing_summary": [],
+        "active_dasha_signals": [],
+        "active_transit_signals": [],
+        "fusion_signals": [],
+        "risk_windows": [],
+        "opportunity_windows": [],
+        "confidence_notes": [],
+        "report_type_focus": {},
+    }
+
+
+def _merge_prediction_fusion_into_signal_context(signal_context, prediction_fusion_context):
+    if not isinstance(signal_context, dict):
+        return
+    fusion = prediction_fusion_context if isinstance(prediction_fusion_context, dict) else _empty_prediction_fusion_context()
+    signal_context["prediction_fusion"] = fusion
+    if not fusion.get("available"):
+        return
+
+    risk_rows = signal_context.setdefault("risk_signals", [])
+    opportunity_rows = signal_context.setdefault("opportunity_signals", [])
+    confidence_notes = signal_context.setdefault("confidence_notes", [])
+    dasha_activation = signal_context.setdefault("dasha_activation_signals", {})
+    dasha_activation.setdefault("signals", [])
+
+    for item in fusion.get("fusion_signals") or []:
+        normalized = _normalize_prediction_fusion_signal(item)
+        if item.get("timing_type") in {"pressure", "review"}:
+            risk_rows.append(normalized)
+        if item.get("timing_type") in {"activation", "opportunity"}:
+            opportunity_rows.append(normalized)
+    for item in fusion.get("active_dasha_signals") or []:
+        dasha_activation["signals"].append(_normalize_prediction_activation_signal(item))
+    confidence_notes.extend(fusion.get("confidence_notes") or [])
+
+
+def _normalize_prediction_fusion_signal(item):
+    return {
+        "key": f"prediction_fusion:{str(item.get('domain') or 'general')}:{str(item.get('title') or item.get('theme') or '').strip().lower().replace(' ', '_')}",
+        "label": item.get("title") or item.get("theme") or "Timing context",
+        "explanation": item.get("interpretation_hint") or "",
+        "summary": item.get("interpretation_hint") or "",
+        "strength": {"low": 1.8, "medium": 2.8, "high": 3.8}.get(str(item.get("strength") or "medium").lower(), 2.8),
+        "categories": [item.get("domain") or "general", "timing"],
+        "tone": "risk" if item.get("timing_type") in {"pressure", "review"} else "opportunity",
+        "source": "prediction_fusion",
+        "safe_language_note": item.get("safe_language_note") or "",
+    }
+
+
+def _normalize_prediction_activation_signal(item):
+    domain = item.get("domain") or "general"
+    title = item.get("title") or item.get("theme") or "Timing activation"
+    return {
+        "key": f"prediction_activation:{domain}:{str(title).strip().lower().replace(' ', '_')}",
+        "label": title,
+        "explanation": item.get("interpretation_hint") or "",
+        "summary": item.get("interpretation_hint") or "",
+        "strength": {"low": 1.6, "medium": 2.6, "high": 3.6}.get(str(item.get("strength") or "medium").lower(), 2.6),
+        "categories": [domain, "timing"],
+        "tone": "opportunity",
+        "source": "prediction_fusion",
     }
 
 

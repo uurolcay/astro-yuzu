@@ -1,0 +1,197 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}AI Astrologer Training{% endblock %}
+{% block admin_content %}
+<style>
+  .entity-pill {
+    display: inline-block;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 99px;
+    border: 0.5px solid var(--color-border-tertiary, var(--border-soft));
+    color: var(--color-text-secondary, var(--muted));
+    margin: 1px 1px 0 0;
+    font-family: var(--font-mono, monospace);
+  }
+  .training-action-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    background: var(--color-background-primary, var(--surface));
+    border: 0.5px solid var(--color-border-tertiary, var(--border-soft));
+    border-radius: var(--border-radius-lg, var(--radius));
+    padding: 16px;
+    transition: border-color 0.15s;
+  }
+  .training-action-card:hover {
+    border-color: var(--color-border-secondary, var(--border));
+  }
+  .training-action-card .action-icon { font-size: 20px; margin-bottom: 8px; }
+  .training-action-card .action-label {
+    font-size: 14px; font-weight: 500; margin-bottom: 4px;
+  }
+  .training-action-card .action-desc {
+    font-size: 12px; color: var(--color-text-secondary, var(--muted)); line-height: 1.5;
+  }
+  .coverage-bar-track { width: 100%; height: 8px; border-radius: 999px; background: rgba(255,255,255,.07); overflow: hidden; }
+  .coverage-bar-fill { height: 100%; border-radius: 999px; }
+</style>
+
+<section class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">AI Astrologer Training</h1>
+    <p class="admin-page-sub">AI'ın neyi bildiğini görün, eksikleri kapatın, kaliteyi ölçün.</p>
+  </div>
+  <div class="admin-page-actions">
+    <a class="btn-admin btn-admin-secondary" href="/admin/documents">PDF Yükle</a>
+    <a class="btn-admin btn-admin-primary" href="/admin/knowledge/coverage">Coverage Haritası</a>
+  </div>
+</section>
+
+{% if notice %}
+<div class="admin-alert admin-alert-success">{{ notice }}</div>
+{% endif %}
+
+<section class="admin-stats">
+  <div class="admin-stat">
+    <div class="admin-stat-label">Toplam İçerik</div>
+    <div class="admin-stat-value">{{ stats.total_items }}</div>
+  </div>
+  <div class="admin-stat {% if stats.coverage_pct < 40 %}finance-kpi-danger{% elif stats.coverage_pct < 70 %}finance-kpi-warning{% endif %}">
+    <div class="admin-stat-label">Coverage</div>
+    <div class="admin-stat-value">{{ stats.coverage_pct }}%</div>
+  </div>
+  <div class="admin-stat {% if stats.open_gaps > 0 %}finance-kpi-danger{% endif %}">
+    <div class="admin-stat-label">Eksik Konu</div>
+    <div class="admin-stat-value">{{ stats.open_gaps }}</div>
+  </div>
+  <div class="admin-stat {% if stats.review_pending > 0 %}finance-kpi-warning{% endif %}">
+    <div class="admin-stat-label">Review Bekleyen</div>
+    <div class="admin-stat-value">{{ stats.review_pending }}</div>
+  </div>
+</section>
+
+<section class="admin-card">
+  <div class="admin-card-title">Hemen içerik ekle</div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+    <a class="training-action-card" href="/admin/documents">
+      <div class="action-icon">📄</div>
+      <div class="action-label">PDF Yükle</div>
+      <div class="action-desc">Kitap, makale veya kaynak PDF'i yükle</div>
+    </a>
+    <a class="training-action-card" href="/admin/training/write">
+      <div class="action-icon">✍️</div>
+      <div class="action-label">El ile Yaz</div>
+      <div class="action-desc">Nakshatra, yoga veya dasha hakkında metin yaz</div>
+    </a>
+    <a class="training-action-card" href="/admin/training/qa">
+      <div class="action-icon">💬</div>
+      <div class="action-label">Q&amp;A Ekle</div>
+      <div class="action-desc">Soru-cevap formatında hızlı bilgi girişi</div>
+    </a>
+  </div>
+</section>
+
+{% if priority_gaps %}
+<section class="admin-table-wrap">
+  <div class="admin-table-header">
+    <div>
+      <div class="admin-table-title">Öncelikli Eksikler — bunları kapat</div>
+      <div class="admin-page-sub" style="margin-top:4px;">Son yorumlardan tespit edilen knowledge gap'leri</div>
+    </div>
+    <a class="btn-admin btn-admin-secondary" href="/admin/gaps">Tüm gap'leri gör →</a>
+  </div>
+  <table class="admin-table">
+    <thead>
+      <tr><th>Entity</th><th>Gap Türü</th><th>Durum</th><th>İşlem</th></tr>
+    </thead>
+    <tbody>
+      {% for gap in priority_gaps %}
+      {% set missing_entities = json_loads_safe(gap.missing_entities_json, []) %}
+      {% set entity_name = (missing_entities[0] if missing_entities else '-') %}
+      <tr>
+        <td>{{ entity_name }}</td>
+        <td>{{ gap.status }}</td>
+        <td><span class="badge badge-danger">{{ gap.status }}</span></td>
+        <td>
+          {% if entity_name != '-' %}
+          <a href="/admin/training/write?entity={{ entity_name }}">El ile Yaz →</a>
+          {% else %}
+          <span class="admin-muted">-</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+<section class="admin-card">
+  <div class="admin-page-header" style="padding:0;">
+    <div>
+      <h2 class="admin-card-title">Coverage Özeti</h2>
+    </div>
+    <a class="btn-admin btn-admin-secondary" href="/admin/knowledge/coverage">Detaylı harita →</a>
+  </div>
+  {% for category_name, entities in coverage.by_category.items() %}
+  {% set ns = namespace(total=0, count=0) %}
+  {% for _entity, payload in entities.items() %}
+    {% set ns.total = ns.total + (payload.pct or 0) %}
+    {% set ns.count = ns.count + 1 %}
+  {% endfor %}
+  {% set pct = ((ns.total / ns.count) if ns.count else 0) | round(1) %}
+  <div style="display:grid;gap:8px;margin-top:14px;">
+    <div style="display:flex;justify-content:space-between;gap:12px;">
+      <strong>{{ category_name }}</strong>
+      <span class="admin-muted">{{ pct }}%</span>
+    </div>
+    <div class="coverage-bar-track">
+      <div class="coverage-bar-fill" style="width:{{ pct }}%; background:{% if pct >= 70 %}var(--success){% elif pct >= 40 %}var(--warning){% else %}var(--danger){% endif %};"></div>
+    </div>
+  </div>
+  {% else %}
+  <div class="admin-muted">Coverage verisi henüz oluşmadı.</div>
+  {% endfor %}
+</section>
+
+<section class="admin-table-wrap">
+  <div class="admin-table-header">
+    <div class="admin-table-title">Son Eklenen İçerikler</div>
+    <a class="btn-admin btn-admin-secondary" href="/admin/knowledge">Tüm içerikler →</a>
+  </div>
+  <table class="admin-table">
+    <thead>
+      <tr><th>Başlık</th><th>Tür</th><th>Entity'ler</th><th>Chunk</th><th>Durum</th><th>Güncellendi</th></tr>
+    </thead>
+    <tbody>
+      {% for item in recent_items %}
+      {% set entities = json_loads_safe(item.entities_json, []) %}
+      <tr>
+        <td>{{ item.title }}</td>
+        <td>{{ item.item_type }}</td>
+        <td>
+          {% for entity in entities %}
+          <span class="entity-pill">{{ entity }}</span>
+          {% else %}
+          <span class="admin-muted">-</span>
+          {% endfor %}
+        </td>
+        <td>{{ item.chunks|length }}</td>
+        <td>
+          {% if item.status == "active" %}
+          <span class="badge badge-success">aktif</span>
+          {% elif item.status == "review_required" %}
+          <span class="badge badge-warning">review bekliyor</span>
+          {% else %}
+          <span class="badge badge-muted">{{ item.status }}</span>
+          {% endif %}
+        </td>
+        <td>{{ item.updated_at.strftime("%Y-%m-%d %H:%M") if item.updated_at else "-" }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="admin-muted">Henüz içerik eklenmemiş.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

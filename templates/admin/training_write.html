@@ -1,0 +1,80 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}El ile İçerik Yaz{% endblock %}
+{% block admin_content %}
+<section class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">El ile İçerik Yaz</h1>
+    <p class="admin-page-sub">Nakshatra, yoga, dasha veya kavram hakkında içerik ekle</p>
+  </div>
+  <div class="admin-page-actions">
+    <a class="btn-admin btn-admin-secondary" href="/admin/training">← Training Hub</a>
+  </div>
+</section>
+
+{% if notice %}
+<div class="admin-alert admin-alert-success">{{ notice }}</div>
+{% endif %}
+
+{% if prefill_entity %}
+<div class="admin-alert" style="border-color:rgba(88,166,255,.25);">
+  Gap tespiti: <strong>{{ prefill_entity }}</strong> için içerik ekleniyor. Entity alanı otomatik dolduruldu.
+</div>
+{% endif %}
+
+<section class="admin-grid-2">
+  <article class="admin-card">
+    <div class="admin-card-title">Yeni içerik</div>
+    <form class="admin-form" method="post" action="/admin/knowledge">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="admin-field">
+        <label for="title">Title</label>
+        <input id="title" type="text" name="title" required placeholder="örn: Saturn in Dhanishta — Disiplin ve Zamanlama">
+      </div>
+      <div class="admin-field">
+        <label for="item_type">Item Type</label>
+        <select id="item_type" name="item_type">
+          {% for option in item_type_options %}
+          <option value="{{ option }}" {% if option == prefill_item_type %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="admin-field">
+        <label for="entities">Entities</label>
+        <input id="entities" type="text" name="entities" required value="{{ prefill_entity if prefill_entity else '' }}" placeholder="saturn, dhanishta, nakshatra, discipline">
+        <div class="admin-muted">Coverage haritasında bu içerik bu entity'ler altında görünür.</div>
+      </div>
+      <div class="admin-field">
+        <label for="language">Language</label>
+        <select id="language" name="language">
+          <option value="tr" selected>TR</option>
+          <option value="en">EN</option>
+        </select>
+      </div>
+      <div class="admin-field">
+        <label for="summary_text">Summary</label>
+        <input id="summary_text" type="text" name="summary_text" placeholder="1 cümle özet">
+      </div>
+      <div class="admin-field">
+        <label for="body_text">Body</label>
+        <textarea id="body_text" name="body_text" rows="12" required placeholder="Bu nakshatra/yoga/dasha için yorum içeriği..."></textarea>
+        <div class="admin-muted">Minimum 100 karakter önerilir. AI bu içeriği retrieval sırasında kullanır.</div>
+      </div>
+      <div class="admin-page-actions">
+        <button class="btn-admin btn-admin-primary" type="submit">Kaydet</button>
+        <a class="btn-admin btn-admin-secondary" href="/admin/training">İptal</a>
+      </div>
+    </form>
+  </article>
+
+  <aside class="admin-card">
+    <div class="admin-card-title">İpuçları</div>
+    <div class="admin-muted" style="display:grid;gap:10px;line-height:1.7;">
+      <div>Entity'leri küçük harf, alt çizgi kullanarak girin: saturn, 6th_house, mars_dasha</div>
+      <div>Body en az 2-3 paragraf olsun — AI kısa chunk'ları tercih etmez.</div>
+      <div>Nakshatra içerikleri için: core_action, dependency, output, risk, evolution alanlarını ele alın.</div>
+      <div>Dasha içerikleri için: dönem özellikleri, fırsatlar, riskler, zamanlama ipuçlarını ekleyin.</div>
+      <div>Yoga içerikleri için: koşulları, potansiyeli ve sınırları açıklayın.</div>
+    </div>
+  </aside>
+</section>
+{% endblock %}

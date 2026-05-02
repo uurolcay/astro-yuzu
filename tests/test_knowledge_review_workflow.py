@@ -88,25 +88,28 @@ class KnowledgeReviewWorkflowTests(unittest.TestCase):
 
     def test_review_required_item_appears_in_list(self):
         item = self._review_item()
+        item_title = item.title
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
             response = self.client.get("/admin/knowledge/review")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(item.title, response.text)
+        self.assertIn(item_title, response.text)
 
     def test_detail_page_opens(self):
         item = self._review_item()
+        item_id = item.id
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
-            response = self.client.get(f"/admin/knowledge/review/{item.id}")
+            response = self.client.get(f"/admin/knowledge/review/{item_id}")
         self.assertEqual(response.status_code, 200)
         self.assertIn("Knowledge Review", response.text)
 
     def test_edit_form_saves(self):
         item = self._review_item()
-        csrf = self._csrf(f"/admin/knowledge/review/{item.id}")
+        item_id = item.id
+        csrf = self._csrf(f"/admin/knowledge/review/{item_id}")
         before_orders = self.db.query(db_mod.ServiceOrder).count()
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
             response = self.client.post(
-                f"/admin/knowledge/review/{item.id}",
+                f"/admin/knowledge/review/{item_id}",
                 data={
                     "csrf_token": csrf,
                     "title": "Ashwini Reviewed",
@@ -131,7 +134,7 @@ class KnowledgeReviewWorkflowTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 303)
         self.db.expire_all()
-        refreshed = self.db.query(db_mod.KnowledgeItem).filter_by(id=item.id).first()
+        refreshed = self.db.query(db_mod.KnowledgeItem).filter_by(id=item_id).first()
         metadata = json.loads(refreshed.metadata_json)
         self.assertEqual(refreshed.title, "Ashwini Reviewed")
         self.assertEqual(metadata["classical_view"], "Edited classical note")
@@ -140,13 +143,14 @@ class KnowledgeReviewWorkflowTests(unittest.TestCase):
 
     def test_publish_item_makes_it_retrieval_visible(self):
         item = self._review_item(title="Career Ashwini", entities=["career", "ashwini"])
+        item_id = item.id
         payload = {"report_type": "career", "language": "tr", "natal_data": {"planets": [{"name": "Mars"}]}}
         before = retrieval_service.build_prompt_knowledge_context(payload, db=self.db)
         self.assertEqual(before["chunks"], [])
-        csrf = self._csrf(f"/admin/knowledge/review/{item.id}")
+        csrf = self._csrf(f"/admin/knowledge/review/{item_id}")
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
             response = self.client.post(
-                f"/admin/knowledge/review/{item.id}/publish",
+                f"/admin/knowledge/review/{item_id}/publish",
                 data={"csrf_token": csrf},
                 follow_redirects=False,
             )
@@ -157,17 +161,18 @@ class KnowledgeReviewWorkflowTests(unittest.TestCase):
 
     def test_reject_item_excludes_it_from_retrieval(self):
         item = self._review_item(title="Rejectable Ashwini", entities=["career", "ashwini"])
-        csrf = self._csrf(f"/admin/knowledge/review/{item.id}")
+        item_id = item.id
+        csrf = self._csrf(f"/admin/knowledge/review/{item_id}")
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
-            self.client.post(f"/admin/knowledge/review/{item.id}/publish", data={"csrf_token": csrf}, follow_redirects=False)
+            self.client.post(f"/admin/knowledge/review/{item_id}/publish", data={"csrf_token": csrf}, follow_redirects=False)
         payload = {"report_type": "career", "language": "tr", "natal_data": {"planets": [{"name": "Mars"}]}}
         self.db.expire_all()
         visible = retrieval_service.build_prompt_knowledge_context(payload, db=self.db)
         self.assertGreaterEqual(len(visible["chunks"]), 1)
-        csrf = self._csrf(f"/admin/knowledge/review/{item.id}")
+        csrf = self._csrf(f"/admin/knowledge/review/{item_id}")
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
             response = self.client.post(
-                f"/admin/knowledge/review/{item.id}/reject",
+                f"/admin/knowledge/review/{item_id}/reject",
                 data={"csrf_token": csrf},
                 follow_redirects=False,
             )
@@ -178,16 +183,18 @@ class KnowledgeReviewWorkflowTests(unittest.TestCase):
 
     def test_non_admin_access_is_blocked(self):
         item = self._review_item()
+        item_id = item.id
         response_one = self.client.get("/admin/knowledge/review", follow_redirects=False)
-        response_two = self.client.get(f"/admin/knowledge/review/{item.id}", follow_redirects=False)
+        response_two = self.client.get(f"/admin/knowledge/review/{item_id}", follow_redirects=False)
         self.assertIn(response_one.status_code, {302, 303, 307, 401, 403})
         self.assertIn(response_two.status_code, {302, 303, 307, 401, 403})
 
     def test_csrf_is_required(self):
         item = self._review_item()
+        item_id = item.id
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
             response = self.client.post(
-                f"/admin/knowledge/review/{item.id}",
+                f"/admin/knowledge/review/{item_id}",
                 data={"title": "Missing token"},
                 follow_redirects=False,
             )
@@ -195,8 +202,9 @@ class KnowledgeReviewWorkflowTests(unittest.TestCase):
 
     def test_no_service_order_is_created(self):
         item = self._review_item()
+        item_id = item.id
         before = self.db.query(db_mod.ServiceOrder).count()
-        csrf = self._csrf(f"/admin/knowledge/review/{item.id}")
+        csrf = self._csrf(f"/admin/knowledge/review/{item_id}")
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
-            self.client.post(f"/admin/knowledge/review/{item.id}/publish", data={"csrf_token": csrf}, follow_redirects=False)
+            self.client.post(f"/admin/knowledge/review/{item_id}/publish", data={"csrf_token": csrf}, follow_redirects=False)
         self.assertEqual(self.db.query(db_mod.ServiceOrder).count(), before)

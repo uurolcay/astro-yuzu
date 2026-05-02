@@ -1,5 +1,6 @@
 import re
 import unittest
+import io
 from datetime import datetime
 from unittest.mock import patch
 
@@ -60,6 +61,7 @@ class NakshatraExtractionServiceTests(unittest.TestCase):
         self.assertEqual(svc.normalize_nakshatra_name("KRİTİKA"), "krittika")
         self.assertEqual(svc.normalize_nakshatra_name("ŞATABHİŞA"), "shatabhisha")
         self.assertEqual(svc.normalize_nakshatra_name("Moola"), "mula")
+        self.assertEqual(svc.normalize_nakshatra_name("ASHWINİ"), "ashwini")
 
     def test_detect_nakshatra_sections_simple_fixture(self):
         blocks = [
@@ -69,6 +71,23 @@ class NakshatraExtractionServiceTests(unittest.TestCase):
         ]
         sections = svc.detect_nakshatra_sections(blocks)
         self.assertEqual(len(sections), 2)
+        self.assertEqual(sections[0]["nakshatra"], "ashwini")
+        self.assertEqual(sections[1]["nakshatra"], "bharani")
+
+    def test_detect_nakshatra_sections_supports_turkish_heading_variations(self):
+        blocks = [
+            "KRİTİKA\nRuler: Sun\nDeity: Agni",
+            "MRIGAŞİR\nRuler: Mars\nDeity: Soma",
+        ]
+        sections = svc.detect_nakshatra_sections(blocks)
+        self.assertEqual([item["nakshatra"] for item in sections], ["krittika", "mrigashira"])
+
+    def test_long_text_soft_split_works_for_inline_nakshatra_mentions(self):
+        blocks = [
+            "Intro text\nASHWINI quick response and initiative.\nMore text continues.\nBHARANI restraint and containment.",
+        ]
+        sections = svc.detect_nakshatra_sections(blocks)
+        self.assertGreaterEqual(len(sections), 2)
         self.assertEqual(sections[0]["nakshatra"], "ashwini")
         self.assertEqual(sections[1]["nakshatra"], "bharani")
 
@@ -118,24 +137,34 @@ class NakshatraExtractionServiceTests(unittest.TestCase):
         self.assertEqual(result["chunk_count"], 0)
 
     def test_route_smoke_test_admin_works(self):
-        document = db_mod.SourceDocument(
-            title="Nakshatra Source",
-            file_path="fake.pdf",
-            document_type="book",
-            uploaded_at=datetime.utcnow(),
-        )
-        self.db.add(document)
-        self.db.commit()
-        document_id = document.id
         csrf = self._csrf()
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair), patch.object(
             app.document_parser,
-            "parse_pdf",
-            return_value=[
-                "ASHWINI\nRuler: Ketu\nDeity: Ashvini Kumars\n\nThe deity mythology emphasizes healing and responsiveness.",
-                "BHARANI\nRuler: Venus\nDeity: Yama\n\nObservation: in some cases this may be seen as intense containment.",
-            ],
+            "parse_pdf_with_diagnostics",
+            return_value={
+                "blocks": [
+                    "ASHWINI\nRuler: Ketu\nDeity: Ashvini Kumars\n\nThe deity mythology emphasizes healing and responsiveness.",
+                    "BHARANI\nRuler: Venus\nDeity: Yama\n\nObservation: in some cases this may be seen as intense containment.",
+                ],
+                "page_count": 2,
+                "block_count": 2,
+                "preview": "ASHWINI",
+                "parser_used": "pypdf",
+                "error": None,
+            },
         ):
+            upload_response = self.client.post(
+                "/admin/documents/upload",
+                data={"csrf_token": csrf, "title": "Nakshatra Source", "document_type": "book"},
+                files={"file": ("import.pdf", io.BytesIO(b"%PDF-1.4 fake pdf"), "application/pdf")},
+                follow_redirects=False,
+            )
+            self.assertEqual(upload_response.status_code, 303)
+            lookup_db = db_mod.SessionLocal()
+            try:
+                document_id = lookup_db.query(db_mod.SourceDocument).order_by(db_mod.SourceDocument.id.desc()).first().id
+            finally:
+                lookup_db.close()
             response = self.client.post(
                 f"/admin/documents/{document_id}/extract-nakshatra",
                 data={"csrf_token": csrf},
@@ -143,6 +172,41 @@ class NakshatraExtractionServiceTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 303)
         self.assertGreaterEqual(self.db.query(db_mod.KnowledgeItem).count(), 1)
+
+    def test_empty_parse_result_does_not_crash_route(self):
+        document = db_mod.SourceDocument(
+            title="Empty Source",
+            file_path="fake.pdf",
+            document_type="book",
+            uploaded_at=datetime.utcnow(),
+        )
+        self.db.add(document)
+        self.db.commit()
+        lookup_db = db_mod.SessionLocal()
+        try:
+            document_id = lookup_db.query(db_mod.SourceDocument).order_by(db_mod.SourceDocument.id.desc()).first().id
+        finally:
+            lookup_db.close()
+        csrf = self._csrf()
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair), patch.object(
+            app.document_parser,
+            "parse_pdf_with_diagnostics",
+            return_value={
+                "blocks": [],
+                "page_count": 1,
+                "block_count": 0,
+                "preview": "",
+                "parser_used": "none",
+                "error": "no_pdf_parser_available",
+            },
+        ):
+            response = self.client.post(
+                f"/admin/documents/{document_id}/extract-nakshatra",
+                data={"csrf_token": csrf},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("parse_empty", response.headers.get("location", ""))
 
     def test_non_admin_access_is_blocked(self):
         response = self.client.post("/admin/documents/1/extract-nakshatra", follow_redirects=False)

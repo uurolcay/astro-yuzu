@@ -21,6 +21,17 @@
 </details>
 
 <section class="admin-card">
+  <div class="admin-card-title">Source Pages</div>
+  <div class="admin-muted">
+    {% if metadata.source_page_start or metadata.source_page_end %}
+      {{ metadata.source_page_start or "?" }} - {{ metadata.source_page_end or metadata.source_page_start or "?" }}
+    {% else %}
+      -
+    {% endif %}
+  </div>
+</section>
+
+<section class="admin-card">
   <div class="admin-card-title">Edit Knowledge Item</div>
   <form class="admin-form" method="post" action="/admin/knowledge/review/{{ item.id }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

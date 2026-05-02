@@ -1,43 +1,68 @@
+from __future__ import annotations
+
 import re
+import unicodedata
+
+from services import document_chunker
 
 
-_NAKSHATRA_ALIASES = {
-    "ashwini": {"aswini", "ashwini", "asvini"},
-    "bharani": {"bharani", "bharni"},
-    "krittika": {"krittika", "kritika", "kritikaa", "kritika", "kritikaa", "kritikah", "krtika", "kritika", "kriitika", "kritika", "kri̇tika", "kri̇ti̇ka", "kritika", "kri̇tika", "kritika", "kri̇ti̇ka", "kritika", "kritika", "kritika", "kri̇ti̇ka", "kritika", "kritika", "krİtİka", "kritika", "kritika", "kritika", "kritika", "kritika", "kritika", "kritika", "kritika", "kritika", "kritika", "kritika", "kritika", "kritika", "kritika", "kritika", "kritika", "kritika", "kritika", "kritika", "kritika", "kri̇tika", "kri̇tika", "krıtıka", "krİtİka", "kritika", "krittika"},
+NAKSHATRA_ALIASES = {
+    "ashwini": {"ashwini", "aswini", "asvini", "aşvini", "ashwini̇"},
+    "bharani": {"bharani", "bharanİ", "barani", "भारानी"},
+    "krittika": {"krittika", "kritika", "krİtİka", "kritika", "kritika"},
     "rohini": {"rohini"},
-    "mrigashira": {"mrigashira", "mrigasir", "mrigashir", "mrigasira", "mrigasirsha", "mrigasirsa", "mrigasira", "mrigasir", "mrigaşir", "mrigasir"},
-    "ardra": {"ardra", "ardraa"},
+    "mrigashira": {"mrigashira", "mrigasira", "mrigasir", "mrigaşir"},
+    "ardra": {"ardra"},
     "punarvasu": {"punarvasu"},
-    "pushya": {"pushya", "pushya"},
-    "ashlesha": {"ashlesha", "aslesha", "aşlesha", "ashlesa"},
+    "pushya": {"pushya"},
+    "ashlesha": {"ashlesha", "ashlesa", "aşlesha"},
     "magha": {"magha"},
     "purva_phalguni": {"purva phalguni", "purvaphalguni", "pubba"},
     "uttara_phalguni": {"uttara phalguni", "uttaraphalguni"},
     "hasta": {"hasta"},
     "chitra": {"chitra", "citra"},
     "swati": {"swati", "svati"},
-    "vishakha": {"vishakha", "visakha"},
+    "vishakha": {"vishakha", "visakha", "vişahha"},
     "anuradha": {"anuradha", "anurada"},
     "jyeshtha": {"jyeshtha", "jyestha"},
-    "mula": {"mula", "moola"},
-    "purva_ashadha": {"purva ashadha", "purvashadha", "purvaashadha"},
-    "uttara_ashadha": {"uttara ashadha", "uttarashadha", "uttaraashadha"},
-    "shravana": {"shravana", "sravana"},
+    "mula": {"mula", "moola", "moola/mula"},
+    "purva_ashadha": {"purva ashadha", "purvashadha"},
+    "uttara_ashadha": {"uttara ashadha", "uttarashadha"},
+    "shravana": {"shravana", "sravana", "şravana"},
     "dhanishta": {"dhanishta", "dhanista"},
-    "shatabhisha": {"shatabhisha", "satabhisha", "şatabhişa", "shatabisa", "satabhisa"},
+    "shatabhisha": {"shatabhisha", "satabhisha", "şatabhişa", "şatabhisha"},
     "purva_bhadrapada": {"purva bhadrapada", "purvabhadrapada"},
     "uttara_bhadrapada": {"uttara bhadrapada", "uttarabhadrapada"},
     "revati": {"revati"},
 }
 
-_METADATA_PATTERNS = {
-    "zodiac_range": [r"zodiac range[:\s-]+([^\n]+)", r"range[:\s-]+([^\n]+)"],
-    "ruler": [r"ruler[:\s-]+([^\n]+)"],
-    "deity": [r"deity[:\s-]+([^\n]+)"],
-    "symbol": [r"symbol[:\s-]+([^\n]+)"],
+METADATA_HINTS = [
+    "zodiac range",
+    "burc araligi",
+    "burç aralığı",
+    "ruler",
+    "gezegene hukmetme",
+    "gezegene hükmetme",
+    "deity",
+    "tanri",
+    "tanrı",
+    "symbol",
+    "sembol",
+    "quality",
+    "kalite",
+    "pada",
+    "padalar",
+    "animal",
+    "yoni",
+]
+
+METADATA_PATTERNS = {
+    "zodiac_range": [r"zodiac range[:\s-]+([^\n]+)", r"burc araligi[:\s-]+([^\n]+)", r"burç aralığı[:\s-]+([^\n]+)"],
+    "ruler": [r"ruler[:\s-]+([^\n]+)", r"gezegene hukmetme[:\s-]+([^\n]+)", r"gezegene hükmetme[:\s-]+([^\n]+)"],
+    "deity": [r"deity[:\s-]+([^\n]+)", r"tanri[:\s-]+([^\n]+)", r"tanrı[:\s-]+([^\n]+)"],
+    "symbol": [r"symbol[:\s-]+([^\n]+)", r"sembol[:\s-]+([^\n]+)"],
     "gana": [r"gana[:\s-]+([^\n]+)"],
-    "quality": [r"quality[:\s-]+([^\n]+)"],
+    "quality": [r"quality[:\s-]+([^\n]+)", r"kalite[:\s-]+([^\n]+)"],
     "caste": [r"caste[:\s-]+([^\n]+)"],
     "animal": [r"animal[:\s-]+([^\n]+)", r"yoni[:\s-]+([^\n]+)"],
     "bird": [r"bird[:\s-]+([^\n]+)"],
@@ -54,57 +79,152 @@ def _clean(value):
     return str(value or "").strip()
 
 
+def _ascii_fold(text):
+    folded = unicodedata.normalize("NFKD", str(text or ""))
+    folded = "".join(ch for ch in folded if not unicodedata.combining(ch))
+    folded = folded.lower().replace("/", " ").replace("-", " ")
+    folded = re.sub(r"\s+", " ", folded)
+    return folded.strip()
+
+
 def normalize_nakshatra_name(value):
-    text = _clean(value).lower()
+    text = _ascii_fold(value)
     if not text:
         return ""
-    replacements = str.maketrans({
-        "ş": "s", "Ş": "s",
-        "ı": "i", "İ": "i",
-        "ğ": "g", "Ğ": "g",
-        "ü": "u", "Ü": "u",
-        "ö": "o", "Ö": "o",
-        "ç": "c", "Ç": "c",
-    })
-    normalized = text.translate(replacements)
-    normalized = normalized.replace("-", " ").replace("/", " ")
-    normalized = re.sub(r"[^a-z0-9\s]", "", normalized)
-    normalized = re.sub(r"\s+", " ", normalized).strip()
-    for canonical, aliases in _NAKSHATRA_ALIASES.items():
-        if normalized == canonical.replace("_", " ") or normalized in aliases:
+    for canonical, aliases in NAKSHATRA_ALIASES.items():
+        if text == canonical.replace("_", " ") or text in {_ascii_fold(alias) for alias in aliases}:
             return canonical
-    return normalized.replace(" ", "_")
+    return text.replace(" ", "_")
+
+
+def _page_entries(text_blocks):
+    entries = []
+    for idx, block in enumerate(text_blocks or [], start=1):
+        if isinstance(block, dict):
+            text = _clean(block.get("text"))
+            page = int(block.get("page") or idx)
+        else:
+            text = _clean(block)
+            page = idx
+        if text:
+            entries.append({"page": page, "text": text})
+    return entries
+
+
+def _candidate_heading(lines):
+    for line in lines[:10]:
+        candidate = normalize_nakshatra_name(line)
+        if candidate in NAKSHATRA_ALIASES:
+            return candidate
+    preview = _ascii_fold(" ".join(lines[:3])[:100])
+    for canonical, aliases in NAKSHATRA_ALIASES.items():
+        variants = {canonical.replace("_", " "), *{_ascii_fold(alias) for alias in aliases}}
+        if any(variant and preview.startswith(variant) for variant in variants):
+            return canonical
+    return ""
+
+
+def _has_long_paragraph(text):
+    return any(len(part.strip()) >= 180 for part in re.split(r"\n\s*\n", str(text or "")) if part.strip())
+
+
+def _section_supported(entries, start_index):
+    window = "\n\n".join(item["text"] for item in entries[start_index : start_index + 3])
+    lowered = _ascii_fold(window)
+    if not lowered:
+        return False
+    if document_chunker.analyze_noise(window)["noise_score"] >= 0.7:
+        return False
+    if any(hint in lowered for hint in METADATA_HINTS):
+        return True
+    if _has_long_paragraph(window):
+        return True
+    if any(keyword in lowered for keyword in ("animal", "yoni", "deity", "myth", "symbol", "sembol")):
+        return True
+    return False
 
 
 def detect_nakshatra_sections(text_blocks):
+    entries = _page_entries(text_blocks)
     sections = []
     current = None
-    for index, block in enumerate(text_blocks or [], start=1):
-        block_text = _clean(block)
-        if not block_text:
-            continue
-        lines = [line.strip() for line in block_text.splitlines() if line.strip()]
-        detected = ""
-        for line in lines[:6]:
-            candidate = normalize_nakshatra_name(line)
-            if candidate in _NAKSHATRA_ALIASES:
-                detected = candidate
-                break
-        if detected:
+    for index, entry in enumerate(entries):
+        text = entry["text"]
+        noise = document_chunker.analyze_noise(text)
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        detected = _candidate_heading(lines)
+        if detected and not noise["is_toc"] and _section_supported(entries, index):
             if current:
-                current["end_page"] = index - 1 if index > current["start_page"] else current["start_page"]
+                current["end_page"] = entries[index - 1]["page"] if index > current["entry_index"] else current["start_page"]
+                current.pop("entry_index", None)
                 sections.append(current)
             current = {
                 "nakshatra": detected,
-                "start_page": index,
-                "end_page": index,
-                "raw_text": block_text,
+                "start_page": entry["page"],
+                "end_page": entry["page"],
+                "raw_text": text,
+                "entry_index": index,
             }
-        elif current:
-            current["end_page"] = index
-            current["raw_text"] = f"{current['raw_text']}\n\n{block_text}".strip()
+            continue
+        if current:
+            current["end_page"] = entry["page"]
+            current["raw_text"] = f"{current['raw_text']}\n\n{text}".strip()
     if current:
+        current.pop("entry_index", None)
         sections.append(current)
+    if sections:
+        return sections
+    return _soft_split_nakshatra_sections(entries)
+
+
+def _soft_split_nakshatra_sections(entries):
+    full_text = "\n\n".join(entry["text"] for entry in entries)
+    if not full_text:
+        return []
+    hits = []
+    for entry_index, entry in enumerate(entries):
+        if document_chunker.analyze_noise(entry["text"])["is_toc"]:
+            continue
+        normalized_text = _ascii_fold(entry["text"])
+        entry_hits = []
+        for canonical, aliases in NAKSHATRA_ALIASES.items():
+            variants = {canonical.replace("_", " "), *{_ascii_fold(alias) for alias in aliases}}
+            matched_variant = next((variant for variant in variants if variant and variant in normalized_text), "")
+            if matched_variant and (
+                _section_supported(entries, entry_index)
+                or (len(entry["text"]) >= 80 and len(normalized_text.split(matched_variant, 1)[-1].strip()) >= 10)
+            ):
+                entry_hits.append((normalized_text.find(matched_variant), canonical))
+        if entry_hits:
+            for position, canonical in sorted(entry_hits, key=lambda value: value[0]):
+                hits.append((entry_index, position, canonical))
+    sections = []
+    seen = set()
+    for hit_index, (entry_index, position, nakshatra) in enumerate(hits):
+        if (entry_index, position, nakshatra) in seen:
+            continue
+        seen.add((entry_index, position, nakshatra))
+        next_hit = hits[hit_index + 1] if hit_index + 1 < len(hits) else None
+        start_entry = entries[entry_index]
+        if next_hit and next_hit[0] == entry_index:
+            next_position = next_hit[1]
+            raw_text = start_entry["text"][position:next_position].strip()
+            end_page = start_entry["page"]
+        else:
+            end_entry_index = len(entries)
+            if next_hit:
+                end_entry_index = next_hit[0]
+            raw_text = "\n\n".join(entry["text"] for entry in entries[entry_index:end_entry_index]).strip()
+            end_page = entries[end_entry_index - 1]["page"] if end_entry_index > entry_index else start_entry["page"]
+        if raw_text:
+            sections.append(
+                {
+                    "nakshatra": nakshatra,
+                    "start_page": start_entry["page"],
+                    "end_page": end_page,
+                    "raw_text": raw_text,
+                }
+            )
     return sections
 
 
@@ -112,10 +232,10 @@ def extract_nakshatra_metadata(section_text):
     text = _clean(section_text)
     metadata = {key: "" for key in [
         "zodiac_range", "ruler", "deity", "symbol", "gana", "quality", "caste",
-        "animal", "bird", "tree", "sounds", "yoga_tara", "padas", "vargottama",
-        "pushkara_navamsa", "pushkara_bhaga",
+        "animal", "bird", "tree", "sounds", "yoga_tara", "padas",
+        "vargottama", "pushkara_navamsa", "pushkara_bhaga",
     ]}
-    for key, patterns in _METADATA_PATTERNS.items():
+    for key, patterns in METADATA_PATTERNS.items():
         for pattern in patterns:
             match = re.search(pattern, text, flags=re.IGNORECASE)
             if match:
@@ -128,7 +248,7 @@ def extract_nakshatra_metadata(section_text):
 
 
 def classify_nakshatra_paragraph(paragraph):
-    text = _clean(paragraph).lower()
+    text = _ascii_fold(paragraph)
     if not text:
         return "unknown"
     if any(keyword in text for keyword in ("ruler:", "deity:", "symbol:", "gana:", "animal:", "tree:", "bird:", "sounds:", "range:")):
@@ -159,13 +279,13 @@ def classify_nakshatra_paragraph(paragraph):
         return "observation_notes"
     if any(keyword in text for keyword in ("pada", "quarter")):
         return "pada_logic"
-    if any(keyword in text for keyword in ("death", "illness", "sexual", "child", "pregnancy", "marriage", "divorce")):
+    if any(keyword in text for keyword in ("death", "illness", "sexual", "child", "pregnancy", "marriage")):
         return "caution_sensitive"
     return "unknown"
 
 
 def _sensitivity_for_text(text):
-    lowered = _clean(text).lower()
+    lowered = _ascii_fold(text)
     if any(keyword in lowered for keyword in ("death", "sexual", "pregnancy", "child", "marriage", "divorce", "illness", "disease")):
         return "high"
     if any(keyword in lowered for keyword in ("health", "partner", "relationship", "family")):
@@ -194,7 +314,7 @@ def build_suggested_nakshatra_chunks(section):
         sensitivity_level = _sensitivity_for_text(paragraph)
         chunks.append(
             {
-                "title": f"{nakshatra.replace('_', ' ').title()} — {paragraph_type.replace('_', ' ').title()}",
+                "title": f"{nakshatra.replace('_', ' ').title()} - {paragraph_type.replace('_', ' ').title()}",
                 "category": "nakshatra",
                 "entity_type": "nakshatra",
                 "primary_entity": nakshatra,
@@ -203,19 +323,21 @@ def build_suggested_nakshatra_chunks(section):
                 "source_type": "classical_text",
                 "source_title": source_title,
                 "source_reference": f"pages {section.get('start_page')}-{section.get('end_page')}",
+                "source_page_start": section.get("start_page"),
+                "source_page_end": section.get("end_page"),
                 "classical_view": paragraph,
-                "modern_synthesis": f"{nakshatra.replace('_', ' ').title()} themes can be translated into a calm, non-deterministic interpretive frame for modern clients.",
-                "interpretation_logic": f"Use this material when {nakshatra.replace('_', ' ')} is active in natal emphasis, dasha activation, or transit contact.",
-                "strong_condition": f"Stronger when {nakshatra.replace('_', ' ')} is tied to Moon, Lagna, ruling planets, or active dasha layers.",
-                "weak_condition": "Weaker when the chart has no clear activation or the statement depends on anecdotal observation only.",
-                "risk_pattern": metadata.get("animal") or "May distort into reactive patterning if handled too literally.",
-                "opportunity_pattern": metadata.get("symbol") or "Can become a source-aware insight when grounded in chart context.",
-                "dasha_activation": f"Review when the native enters {metadata.get('ruler') or nakshatra} timing or related dasha periods.",
-                "transit_activation": f"Useful when transits trigger {nakshatra.replace('_', ' ')} planets or the ruler of this nakshatra.",
-                "safe_language_notes": "Avoid fate-heavy certainty. Present as pattern, tendency, or quality that may become more visible under activation.",
-                "what_not_to_say": "Do not present this as a guaranteed life outcome or irreversible destiny.",
-                "premium_synthesis_sentence": f"{nakshatra.replace('_', ' ').title()} can be framed as a nuanced quality pattern that becomes clearest when chart activation and lived context support it.",
-                "tags": [nakshatra, paragraph_type, metadata.get("ruler") or ""],
+                "modern_synthesis": f"{nakshatra.replace('_', ' ').title()} temalari modern bir danisan deneyimi icin sakin ve kosullu bir dil ile sentezlenebilir.",
+                "interpretation_logic": f"Bu icerigi {nakshatra.replace('_', ' ')} natal vurguda, dasha aktivasyonunda veya transit temasinda kullanin.",
+                "strong_condition": f"Moon, Lagna veya aktif dasha katmanlari {nakshatra.replace('_', ' ')} ile baglandiginda daha guclu kullanilir.",
+                "weak_condition": "Haritada net aktivasyon yoksa veya ifade yalnizca gozlemsel/anekdotal ise daha yumusak kullanilmalidir.",
+                "risk_pattern": metadata.get("animal") or "Asiri literal okunursa tepkisel bir oruntuye kayabilir.",
+                "opportunity_pattern": metadata.get("symbol") or "Chart baglamina oturdugunda derin ve kaynakli bir icgoru uretebilir.",
+                "dasha_activation": f"{metadata.get('ruler') or nakshatra} yonetimiyle ilgili dasha donemlerinde tekrar gozden gecirin.",
+                "transit_activation": f"Transitler {nakshatra.replace('_', ' ')} ile bagli gezegenleri tetiklediginde kullanislidir.",
+                "safe_language_notes": "Kesin olur dili kullanma. Bunu bir oruntu, egilim veya aktiflesebilecek kalite olarak sun.",
+                "what_not_to_say": "Bunu garantili kader, kesin evlilik, kesin hastalik veya geri donulmez sonuc gibi sunma.",
+                "premium_synthesis_sentence": f"{nakshatra.replace('_', ' ').title()} daha cok, aktivasyon desteklendikce belirginlesen ince bir kalite olarak okunmalidir.",
+                "tags": [tag for tag in [nakshatra, paragraph_type, metadata.get('ruler') or ""] if tag],
                 "confidence_level": confidence_level,
                 "sensitivity_level": sensitivity_level,
                 "review_required": True,

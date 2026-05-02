@@ -1,4 +1,5 @@
 import os
+import sys
 from types import SimpleNamespace
 
 
@@ -10,7 +11,8 @@ def _env_flag(name, default=False):
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", REDIS_URL)
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", REDIS_URL)
-TASK_ALWAYS_EAGER = _env_flag("CELERY_TASK_ALWAYS_EAGER", default=False)
+RUNNING_UNDER_PYTEST = "pytest" in sys.modules
+TASK_ALWAYS_EAGER = _env_flag("CELERY_TASK_ALWAYS_EAGER", default=RUNNING_UNDER_PYTEST)
 
 
 try:
@@ -82,4 +84,5 @@ else:
         task_acks_late=True,
         worker_prefetch_multiplier=1,
         task_always_eager=TASK_ALWAYS_EAGER,
+        task_eager_propagates=True,
     )

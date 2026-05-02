@@ -32,7 +32,7 @@ from fastapi.requests import Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, inspect as sa_inspect, or_
+from sqlalchemy import func, inspect as sa_inspect, or_, text as sa_text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
@@ -96,6 +96,7 @@ from services import interpretation_quality_service as quality_svc
 from services import knowledge_coverage_service as coverage_svc
 from services import knowledge_import_service
 from services import knowledge_service
+from services import embedding_service
 from services import report_structure_v3
 from services import retrieval_service
 from services import training_service
@@ -409,6 +410,74 @@ RUNTIME_TMP_DIR = RUNTIME_CACHE_DIR / "tmp"
 FONTCONFIG_RUNTIME_FILE = RUNTIME_CACHE_DIR / "fonts.runtime.conf"
 _PDF_RUNTIME_CONFIGURED = False
 _PDF_DLL_DIRECTORY_HANDLE = None
+UPLOADS_DIR = Path(os.getenv("UPLOAD_DIR", str(BASE_DIR / "uploads"))).resolve()
+
+
+def get_upload_dir():
+    configured = str(os.getenv("UPLOAD_DIR", str(UPLOADS_DIR))).strip()
+    upload_dir = Path(configured).resolve()
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    return upload_dir
+
+
+def _is_render_env():
+    return any(
+        str(os.getenv(key, "")).strip()
+        for key in ("RENDER", "RENDER_SERVICE_ID", "RENDER_EXTERNAL_URL")
+    )
+
+
+def _storage_warnings(engine_meta, uploads_dir, *, is_render_env=False):
+    warnings = []
+    if engine_meta.get("database_url_missing"):
+        warnings.append("DATABASE_URL missing")
+    if is_render_env and engine_meta.get("db_dialect") == "sqlite":
+        warnings.append("Production SQLite detected")
+    normalized_upload_dir = str(uploads_dir).replace("\\", "/").rstrip("/")
+    if is_render_env and not normalized_upload_dir.startswith("/var/data"):
+        warnings.append("Upload dir not under /var/data while Render detected")
+        warnings.append("Upload dir may be ephemeral")
+    return warnings
+
+
+def _storage_diagnostics(db: Session):
+    engine_meta = db_mod.get_engine_diagnostics()
+    uploads_dir = get_upload_dir()
+    uploads_dir_exists = uploads_dir.exists()
+    is_render_env = _is_render_env()
+    warnings = _storage_warnings(engine_meta, uploads_dir, is_render_env=is_render_env)
+    source_documents_count = db.query(db_mod.SourceDocument).count()
+    knowledge_items_count = db.query(db_mod.KnowledgeItem).count()
+    knowledge_chunks_count = db.query(db_mod.KnowledgeChunk).count()
+    review_required_count = db.query(db_mod.KnowledgeItem).filter(db_mod.KnowledgeItem.status == "review_required").count()
+    published_count = db.query(db_mod.KnowledgeItem).filter(db_mod.KnowledgeItem.status.in_(["published", "active"])).count()
+    return {
+        **engine_meta,
+        "source_documents_count": source_documents_count,
+        "knowledge_items_count": knowledge_items_count,
+        "knowledge_chunks_count": knowledge_chunks_count,
+        "review_required_count": review_required_count,
+        "published_count": published_count,
+        "uploads_dir_path": str(uploads_dir),
+        "uploads_dir_exists": uploads_dir_exists,
+        "uploads_file_count": len([item for item in uploads_dir.iterdir() if item.is_file()]) if uploads_dir_exists else 0,
+        "is_render_env": is_render_env,
+        "warnings": warnings,
+    }
+
+
+_startup_storage_meta = db_mod.get_engine_diagnostics()
+_startup_render_env = _is_render_env()
+_startup_upload_dir = get_upload_dir()
+_startup_warnings = _storage_warnings(_startup_storage_meta, _startup_upload_dir, is_render_env=_startup_render_env)
+logger.info(
+    "Storage startup db_dialect=%s db_url=%s upload_dir=%s render_env=%s warnings=%s",
+    _startup_storage_meta.get("db_dialect"),
+    _startup_storage_meta.get("database_url_masked"),
+    str(_startup_upload_dir),
+    _startup_render_env,
+    ",".join(_startup_warnings) if _startup_warnings else "-",
+)
 REPORT_TYPES = {
     "preview": {
         "label": "Preview",
@@ -6511,6 +6580,9 @@ def _json_loads_safe(value, default):
         return default
 
 
+templates.env.globals["json_loads_safe"] = _json_loads_safe
+
+
 def _ai_quality_context(request, **extra):
     active_page = extra.pop("active_page", "training_dashboard")
     return _auth_template_context(
@@ -6587,6 +6659,58 @@ def _review_required_items(db):
         if str(item.status or "").strip().lower() == "review_required" or bool(metadata.get("review_required")):
             results.append(item)
     return results
+
+
+def _knowledge_item_coverage_entities(item, metadata):
+    return [
+        str(value).lower()
+        for value in (metadata.get("coverage_entities") or _json_loads_safe(item.coverage_entities_json, []))
+        if str(value or "").strip()
+    ]
+
+
+def _apply_knowledge_review_status(db, item, status):
+    metadata = _knowledge_item_metadata(item)
+    normalized_status = str(status or "").strip().lower() or "review_required"
+    metadata["review_required"] = normalized_status == "review_required"
+    metadata["status"] = normalized_status
+    knowledge_service.update_knowledge_item(
+        db,
+        item,
+        title=item.title,
+        body_text=_knowledge_review_body(metadata) or item.body_text,
+        summary_text=metadata.get("premium_synthesis_sentence") or item.summary_text,
+        entities=_knowledge_item_coverage_entities(item, metadata),
+        metadata=metadata,
+        status=normalized_status,
+    )
+    return item
+
+
+def _is_auto_approve_blocked(item, metadata):
+    title = str(getattr(item, "title", "") or "").strip().lower()
+    noise_score = float(metadata.get("noise_score") or 0)
+    if metadata.get("is_toc") is True:
+        return True
+    if metadata.get("is_index") is True:
+        return True
+    if noise_score >= 0.7:
+        return True
+    if any(marker in title for marker in ("contents", "bölümler", "bolumler", "index")):
+        return True
+    source_page_start = metadata.get("source_page_start")
+    source_page_end = metadata.get("source_page_end")
+    if source_page_start and source_page_end and int(source_page_start) <= 3:
+        support_fields = [
+            metadata.get("classical_view"),
+            metadata.get("modern_synthesis"),
+            metadata.get("interpretation_logic"),
+            metadata.get("strong_condition"),
+            metadata.get("opportunity_pattern"),
+        ]
+        if not any(str(value or "").strip() for value in support_fields):
+            return True
+    return False
 
 
 def slugify_article_title(value):
@@ -8291,6 +8415,12 @@ async def admin_debug_whoami(request: Request, db: Session = Depends(get_db)):
             "template_hint": "admin/dashboard.html" if request.url.path in {"/admin", "/admin/dashboard"} else "admin/debug/whoami",
         }
     )
+
+
+@app.get("/admin/debug/storage")
+@admin_required
+async def admin_debug_storage(request: Request, db: Session = Depends(get_db)):
+    return JSONResponse(_storage_diagnostics(db))
 
 
 def _admin_order_view(order):
@@ -11838,6 +11968,124 @@ async def admin_astro_workspace_profile_delete(request: Request, profile_id: int
     return RedirectResponse(url="/admin/astro-workspace/profiles", status_code=303)
 
 
+@app.get("/admin/training", response_class=HTMLResponse)
+@admin_required
+async def admin_training_hub(
+    request: Request,
+    db: Session = Depends(get_db),
+    notice: str = "",
+):
+    total_items = db.query(db_mod.KnowledgeItem).count()
+    review_pending = db.query(db_mod.KnowledgeItem).filter(
+        db_mod.KnowledgeItem.status == "review_required"
+    ).count()
+    open_gaps = db.query(db_mod.KnowledgeGap).filter(
+        db_mod.KnowledgeGap.status == "open"
+    ).count()
+
+    try:
+        coverage = coverage_svc.compute_knowledge_coverage(db)
+    except Exception:
+        coverage = {"summary": {}, "by_category": {}}
+
+    recent_items = (
+        db.query(db_mod.KnowledgeItem)
+        .order_by(db_mod.KnowledgeItem.updated_at.desc())
+        .limit(8)
+        .all()
+    )
+
+    priority_gaps = (
+        db.query(db_mod.KnowledgeGap)
+        .filter(db_mod.KnowledgeGap.status == "open")
+        .order_by(db_mod.KnowledgeGap.created_at.desc())
+        .limit(10)
+        .all()
+    )
+
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/training_hub.html",
+        context=_ai_quality_context(
+            request,
+            active_page="training_hub",
+            notice=notice,
+            stats={
+                "total_items": total_items,
+                "review_pending": review_pending,
+                "open_gaps": open_gaps,
+                "coverage_pct": round(
+                    coverage.get("summary", {}).get("overall_pct", 0), 1
+                ),
+            },
+            coverage=coverage,
+            recent_items=recent_items,
+            priority_gaps=priority_gaps,
+        ),
+    )
+
+
+@app.get("/admin/training/write", response_class=HTMLResponse)
+@admin_required
+async def admin_training_write(
+    request: Request,
+    db: Session = Depends(get_db),
+    entity: str = "",
+    notice: str = "",
+):
+    prefill_entity = str(entity or "").strip()
+    detected_type = "reference"
+    lowered_entity = prefill_entity.lower()
+    if "yoga" in lowered_entity:
+        detected_type = "yoga"
+    elif "dasha" in lowered_entity:
+        detected_type = "dasha"
+    elif any(token in lowered_entity for token in ("nakshatra", "ashwini", "bharani", "rohini", "hasta", "chitra", "swati", "anuradha", "revati", "dhanishta")):
+        detected_type = "nakshatra"
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/training_write.html",
+        context=_ai_quality_context(
+            request,
+            active_page="training_write",
+            prefill_entity=prefill_entity,
+            prefill_item_type=detected_type,
+            notice=notice,
+            item_type_options=[
+                "nakshatra", "yoga", "dasha", "concept",
+                "house_interpretation", "planet_combination",
+                "qa", "reference",
+            ],
+        ),
+    )
+
+
+@app.get("/admin/training/qa", response_class=HTMLResponse)
+@admin_required
+async def admin_training_qa(
+    request: Request,
+    db: Session = Depends(get_db),
+    notice: str = "",
+):
+    recent_qa = (
+        db.query(db_mod.KnowledgeItem)
+        .filter(db_mod.KnowledgeItem.item_type == "qa")
+        .order_by(db_mod.KnowledgeItem.updated_at.desc())
+        .limit(5)
+        .all()
+    )
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/training_qa.html",
+        context=_ai_quality_context(
+            request,
+            active_page="training_qa",
+            notice=notice,
+            recent_qa=recent_qa,
+        ),
+    )
+
+
 @app.get("/admin/training/dashboard", response_class=HTMLResponse)
 @admin_required
 async def admin_training_dashboard(request: Request, db: Session = Depends(get_db)):
@@ -11950,6 +12198,73 @@ async def admin_knowledge_review_list(request: Request, db: Session = Depends(ge
     )
 
 
+@app.post("/admin/knowledge/review/bulk-approve")
+@admin_required
+async def admin_knowledge_review_bulk_approve(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(default=""),
+):
+    await validate_csrf_token(request, csrf_token)
+    form = await request.form()
+    raw_ids = form.getlist("knowledge_ids")
+    knowledge_ids = [int(value) for value in raw_ids if str(value or "").strip().isdigit()]
+    approved_count = 0
+    if knowledge_ids:
+        items = db.query(db_mod.KnowledgeItem).filter(db_mod.KnowledgeItem.id.in_(knowledge_ids)).all()
+        for item in items:
+            _apply_knowledge_review_status(db, item, "published")
+            approved_count += 1
+    db.commit()
+    return RedirectResponse(url=f"/admin/knowledge/review?notice={approved_count}+items+approved", status_code=303)
+
+
+@app.post("/admin/knowledge/review/bulk-reject")
+@admin_required
+async def admin_knowledge_review_bulk_reject(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(default=""),
+):
+    await validate_csrf_token(request, csrf_token)
+    form = await request.form()
+    raw_ids = form.getlist("knowledge_ids")
+    knowledge_ids = [int(value) for value in raw_ids if str(value or "").strip().isdigit()]
+    rejected_count = 0
+    if knowledge_ids:
+        items = db.query(db_mod.KnowledgeItem).filter(db_mod.KnowledgeItem.id.in_(knowledge_ids)).all()
+        for item in items:
+            _apply_knowledge_review_status(db, item, "rejected")
+            rejected_count += 1
+    db.commit()
+    return RedirectResponse(url=f"/admin/knowledge/review?notice={rejected_count}+items+rejected", status_code=303)
+
+
+@app.post("/admin/knowledge/review/auto-approve")
+@admin_required
+async def admin_knowledge_review_auto_approve(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(default=""),
+):
+    await validate_csrf_token(request, csrf_token)
+    approved_count = 0
+    for item in _review_required_items(db):
+        metadata = _knowledge_item_metadata(item)
+        confidence_level = str(metadata.get("confidence_level") or "").strip().lower()
+        sensitivity_level = str(metadata.get("sensitivity_level") or "").strip().lower()
+        if confidence_level != "high":
+            continue
+        if sensitivity_level == "sensitive":
+            continue
+        if _is_auto_approve_blocked(item, metadata):
+            continue
+        _apply_knowledge_review_status(db, item, "published")
+        approved_count += 1
+    db.commit()
+    return RedirectResponse(url=f"/admin/knowledge/review?notice={approved_count}+items+auto-approved", status_code=303)
+
+
 @app.get("/admin/knowledge/review/{knowledge_id}", response_class=HTMLResponse)
 @admin_required
 async def admin_knowledge_review_detail(request: Request, knowledge_id: int, db: Session = Depends(get_db), notice: str = ""):
@@ -12041,20 +12356,7 @@ async def admin_knowledge_review_publish(
     item = db.query(db_mod.KnowledgeItem).filter(db_mod.KnowledgeItem.id == knowledge_id).first()
     if not item:
         _public_error("Knowledge item not found.", 404)
-    metadata = _knowledge_item_metadata(item)
-    metadata["review_required"] = False
-    metadata["status"] = "published"
-    coverage_entities = [str(value).lower() for value in (metadata.get("coverage_entities") or _json_loads_safe(item.coverage_entities_json, [])) if str(value or "").strip()]
-    knowledge_service.update_knowledge_item(
-        db,
-        item,
-        title=item.title,
-        body_text=_knowledge_review_body(metadata) or item.body_text,
-        summary_text=metadata.get("premium_synthesis_sentence") or item.summary_text,
-        entities=coverage_entities,
-        metadata=metadata,
-        status="published",
-    )
+    _apply_knowledge_review_status(db, item, "published")
     db.commit()
     return RedirectResponse(url="/admin/knowledge/review?notice=published", status_code=303)
 
@@ -12071,20 +12373,7 @@ async def admin_knowledge_review_reject(
     item = db.query(db_mod.KnowledgeItem).filter(db_mod.KnowledgeItem.id == knowledge_id).first()
     if not item:
         _public_error("Knowledge item not found.", 404)
-    metadata = _knowledge_item_metadata(item)
-    metadata["review_required"] = False
-    metadata["status"] = "rejected"
-    coverage_entities = [str(value).lower() for value in (metadata.get("coverage_entities") or _json_loads_safe(item.coverage_entities_json, [])) if str(value or "").strip()]
-    knowledge_service.update_knowledge_item(
-        db,
-        item,
-        title=item.title,
-        body_text=_knowledge_review_body(metadata) or item.body_text,
-        summary_text=metadata.get("premium_synthesis_sentence") or item.summary_text,
-        entities=coverage_entities,
-        metadata=metadata,
-        status="rejected",
-    )
+    _apply_knowledge_review_status(db, item, "rejected")
     db.commit()
     return RedirectResponse(url="/admin/knowledge/review?notice=rejected", status_code=303)
 
@@ -12123,14 +12412,21 @@ async def admin_documents(request: Request, db: Session = Depends(get_db), notic
     documents = db.query(db_mod.SourceDocument).order_by(db_mod.SourceDocument.updated_at.desc()).all()
     rows = []
     for document in documents:
+        metadata = _json_loads_safe(document.metadata_json, {}) or {}
         chunk_count = sum(len(item.chunks or []) for item in (document.knowledge_items or []))
-        status = "processed" if chunk_count else "uploaded"
+        status = str(metadata.get("processing_status") or ("processed" if chunk_count else "uploaded"))
+        diagnostics = metadata.get("parser_diagnostics") or {}
         rows.append(
             {
                 "document": document,
                 "processing_status": status,
                 "chunk_count": chunk_count,
                 "file_name": Path(str(document.file_path or "")).name if str(document.file_path or "").strip() else None,
+                "parser_used": diagnostics.get("parser_used") or "-",
+                "page_count": diagnostics.get("page_count") or 0,
+                "block_count": diagnostics.get("block_count") or 0,
+                "preview": diagnostics.get("preview") or "",
+                "parse_error": diagnostics.get("error"),
             }
         )
     return templates.TemplateResponse(
@@ -12162,7 +12458,7 @@ async def admin_documents_upload(
     filename = str(getattr(file, "filename", "") or "")
     if not filename.lower().endswith(".pdf"):
         return RedirectResponse(url="/admin/documents?notice=invalid_pdf", status_code=303)
-    upload_dir = Path("uploads")
+    upload_dir = get_upload_dir()
     upload_dir.mkdir(parents=True, exist_ok=True)
     stored_name = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}.pdf"
     destination = upload_dir / stored_name
@@ -12180,21 +12476,27 @@ async def admin_documents_upload(
     db.add(source_document)
     db.flush()
 
-    text_blocks = document_parser.parse_pdf(destination)
-    meaningful_chunks = document_chunker.chunk_text_blocks(text_blocks)
-    source_document.content_text = "\n\n".join(text_blocks) if text_blocks else None
+    diagnostics = document_parser.parse_pdf_with_diagnostics(destination)
+    text_blocks = list(diagnostics.get("blocks") or [])
+    page_blocks = list(diagnostics.get("page_blocks") or [])
+    chunk_input = page_blocks or text_blocks
+    meaningful_chunks = document_chunker.chunk_text_blocks(chunk_input)
+    source_document.content_text = "\n\n".join(
+        (block.get("text") if isinstance(block, dict) else str(block)) for block in (page_blocks or text_blocks)
+    ) if (page_blocks or text_blocks) else None
     source_document.metadata_json = json.dumps(
         {
-            "processing_status": "processed" if meaningful_chunks else "uploaded",
+            "processing_status": "processed" if meaningful_chunks else "parse_empty",
             "block_count": len(text_blocks),
             "chunk_count": len(meaningful_chunks),
+            "parser_diagnostics": diagnostics,
         },
         ensure_ascii=False,
     )
     for index, chunk in enumerate(meaningful_chunks, start=1):
         chunk_title = str(chunk.get("title") or f"{source_document.title} {index}").strip()
         coverage_entities = chunk.get("coverage_entities") or []
-        knowledge_service.create_knowledge_item(
+        item = knowledge_service.create_knowledge_item(
             db,
             title=chunk_title,
             body_text=str(chunk.get("text") or "").strip(),
@@ -12203,16 +12505,36 @@ async def admin_documents_upload(
             summary_text=str(chunk.get("topic") or "").strip() or chunk_title,
             entities=coverage_entities,
             source_document=source_document,
-            metadata={
-                "document_id": source_document.id,
-                "document_type": source_document.document_type,
-                "topic": chunk.get("topic"),
-                "primary_entity": chunk.get("entity"),
-                "category": chunk.get("category"),
-                "source_file_path": str(destination),
-            },
-            created_by_user_id=getattr(admin_user, "id", None),
-        )
+                metadata={
+                    "document_id": source_document.id,
+                    "document_type": source_document.document_type,
+                    "topic": chunk.get("topic"),
+                    "primary_entity": chunk.get("entity"),
+                    "category": chunk.get("category"),
+                    "source_file_path": str(destination),
+                    "source_page_start": chunk.get("source_page_start"),
+                    "source_page_end": chunk.get("source_page_end"),
+                    "is_toc": bool(chunk.get("is_toc")),
+                    "is_index": bool(chunk.get("is_index")),
+                    "noise_score": chunk.get("noise_score"),
+                },
+                created_by_user_id=getattr(admin_user, "id", None),
+            )
+        if not (item.chunks or []):
+            chunk_text = str(chunk.get("text") or "").strip()
+            if chunk_text:
+                vector = embedding_service.generate_embedding(chunk_text)
+                db.add(
+                    db_mod.KnowledgeChunk(
+                        knowledge_item=item,
+                        chunk_index=0,
+                        chunk_text=chunk_text,
+                        embedding_json=embedding_service.serialize_embedding(vector),
+                        entities_json=json.dumps(coverage_entities, ensure_ascii=False),
+                        coverage_entities_json=json.dumps(coverage_entities, ensure_ascii=False),
+                        token_count=len(chunk_text.split()),
+                    )
+                )
     db.commit()
     if not meaningful_chunks:
         return RedirectResponse(url="/admin/documents?notice=parse_empty", status_code=303)
@@ -12232,11 +12554,31 @@ async def admin_document_extract_nakshatra(
     document = db.query(db_mod.SourceDocument).filter(db_mod.SourceDocument.id == document_id).first()
     if not document:
         _public_error("Document not found.", 404)
-    text_blocks = document_parser.parse_pdf(document.file_path)
+    diagnostics = document_parser.parse_pdf_with_diagnostics(document.file_path)
+    text_blocks = list(diagnostics.get("blocks") or [])
+    page_blocks = list(diagnostics.get("page_blocks") or [])
+    if not text_blocks:
+        metadata = _json_loads_safe(document.metadata_json, {}) or {}
+        metadata["processing_status"] = "parse_empty"
+        metadata["parser_diagnostics"] = diagnostics
+        document.metadata_json = json.dumps(metadata, ensure_ascii=False)
+        db.commit()
+        return RedirectResponse(url="/admin/documents?notice=parse_empty", status_code=303)
     extracted = nakshatra_extraction_service.extract_nakshatra_knowledge_from_document(
-        text_blocks,
+        page_blocks or text_blocks,
         document.title,
     )
+    if not extracted.get("section_count", 0):
+        metadata = _json_loads_safe(document.metadata_json, {}) or {}
+        metadata["processing_status"] = str(metadata.get("processing_status") or "processed")
+        metadata["parser_diagnostics"] = diagnostics
+        metadata["nakshatra_extraction"] = {
+            "section_count": 0,
+            "chunk_count": 0,
+        }
+        document.metadata_json = json.dumps(metadata, ensure_ascii=False)
+        db.commit()
+        return RedirectResponse(url="/admin/documents?notice=nakshatra_sections_empty", status_code=303)
     created_count = 0
     for section in extracted.get("sections") or []:
         for chunk in section.get("suggested_chunks") or []:
@@ -12256,11 +12598,20 @@ async def admin_document_extract_nakshatra(
             )
             created_count += 1
     metadata = _json_loads_safe(document.metadata_json, {}) or {}
+    metadata["parser_diagnostics"] = diagnostics
     metadata["nakshatra_extraction"] = {
         "section_count": extracted.get("section_count", 0),
         "chunk_count": created_count,
     }
-    document.metadata_json = json.dumps(metadata, ensure_ascii=False)
+    db.execute(
+        sa_text(
+            "UPDATE source_documents SET metadata_json = :metadata WHERE id = :document_id"
+        ),
+        {
+            "metadata": json.dumps(metadata, ensure_ascii=False),
+            "document_id": document.id,
+        },
+    )
     db.commit()
     return RedirectResponse(
         url=f"/admin/documents?notice=nakshatra_extracted:{extracted.get('section_count', 0)}:{created_count}",

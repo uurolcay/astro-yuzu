@@ -24,6 +24,23 @@ REPORT_TYPE_PRIMARY_DOMAINS = {
 RISK_SCALE = ("low", "medium", "high", "very_high")
 OPPORTUNITY_SCALE = ("low", "medium", "high", "very_high")
 
+FUSION_DOMAIN_MAP = {
+    "career": "career",
+    "wealth": "money",
+    "money": "money",
+    "relationship": "relationship",
+    "emotional_needs": "family",
+    "parent_child": "family",
+    "family": "family",
+    "health": "health_safe",
+    "health_safe": "health_safe",
+    "spiritual": "spiritual",
+    "karmic": "spiritual",
+    "timing": "general",
+    "risk": "general",
+    "opportunity": "general",
+}
+
 
 def build_prediction_fusion(
     astro_signal_context=None,
@@ -484,3 +501,500 @@ def _message(key, language, **kwargs):
         },
     }
     return messages[key][language].format(**kwargs)
+
+
+def build_prediction_fusion_context(
+    natal_data=None,
+    dasha_data=None,
+    transit_data=None,
+    signal_context=None,
+    report_type=None,
+    language="tr",
+):
+    try:
+        return _build_prediction_fusion_context(
+            natal_data=natal_data,
+            dasha_data=dasha_data,
+            transit_data=transit_data,
+            signal_context=signal_context,
+            report_type=report_type,
+            language=language,
+        )
+    except Exception:  # pragma: no cover - defensive guard
+        return _empty_prediction_fusion_context(language=language)
+
+
+def _build_prediction_fusion_context(
+    *,
+    natal_data=None,
+    dasha_data=None,
+    transit_data=None,
+    signal_context=None,
+    report_type=None,
+    language="tr",
+):
+    language = "tr" if str(language or "").strip().lower() == "tr" else "en"
+    context = deepcopy(signal_context or {})
+    natal_data = deepcopy(natal_data or {})
+    dasha_data = deepcopy(dasha_data or {})
+    transit_data = deepcopy(transit_data or {})
+    normalized_report_type = _normalize_report_type(report_type)
+    empty = _empty_prediction_fusion_context(language=language)
+
+    dasha_bundle = context.get("dasha_signal_bundle") or _coerce_dasha_bundle(dasha_data)
+    transit_bundle = context.get("transit_trigger_signals") or _coerce_transit_bundle(transit_data)
+    dominant_signals = list(context.get("dominant_signals") or [])
+    risk_signals = list(context.get("risk_signals") or [])
+    opportunity_signals = list(context.get("opportunity_signals") or [])
+
+    active_dasha_signals = _build_active_dasha_signal_rows(
+        dasha_bundle=dasha_bundle,
+        dominant_signals=dominant_signals,
+        language=language,
+    )
+    active_transit_signals = _build_active_transit_signal_rows(
+        transit_bundle=transit_bundle,
+        dominant_signals=dominant_signals,
+        language=language,
+    )
+    fusion_signals = _build_fusion_signal_rows(
+        active_dasha_signals=active_dasha_signals,
+        active_transit_signals=active_transit_signals,
+        risk_signals=risk_signals,
+        opportunity_signals=opportunity_signals,
+        report_type=normalized_report_type,
+        natal_data=natal_data,
+        language=language,
+    )
+    risk_windows = [
+        _window_row(signal, language=language)
+        for signal in fusion_signals
+        if signal.get("timing_type") in {"pressure", "review"}
+    ]
+    opportunity_windows = [
+        _window_row(signal, language=language)
+        for signal in fusion_signals
+        if signal.get("timing_type") in {"activation", "opportunity"}
+    ]
+    timing_summary = _build_timing_summary(
+        active_dasha_signals=active_dasha_signals,
+        active_transit_signals=active_transit_signals,
+        fusion_signals=fusion_signals,
+        language=language,
+    )
+    confidence_notes = _build_fusion_confidence_notes(
+        dasha_bundle=dasha_bundle,
+        transit_bundle=transit_bundle,
+        fusion_signals=fusion_signals,
+        language=language,
+    )
+    available = bool(
+        active_dasha_signals
+        or active_transit_signals
+        or fusion_signals
+        or risk_windows
+        or opportunity_windows
+    )
+    report_type_focus = _build_report_type_focus(
+        report_type=normalized_report_type,
+        fusion_signals=fusion_signals,
+        language=language,
+    )
+
+    return {
+        "available": available,
+        "timing_summary": timing_summary,
+        "active_dasha_signals": active_dasha_signals,
+        "active_transit_signals": active_transit_signals,
+        "fusion_signals": fusion_signals,
+        "risk_windows": risk_windows,
+        "opportunity_windows": opportunity_windows,
+        "confidence_notes": confidence_notes,
+        "report_type_focus": report_type_focus,
+    }
+
+
+def _empty_prediction_fusion_context(language="tr"):
+    language = "tr" if str(language or "").strip().lower() == "tr" else "en"
+    return {
+        "available": False,
+        "timing_summary": [],
+        "active_dasha_signals": [],
+        "active_transit_signals": [],
+        "fusion_signals": [],
+        "risk_windows": [],
+        "opportunity_windows": [],
+        "confidence_notes": [
+            (
+                "Zamanlama verisi sinirli; bu nedenle tahmin katmani aktiflestirilemedi."
+                if language == "tr"
+                else "Timing data is limited, so the prediction layer could not be activated."
+            )
+        ],
+        "report_type_focus": {},
+    }
+
+
+def _coerce_dasha_bundle(dasha_data):
+    if isinstance(dasha_data, dict):
+        return {
+            "dasha_lord": dasha_data.get("dasha_lord")
+            or dasha_data.get("planet")
+            or ((dasha_data.get("active_period") or {}).get("planet")),
+            "active_period": dasha_data.get("active_period") or {},
+            "amplified_signals": list(dasha_data.get("amplified_signals") or []),
+            "active_nakshatra_patterns": list(dasha_data.get("active_nakshatra_patterns") or []),
+        }
+    if isinstance(dasha_data, list) and dasha_data:
+        first = dasha_data[0] or {}
+        return {
+            "dasha_lord": first.get("planet"),
+            "active_period": {
+                "planet": first.get("planet"),
+                "start": first.get("start"),
+                "end": first.get("end"),
+            },
+            "amplified_signals": [],
+            "active_nakshatra_patterns": [],
+        }
+    return {}
+
+
+def _coerce_transit_bundle(transit_data):
+    if not isinstance(transit_data, dict):
+        return {"transit_triggers": [], "blocked_events": []}
+    triggers = list(transit_data.get("transit_triggers") or [])
+    for period in list(transit_data.get("trigger_periods") or []):
+        triggers.append(
+            {
+                "planet": period.get("planet") or period.get("title") or "Transit",
+                "effect": period.get("effect") or "activation",
+                "duration": _format_window(period.get("start"), period.get("end")),
+                "target_signal_key": period.get("target_signal_key"),
+                "title": period.get("title"),
+            }
+        )
+    for period in list(transit_data.get("opportunity_windows") or []):
+        triggers.append(
+            {
+                "planet": period.get("planet") or period.get("title") or "Transit",
+                "effect": "opportunity",
+                "duration": period.get("duration") or "",
+                "title": period.get("title"),
+                "target_signal_key": period.get("target_signal_key"),
+            }
+        )
+    blocked_events = list(transit_data.get("blocked_events") or [])
+    for period in list(transit_data.get("pressure_windows") or []):
+        blocked_events.append(
+            {
+                "planet": period.get("planet") or period.get("title") or "Transit",
+                "reason": period.get("title") or "pressure",
+            }
+        )
+    return {"transit_triggers": triggers, "blocked_events": blocked_events}
+
+
+def _build_active_dasha_signal_rows(*, dasha_bundle, dominant_signals, language):
+    lord = str(dasha_bundle.get("dasha_lord") or "").strip()
+    if not lord:
+        return []
+    amplified_keys = _dasha_signal_keys(dasha_bundle)
+    rows = []
+    for signal in dominant_signals or []:
+        categories = list(signal.get("categories") or [])
+        if str(signal.get("planet") or "").strip() != lord and str(signal.get("key") or "").strip() not in amplified_keys:
+            continue
+        rows.append(
+            {
+                "title": signal.get("label") or lord,
+                "theme": signal.get("label") or lord,
+                "domain": _fusion_domain_for_categories(categories),
+                "dasha_driver": lord,
+                "categories": categories,
+                "strength": _strength_label(signal.get("strength")),
+                "interpretation_hint": (
+                    f"{lord} donemi bu temayi one cikarabilir."
+                    if language == "tr"
+                    else f"The {lord} period may bring this theme forward."
+                ),
+            }
+        )
+    if rows:
+        return rows[:5]
+    return [
+        {
+            "title": lord,
+            "theme": lord,
+            "domain": "general",
+            "dasha_driver": lord,
+            "categories": [],
+            "strength": "medium",
+            "interpretation_hint": (
+                f"{lord} donemi belirli temalari aktiflestirebilir."
+                if language == "tr"
+                else f"The {lord} period may activate specific themes."
+            ),
+        }
+    ]
+
+
+def _build_active_transit_signal_rows(*, transit_bundle, dominant_signals, language):
+    rows = []
+    lookup = {str(signal.get("key") or "").strip(): signal for signal in dominant_signals or []}
+    for trigger in list(transit_bundle.get("transit_triggers") or []):
+        linked = lookup.get(str(trigger.get("target_signal_key") or "").strip()) or {}
+        categories = list(linked.get("categories") or [])
+        title = trigger.get("title") or linked.get("label") or trigger.get("planet") or "Transit"
+        rows.append(
+            {
+                "title": title,
+                "theme": linked.get("label") or title,
+                "domain": _fusion_domain_for_categories(categories),
+                "transit_trigger": trigger.get("planet") or title,
+                "categories": categories,
+                "effect": trigger.get("effect") or "activation",
+                "duration": trigger.get("duration") or "",
+                "interpretation_hint": (
+                    f"{title} temasi bu donemde hareketlenebilir."
+                    if language == "tr"
+                    else f"The {title} theme may become more active in this period."
+                ),
+            }
+        )
+    return rows[:6]
+
+
+def _build_fusion_signal_rows(
+    *,
+    active_dasha_signals,
+    active_transit_signals,
+    risk_signals,
+    opportunity_signals,
+    report_type,
+    natal_data,
+    language,
+):
+    if not active_dasha_signals or not active_transit_signals:
+        return []
+    fusion = []
+    opportunity_keys = {str(item.get("key") or "").strip() for item in opportunity_signals or []}
+    risk_keys = {str(item.get("key") or "").strip() for item in risk_signals or []}
+    natal_anchor = _pick_natal_anchor(natal_data)
+    for dasha_row in active_dasha_signals:
+        d_categories = set(dasha_row.get("categories") or [])
+        for transit_row in active_transit_signals:
+            t_categories = set(transit_row.get("categories") or [])
+            shared = sorted(d_categories & t_categories)
+            if not shared and dasha_row.get("domain") != transit_row.get("domain"):
+                continue
+            domain = _resolve_fusion_domain(
+                dasha_row.get("domain"),
+                transit_row.get("domain"),
+                report_type,
+            )
+            theme = dasha_row.get("theme") or transit_row.get("theme") or domain
+            timing_type = _timing_type_for_rows(dasha_row, transit_row, theme, risk_keys, opportunity_keys)
+            fusion.append(
+                {
+                    "title": theme,
+                    "theme": theme,
+                    "domain": domain,
+                    "dasha_driver": dasha_row.get("dasha_driver"),
+                    "transit_trigger": transit_row.get("transit_trigger"),
+                    "natal_anchor": natal_anchor,
+                    "strength": _combine_strength_labels(dasha_row.get("strength"), transit_row.get("effect")),
+                    "timing_type": timing_type,
+                    "interpretation_hint": _fusion_hint(
+                        theme=theme,
+                        domain=domain,
+                        timing_type=timing_type,
+                        language=language,
+                    ),
+                    "safe_language_note": (
+                        "Bunu kesin sonuc olarak degil, aktiflesebilecek bir tema olarak okuyun."
+                        if language == "tr"
+                        else "Read this as an activating theme, not a guaranteed outcome."
+                    ),
+                }
+            )
+    return fusion[:6]
+
+
+def _window_row(signal, *, language):
+    return {
+        "title": signal.get("title") or signal.get("theme") or "",
+        "domain": signal.get("domain") or "general",
+        "timing_type": signal.get("timing_type") or "review",
+        "note": signal.get("interpretation_hint")
+        or (
+            "Bu tema bu donemde daha dikkatli okunmali."
+            if language == "tr"
+            else "This theme should be read with more care in this period."
+        ),
+    }
+
+
+def _build_timing_summary(*, active_dasha_signals, active_transit_signals, fusion_signals, language):
+    summary = []
+    if active_dasha_signals:
+        summary.append(
+            {
+                "label": "Dasha activation" if language != "tr" else "Dasha aktivasyonu",
+                "value": active_dasha_signals[0].get("dasha_driver") or active_dasha_signals[0].get("theme") or "",
+            }
+        )
+    if active_transit_signals:
+        summary.append(
+            {
+                "label": "Transit trigger" if language != "tr" else "Transit tetigi",
+                "value": active_transit_signals[0].get("transit_trigger") or active_transit_signals[0].get("theme") or "",
+            }
+        )
+    if fusion_signals:
+        summary.append(
+            {
+                "label": "Fusion theme" if language != "tr" else "Bilesik tema",
+                "value": fusion_signals[0].get("theme") or "",
+            }
+        )
+    return summary
+
+
+def _build_fusion_confidence_notes(*, dasha_bundle, transit_bundle, fusion_signals, language):
+    notes = []
+    if not dasha_bundle.get("dasha_lord"):
+        notes.append(
+            "Dasha verisi sinirli oldugu icin zamanlama dili yumusak tutulmali."
+            if language == "tr"
+            else "Timing language should stay soft because dasha data is limited."
+        )
+    if not (transit_bundle.get("transit_triggers") or []):
+        notes.append(
+            "Transit destegi sinirli; bu nedenle pencere yorumu genel tutulmali."
+            if language == "tr"
+            else "Transit support is limited, so the timing window should stay general."
+        )
+    if fusion_signals:
+        notes.append(
+            "Bu katman yalnizca zamanlama baglami saglar; kaderci yorum icin kullanilmamali."
+            if language == "tr"
+            else "This layer provides timing context only and should not be used for fatalistic statements."
+        )
+    if not notes:
+        notes.append(
+            "Zamanlama sinyalleri mevcut, ancak dikkatli ve kosullu okunmali."
+            if language == "tr"
+            else "Timing signals are present, but they should be read carefully and conditionally."
+        )
+    return notes
+
+
+def _build_report_type_focus(*, report_type, fusion_signals, language):
+    if not fusion_signals:
+        return {}
+    domain_counts = {}
+    for item in fusion_signals:
+        domain = item.get("domain") or "general"
+        domain_counts[domain] = domain_counts.get(domain, 0) + 1
+    top_domain = sorted(domain_counts.items(), key=lambda pair: (-pair[1], pair[0]))[0][0]
+    if language == "tr":
+        description = f"Zamanlama vurgusu en cok {top_domain} alaninda yogunlasiyor."
+    else:
+        description = f"Timing emphasis is concentrating most strongly in the {top_domain} domain."
+    return {
+        "report_type": report_type,
+        "primary_domain": top_domain,
+        "description": description,
+    }
+
+
+def _fusion_domain_for_categories(categories):
+    for category in categories or []:
+        mapped = FUSION_DOMAIN_MAP.get(str(category or "").strip().lower())
+        if mapped:
+            return mapped
+    return "general"
+
+
+def _resolve_fusion_domain(dasha_domain, transit_domain, report_type):
+    for value in (dasha_domain, transit_domain):
+        if value and value != "general":
+            return value
+    if report_type == "career":
+        return "career"
+    if report_type == "parent_child":
+        return "family"
+    if report_type == "annual_transit":
+        return "general"
+    return "general"
+
+
+def _timing_type_for_rows(dasha_row, transit_row, theme, risk_keys, opportunity_keys):
+    effect = str(transit_row.get("effect") or "").strip().lower()
+    theme_key = str(theme or "").strip().lower()
+    if effect in {"pressure", "delay"} or theme_key in risk_keys:
+        return "pressure"
+    if effect in {"review", "revision"}:
+        return "review"
+    if effect in {"opportunity", "support"} or theme_key in opportunity_keys:
+        return "opportunity"
+    return "activation"
+
+
+def _fusion_hint(*, theme, domain, timing_type, language):
+    if language == "tr":
+        mapping = {
+            "pressure": f"{theme} temasinda dikkat alani artabilir; tempoyu ve beklentiyi iyi yonetmek faydali olur.",
+            "opportunity": f"{theme} temasinda firsat penceresi acilabilir; gorunen acilimi bilincli kullanin.",
+            "review": f"{theme} temasinda gozden gecirme ihtiyaci belirginlesebilir; acele karar yerine ayar yapmak daha iyi olur.",
+            "activation": f"{theme} temasinin {domain} alaninda aktiflesmesi mumkun; sinyalleri takip ederek ilerlemek daha saglikli olur.",
+        }
+        return mapping.get(timing_type, mapping["activation"])
+    mapping = {
+        "pressure": f"The {theme} theme may become a pressure point; slower pacing and cleaner expectations will help.",
+        "opportunity": f"The {theme} theme may open an opportunity window; use visible openings deliberately.",
+        "review": f"The {theme} theme may call for review and recalibration rather than rushed action.",
+        "activation": f"The {theme} theme may activate in the {domain} domain; respond to it as a live context, not a certainty.",
+    }
+    return mapping.get(timing_type, mapping["activation"])
+
+
+def _pick_natal_anchor(natal_data):
+    planets = list((natal_data or {}).get("planets") or [])
+    for item in planets:
+        name = str(item.get("name") or "").strip()
+        nakshatra = str(item.get("nakshatra") or "").strip()
+        if name and nakshatra:
+            return f"{name} - {nakshatra}"
+        if name:
+            return name
+    return None
+
+
+def _strength_label(value):
+    try:
+        numeric = float(value or 0.0)
+    except (TypeError, ValueError):
+        numeric = 0.0
+    if numeric >= 4.0:
+        return "high"
+    if numeric >= 2.2:
+        return "medium"
+    return "low"
+
+
+def _combine_strength_labels(dasha_strength, transit_effect):
+    if dasha_strength == "high" or str(transit_effect or "").strip().lower() in {"opportunity", "support"}:
+        return "high"
+    if dasha_strength == "medium":
+        return "medium"
+    return "low"
+
+
+def _format_window(start, end):
+    start_date = _parse_date(start)
+    end_date = _parse_date(end)
+    if start_date and end_date:
+        return f"{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}"
+    return ""

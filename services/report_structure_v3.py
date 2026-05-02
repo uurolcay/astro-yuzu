@@ -85,6 +85,10 @@ def _build_single_profile_structure(context, report_type, language):
         "risks": _normalize_signal_rows(context.get("risk_signals") or [], language, limit=4),
         "opportunities": _normalize_signal_rows(context.get("opportunity_signals") or [], language, limit=4),
     }
+    prediction_fusion = _prediction_fusion_context(context)
+    if prediction_fusion.get("available"):
+        risk_opportunity_map["risk_windows"] = list(prediction_fusion.get("risk_windows") or [])[:4]
+        risk_opportunity_map["opportunity_windows"] = list(prediction_fusion.get("opportunity_windows") or [])[:4]
     timing_engine = _build_timing_engine(context, language)
     action_engine = _build_action_engine(
         context,
@@ -212,6 +216,7 @@ def _build_core_drivers(context, language):
 def _build_timing_engine(context, language):
     dasha_bundle = context.get("dasha_signal_bundle") or {}
     transit_bundle = context.get("transit_trigger_signals") or {}
+    prediction_fusion = _prediction_fusion_context(context)
     triggers = []
     for item in (transit_bundle.get("delivery_events") or transit_bundle.get("transit_triggers") or [])[:5]:
         triggers.append(
@@ -222,7 +227,7 @@ def _build_timing_engine(context, language):
                 "explanation": item.get("explanation") or "",
             }
         )
-    return {
+    timing_engine = {
         "active_period": dasha_bundle.get("dasha_lord") or ((context.get("dasha_activation_signals") or {}).get("active_period") or {}).get("planet"),
         "active_nakshatra_patterns": list(dasha_bundle.get("active_nakshatra_patterns") or [])[:4],
         "transit_triggers": triggers,
@@ -233,6 +238,18 @@ def _build_timing_engine(context, language):
             else "Timing is emphasized only where natal promise and dasha support are already present."
         ),
     }
+    if prediction_fusion.get("available"):
+        timing_engine["fusion_available"] = True
+        timing_engine["fusion_signals"] = list(prediction_fusion.get("fusion_signals") or [])[:4]
+        timing_engine["risk_windows"] = list(prediction_fusion.get("risk_windows") or [])[:3]
+        timing_engine["opportunity_windows"] = list(prediction_fusion.get("opportunity_windows") or [])[:3]
+        timing_engine["timing_summary"] = list(prediction_fusion.get("timing_summary") or [])[:4]
+        timing_engine["summary"] = (
+            "Zamanlama, natal vaat ile dasha/transit kesişiminin aktiflestirdigi temalar uzerinden dikkatle okunmali."
+            if language == "tr"
+            else "Timing should be read carefully through the themes activated where natal promise intersects with dasha and transit."
+        )
+    return timing_engine
 
 
 def _build_action_engine(context, language, *, report_type, interaction_layer, timing_engine):
@@ -267,6 +284,19 @@ def _build_action_engine(context, language, *, report_type, interaction_layer, t
                     "domain": report_type,
                 }
             )
+    for signal in (timing_engine.get("fusion_signals") or [])[:2]:
+        actions.append(
+            {
+                "title": (
+                    f"Bu pencereyi kullan: {signal.get('title')}"
+                    if language == "tr"
+                    else f"Use this window for: {signal.get('title')}"
+                ),
+                "reason": signal.get("interpretation_hint") or "",
+                "time_window": signal.get("dasha_driver") or timing_engine.get("active_period") or "",
+                "domain": signal.get("domain") or ("career" if report_type == "career" else report_type),
+            }
+        )
     return actions[:5]
 
 
@@ -288,7 +318,7 @@ def _build_strategic_summary(context, language, *, report_type, identity_layer, 
             if language == "tr"
             else "The main emphasis is the timing and trigger logic showing which period is truly active."
         )
-    return {
+    strategic_summary = {
         "headline": headline,
         "identity_focus": identity_layer.get("dominant_nakshatra") or {},
         "driver_count": len(core_drivers),
@@ -296,6 +326,22 @@ def _build_strategic_summary(context, language, *, report_type, identity_layer, 
         "timing_focus": timing_engine.get("active_period") or "",
         "confidence_notes": list(context.get("confidence_notes") or [])[:4],
     }
+    if timing_engine.get("fusion_available"):
+        strategic_summary["timing_confidence"] = (
+            "Yumusak zamanlama baglami mevcut"
+            if language == "tr"
+            else "Soft timing context available"
+        )
+        strategic_summary["timing_focus"] = (
+            (timing_engine.get("fusion_signals") or [{}])[0].get("theme")
+            or strategic_summary["timing_focus"]
+        )
+    return strategic_summary
+
+
+def _prediction_fusion_context(context):
+    fusion = context.get("prediction_fusion") or {}
+    return fusion if isinstance(fusion, dict) else {"available": False}
 
 
 def _extract_atmakaraka_row(context, language):

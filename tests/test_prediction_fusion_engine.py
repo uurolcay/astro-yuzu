@@ -1,4 +1,8 @@
-from services.prediction_fusion_engine import NOT_FATED_NOTE, build_prediction_fusion
+from services.prediction_fusion_engine import (
+    NOT_FATED_NOTE,
+    build_prediction_fusion,
+    build_prediction_fusion_context,
+)
 
 
 def _signal(key, label, categories, *, planet="", tone="opportunity", strength=3.0):
@@ -191,3 +195,58 @@ def test_prediction_id_is_deterministic_and_follows_schema():
     )
     item = result["prediction_windows"][0]
     assert item["prediction_id"] == "career:career:path:Jupiter"
+
+
+def test_build_prediction_fusion_context_returns_safe_empty_shape_on_missing_input():
+    result = build_prediction_fusion_context()
+    assert result["available"] is False
+    assert result["timing_summary"] == []
+    assert result["active_dasha_signals"] == []
+    assert result["active_transit_signals"] == []
+    assert result["fusion_signals"] == []
+    assert result["risk_windows"] == []
+    assert result["opportunity_windows"] == []
+    assert result["confidence_notes"]
+    assert result["report_type_focus"] == {}
+
+
+def test_dasha_only_input_creates_active_dasha_signals_without_transit_crash():
+    result = build_prediction_fusion_context(
+        dasha_data=_dasha_bundle(lord="Saturn"),
+        language="tr",
+    )
+    assert result["active_dasha_signals"]
+    assert result["active_transit_signals"] == []
+
+
+def test_transit_only_input_creates_active_transit_signals_without_dasha_crash():
+    result = build_prediction_fusion_context(
+        transit_data={"trigger_periods": [{"title": "Career window", "start": "2026-05-01", "end": "2026-05-20"}]},
+        language="tr",
+    )
+    assert result["active_transit_signals"]
+    assert result["active_dasha_signals"] == []
+
+
+def test_dasha_and_transit_overlap_creates_fusion_signals():
+    result = build_prediction_fusion_context(
+        natal_data={"planets": [{"name": "Jupiter", "nakshatra": "Rohini"}]},
+        dasha_data=_dasha_bundle(amplified=[{"key": "career:path"}]),
+        transit_data=_transit_bundle(),
+        signal_context=_base_context() | {"dasha_signal_bundle": _dasha_bundle(amplified=[{"key": "career:path"}]), "transit_trigger_signals": _transit_bundle()},
+        report_type="career",
+        language="tr",
+    )
+    assert result["fusion_signals"]
+
+
+def test_fusion_signal_shape_includes_safe_language_note():
+    result = build_prediction_fusion_context(
+        natal_data={"planets": [{"name": "Jupiter", "nakshatra": "Rohini"}]},
+        dasha_data=_dasha_bundle(amplified=[{"key": "career:path"}]),
+        transit_data=_transit_bundle(),
+        signal_context=_base_context() | {"dasha_signal_bundle": _dasha_bundle(amplified=[{"key": "career:path"}]), "transit_trigger_signals": _transit_bundle()},
+        report_type="career",
+        language="tr",
+    )
+    assert result["fusion_signals"][0]["safe_language_note"]

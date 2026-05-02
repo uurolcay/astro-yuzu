@@ -1,13 +1,70 @@
+import os
 from datetime import datetime
+from pathlib import Path
 
 from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, create_engine, inspect, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./astro_logic.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+BASE_DIR = Path(__file__).resolve().parent
+DEFAULT_SQLITE_PATH = BASE_DIR / "astro_logic.db"
+
+
+def resolve_database_url(raw_value: str | None = None) -> str:
+    raw = str(raw_value if raw_value is not None else os.getenv("DATABASE_URL", "")).strip()
+    if raw.startswith("postgres://"):
+        raw = "postgresql://" + raw[len("postgres://") :]
+    if raw:
+        return raw
+    return f"sqlite:///{DEFAULT_SQLITE_PATH.as_posix()}"
+
+
+SQLALCHEMY_DATABASE_URL = resolve_database_url()
+_ENGINE_CONNECT_ARGS = {"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args=_ENGINE_CONNECT_ARGS)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+
+def _mask_database_url(value: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return "(missing)"
+    if "://" not in raw:
+        return raw
+    scheme, rest = raw.split("://", 1)
+    if "@" in rest:
+        creds, tail = rest.rsplit("@", 1)
+        if ":" in creds:
+            user = creds.split(":", 1)[0]
+            return f"{scheme}://{user}:***@{tail}"
+        return f"{scheme}://***@{tail}"
+    return raw
+
+
+def get_engine_diagnostics():
+    url_obj = engine.url
+    dialect = str(getattr(url_obj, "drivername", "") or "").split("+", 1)[0]
+    database_value = str(getattr(url_obj, "database", "") or "").strip()
+    sqlite_file_path = ""
+    sqlite_file_exists = False
+    sqlite_file_size = 0
+    if dialect == "sqlite" and database_value and database_value != ":memory:":
+        sqlite_path = Path(database_value)
+        if not sqlite_path.is_absolute():
+            sqlite_path = (BASE_DIR / sqlite_path).resolve()
+        sqlite_file_path = str(sqlite_path)
+        sqlite_file_exists = sqlite_path.exists()
+        sqlite_file_size = sqlite_path.stat().st_size if sqlite_file_exists else 0
+    return {
+        "database_url_masked": _mask_database_url(SQLALCHEMY_DATABASE_URL),
+        "db_dialect": dialect or "unknown",
+        "sqlite_file_path": sqlite_file_path or None,
+        "sqlite_file_exists": sqlite_file_exists,
+        "sqlite_file_size": sqlite_file_size,
+        "database_url_missing": not bool(str(os.getenv("DATABASE_URL", "")).strip()),
+        "is_in_memory": dialect == "sqlite" and database_value == ":memory:",
+    }
 
 class UserRecord(Base):
     __tablename__ = "users"

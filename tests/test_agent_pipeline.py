@@ -228,11 +228,19 @@ class AgentPipelineTests(unittest.TestCase):
         self.assertEqual(structured["language"], "tr")
 
     def test_timing_prompt_uses_insight_output_when_available(self):
-        structured = agent_pipeline.build_structured_payload({"language": "en", "timing_data": {"peak": "May"}})
+        structured = agent_pipeline.build_structured_payload(
+            {
+                "language": "en",
+                "timing_data": {"peak": "May"},
+                "astro_signal_context": {"prediction_fusion": {"available": True, "confidence_notes": ["Timing data is limited."]}},
+            }
+        )
         prompt = agent_pipeline.build_timing_prompt(structured, "Primary theme: career direction")
         self.assertIn("INSIGHT AGENT OUTPUT", prompt)
         self.assertIn("Primary theme: career direction", prompt)
         self.assertIn("Relate timing explicitly to the themes already identified by the Insight Agent", prompt)
+        self.assertIn("use it only as timing context, never as deterministic prophecy", prompt)
+        self.assertIn('Do not say "this will happen"', prompt)
 
     def test_composer_prompt_preserves_prior_agent_priorities(self):
         structured = agent_pipeline.build_structured_payload({"language": "en"})
