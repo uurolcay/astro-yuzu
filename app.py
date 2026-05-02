@@ -217,6 +217,59 @@ def get_setting(db: Session, key: str, default: str = "") -> str:
     return row.value if row and row.value is not None else default
 
 
+def parse_price_amount(value) -> Decimal:
+    raw = str(value or "").strip()
+    raw = raw.replace("₺", "").replace("â‚º", "").replace("TRY", "").replace("TL", "").replace(" ", "")
+    if "," in raw and "." in raw:
+        if raw.rfind(",") > raw.rfind("."):
+            raw = raw.replace(".", "").replace(",", ".")
+        else:
+            raw = raw.replace(",", "")
+    elif "," in raw:
+        raw = raw.replace(".", "").replace(",", ".")
+    elif "." in raw:
+        parts = raw.split(".")
+        if len(parts[-1]) == 3:
+            raw = "".join(parts)
+    try:
+        amount = Decimal(raw)
+    except (InvalidOperation, ValueError):
+        amount = Decimal("0")
+    return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _format_try_amount(amount: Decimal, language: str = "tr") -> str:
+    whole = int(amount.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    separator = "," if language == "en" else "."
+    formatted = f"{whole:,}".replace(",", separator)
+    return f"₺{formatted} TL" if language == "en" else f"₺{formatted}"
+
+
+def parse_usd_try_rate(value) -> Decimal | None:
+    raw = str(value or "").strip().replace(",", ".")
+    try:
+        rate = Decimal(raw)
+    except (InvalidOperation, ValueError):
+        return None
+    if rate <= 0:
+        return None
+    return rate
+
+
+def get_usd_try_rate(db: Session) -> Decimal | None:
+    return parse_usd_try_rate(get_setting(db, "site_usd_try_rate", ""))
+
+
+def format_price_html(value, language: str = "tr", usd_try_rate: Decimal | None = None) -> str:
+    lang = "en" if language == "en" else "tr"
+    amount = parse_price_amount(value)
+    label = _format_try_amount(amount, lang)
+    if lang == "en" and usd_try_rate:
+        usd_amount = (amount / usd_try_rate).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        label = f'{label} <span class="price-approx">(≈ ${int(usd_amount):,})</span>'
+    return label
+
+
 def render_email(template_name: str, **kwargs) -> str:
     return email_utils.render_email(template_name, **kwargs)
 
@@ -294,9 +347,12 @@ def _send_logged_email(
 
 
 def base_context(request: Request, db: Session, **kwargs) -> dict:
+    usd_try_rate = get_usd_try_rate(db)
     return _auth_template_context(
         request,
         instagram_url=get_setting(db, "site_instagram_url", "https://www.instagram.com/feruze.olcay/"),
+        usd_try_rate=usd_try_rate,
+        format_price=lambda value, language="tr": format_price_html(value, language, usd_try_rate),
         **kwargs,
     )
 
@@ -10593,6 +10649,7 @@ ADMIN_SETTING_LABELS = {
     "site_contact_email": "Contact email",
     "astrologer_name": "Astrologer name",
     "site_report_delivery_days": "Report delivery days",
+    "site_usd_try_rate": "USD/TRY rate",
 }
 
 
@@ -10600,7 +10657,7 @@ ADMIN_SETTING_LABELS = {
 @admin_required
 async def admin_settings(request: Request, db: Session = Depends(get_db)):
     existing = {row.key: row.value for row in db.query(db_mod.SiteSetting).all()}
-    defaults = {"site_instagram_url": "", "site_maintenance_mode": "false", "site_contact_email": "info@focusastrology.com", "astrologer_name": "", "site_report_delivery_days": "7"}
+    defaults = {"site_instagram_url": "", "site_maintenance_mode": "false", "site_contact_email": "info@focusastrology.com", "astrologer_name": "", "site_report_delivery_days": "7", "site_usd_try_rate": ""}
     settings = {key: existing.get(key, defaults[key]) for key in ADMIN_SETTING_LABELS}
     return templates.TemplateResponse(request=request, name="admin/settings.html", context=_auth_template_context(request, dashboard_user=request.state.admin_user, active_page="settings", settings=settings, settings_labels=ADMIN_SETTING_LABELS))
 

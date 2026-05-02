@@ -212,6 +212,7 @@ class MonetizationFlowTests(unittest.TestCase):
         self.db.query(db_mod.GeneratedReport).delete()
         self.db.query(db_mod.UserProfile).delete()
         self.db.query(db_mod.AppUser).delete()
+        self.db.query(db_mod.SiteSetting).filter(db_mod.SiteSetting.key == "site_usd_try_rate").delete()
         self.db.commit()
         app._RATE_LIMIT_BUCKETS.clear()
         self.client = TestClient(app.app)
@@ -227,6 +228,7 @@ class MonetizationFlowTests(unittest.TestCase):
         self.db.query(db_mod.GeneratedReport).delete()
         self.db.query(db_mod.UserProfile).delete()
         self.db.query(db_mod.AppUser).delete()
+        self.db.query(db_mod.SiteSetting).filter(db_mod.SiteSetting.key == "site_usd_try_rate").delete()
         self.db.commit()
         app._RATE_LIMIT_BUCKETS.clear()
         self.db.close()
@@ -237,6 +239,14 @@ class MonetizationFlowTests(unittest.TestCase):
         marker = 'name="csrf_token" value="'
         self.assertIn(marker, response.text)
         return response.text.split(marker, 1)[1].split('"', 1)[0]
+
+    def _set_site_setting(self, key, value):
+        row = self.db.query(db_mod.SiteSetting).filter(db_mod.SiteSetting.key == key).first()
+        if not row:
+            row = db_mod.SiteSetting(key=key)
+            self.db.add(row)
+        row.value = value
+        self.db.commit()
 
     def test_security_headers_are_added_to_public_pages(self):
         response = self.client.get("/reports")
@@ -570,6 +580,26 @@ class MonetizationFlowTests(unittest.TestCase):
         self.assertIn("₺2.890", response.text)
         self.assertIn("₺3.390", response.text)
         self.assertIn("/reports/order/bundle/life_path_bundle", response.text)
+
+    def test_reports_page_formats_english_prices_with_approximate_usd_from_settings(self):
+        self._set_site_setting("site_usd_try_rate", "32.5")
+
+        response = self.client.get("/reports", headers={"accept-language": "en"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("₺1,900 TL", response.text)
+        self.assertIn("≈ $58", response.text)
+        self.assertIn("Charged in Turkish lira. USD amounts are approximate.", response.text)
+
+    def test_reports_page_hides_approximate_usd_when_rate_setting_is_blank(self):
+        self._set_site_setting("site_usd_try_rate", "")
+
+        response = self.client.get("/reports", headers={"accept-language": "en"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("₺1,900 TL", response.text)
+        self.assertNotIn("≈ $", response.text)
+        self.assertIn("Charged in Turkish lira. USD amounts are approximate.", response.text)
 
     def test_bundle_order_submission_records_bundle_metadata(self):
         csrf_token = self._csrf_token_from("/reports/order/bundle/life_path_bundle")

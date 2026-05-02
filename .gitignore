@@ -40,3 +40,37 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+# --- PYTHON ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+*.db
+
+# --- VIRTUAL ENV ---
+venv/
+.venv/
+env/
+
+# --- ENV FILES ---
+.env
+.env.*
+
+# --- UPLOADS / GENERATED FILES ---
+uploads/
+*.pdf
+
+# --- LOGS ---
+*.log
+
+# --- OS FILES ---
+.DS_Store
+Thumbs.db
+
+# --- BUILD / CACHE ---
+.cache/
+.pytest_cache/
+
+# --- RENDER / TEMP ---
+tmp/

@@ -415,6 +415,18 @@ class BirthLocationPipelineTests(unittest.TestCase):
         self.assertIn("Raporunuzu Seçin", response.text)
         self.assertIn("Seçili Makaleler", response.text)
 
+    def test_language_switcher_marks_active_language_as_current_and_disabled(self):
+        client = TestClient(app.app)
+        tr_response = client.get("/", headers={"accept-language": "tr"})
+        en_response = client.get("/", headers={"accept-language": "en"})
+
+        self.assertEqual(tr_response.status_code, 200)
+        self.assertEqual(en_response.status_code, 200)
+        self.assertIn('data-language-btn="tr" aria-current="true" aria-disabled="true" disabled', tr_response.text)
+        self.assertIn('data-language-btn="en">EN</button>', tr_response.text)
+        self.assertIn('data-language-btn="en" aria-current="true" aria-disabled="true" disabled', en_response.text)
+        self.assertIn('data-language-btn="tr">TR</button>', en_response.text)
+
     def test_homepage_instagram_links_use_feruze_account(self):
         client = TestClient(app.app)
         response = client.get("/")

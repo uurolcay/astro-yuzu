@@ -815,6 +815,11 @@
             background: var(--gold);
         }
 
+        .language-btn:disabled {
+            cursor: default;
+            opacity: 1;
+        }
+
         .theme-toggle {
             position: fixed;
             right: 20px;
@@ -874,6 +879,14 @@
         .theme-option.active {
             background: var(--theme-toggle-active-bg);
             color: var(--theme-toggle-active-text);
+        }
+
+        .price-approx {
+            display: inline-block;
+            margin-left: 6px;
+            color: var(--text-soft);
+            font-size: 0.72em;
+            white-space: nowrap;
         }
 
         .site-footer {
@@ -1344,8 +1357,8 @@
                         </svg>
                     </a>
                     <div class="language-toggle" aria-label="Language toggle">
-                        <button class="language-btn" type="button" data-language-btn="tr">TR</button>
-                        <button class="language-btn" type="button" data-language-btn="en">EN</button>
+                        <button class="language-btn{% if ui_lang == 'tr' %} active{% endif %}" type="button" data-language-btn="tr"{% if ui_lang == 'tr' %} aria-current="true" aria-disabled="true" disabled{% endif %}>TR</button>
+                        <button class="language-btn{% if ui_lang == 'en' %} active{% endif %}" type="button" data-language-btn="en"{% if ui_lang == 'en' %} aria-current="true" aria-disabled="true" disabled{% endif %}>EN</button>
                     </div>
                     <div class="account-menu" data-account-menu>
                         <button class="account-trigger" type="button" aria-expanded="false" aria-haspopup="menu" aria-label="{{ t('common.account_trigger_user') if request.state.current_user else t('common.account_trigger_guest') }}" data-account-trigger>
@@ -1508,7 +1521,11 @@
             },
             updateButtons(language) {
                 document.querySelectorAll("[data-language-btn]").forEach((button) => {
-                    button.classList.toggle("active", button.dataset.languageBtn === language);
+                    const active = button.dataset.languageBtn === language;
+                    button.classList.toggle("active", active);
+                    button.disabled = active;
+                    button.toggleAttribute("aria-current", active);
+                    button.toggleAttribute("aria-disabled", active);
                 });
             }
         };
@@ -1659,6 +1676,9 @@
 
             document.querySelectorAll("[data-language-btn]").forEach((button) => {
                 button.addEventListener("click", () => {
+                    if (button.dataset.languageBtn === document.documentElement.lang) {
+                        return;
+                    }
                     const nextLanguage = window.APP_LANGUAGE.persist(button.dataset.languageBtn);
                     if (nextLanguage !== document.documentElement.lang) {
                         window.location.reload();

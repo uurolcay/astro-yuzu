@@ -385,13 +385,14 @@ Birden fazla soru
                     <div class="reports-eyebrow">{{ "4 report options" if page_lang == "en" else "4 rapor seçeneği" }}</div>
                     <h2 class="reports-title">{{ "Focused written analyses you can revisit at your own pace." if page_lang == "en" else "Odaklı, yazılı ve kendi hızınızda inceleyebileceğiniz analizler." }}</h2>
                     <p class="reports-muted">{{ "Reports are designed to clarify one main question; consultation can turn any report into a more personal synthesis." if page_lang == "en" else "Raporlar tek bir ana soruya netlik kazandırmak için tasarlanır; danışmanlık bağlantısı ise her raporu daha kişisel bir senteze taşıyabilir." }}</p>
+                    <p class="reports-price-note">{{ "Charged in Turkish lira. USD amounts are approximate." if page_lang == "en" else "Tahsilat Türk lirası üzerinden yapılır." }}</p>
                 </div>
                 <div class="reports-offer-grid">
                     <article class="reports-card" id="birth-chart-karma">
                         <span class="reports-card-label">{{ "Core chart" if page_lang == "en" else "Temel harita" }}</span>
                         <h3>{{ "Birth Chart Karma" if page_lang == "en" else "Doğum Haritası Karma’sı" }}</h3>
                         <div class="reports-price-row">
-                            <strong class="reports-price">₺1.900</strong>
+                            <strong class="reports-price">{{ format_price(1900, page_lang)|safe }}</strong>
                             <span class="reports-price-note">{{ "Delivered by email within 7 days." if page_lang == "en" else "Raporlar, hazırlık sürecinin ardından en geç 7 gün içinde e-posta ile teslim edilir." }}</span>
                         </div>
                         <p class="reports-muted">{{ "A foundational report for understanding life themes, karmic patterns, strengths, and areas needing attention." if page_lang == "en" else "Yaşam temalarınızı, karmik örüntülerinizi, güçlü yönlerinizi ve dikkat isteyen alanları anlamak için temel rapor." }}</p>
@@ -430,7 +431,7 @@ Birden fazla soru
                         <span class="reports-card-label">{{ "Timing" if page_lang == "en" else "Zamanlama" }}</span>
                         <h3>{{ "Annual Transit" if page_lang == "en" else "Yıllık Transit" }}</h3>
                         <div class="reports-price-row">
-                            <strong class="reports-price">₺1.490</strong>
+                            <strong class="reports-price">{{ format_price(1490, page_lang)|safe }}</strong>
                             <span class="reports-price-note">{{ "Delivered by email within 7 days." if page_lang == "en" else "Raporlar, hazırlık sürecinin ardından en geç 7 gün içinde e-posta ile teslim edilir." }}</span>
                         </div>
                         <p class="reports-muted">{{ "An annual view for seeing emphasis areas, opportunity windows, and times that need more care." if page_lang == "en" else "Önümüzdeki dönemin vurgu alanlarını, fırsat pencerelerini ve dikkat isteyen zamanları görmek için yıllık bakış." }}</p>
@@ -469,7 +470,7 @@ Birden fazla soru
                         <span class="reports-card-label">{{ "Career direction" if page_lang == "en" else "Kariyer yönü" }}</span>
                         <h3>{{ "Career" if page_lang == "en" else "Kariyer" }}</h3>
                         <div class="reports-price-row">
-                            <strong class="reports-price">₺1.690</strong>
+                            <strong class="reports-price">{{ format_price(1690, page_lang)|safe }}</strong>
                             <span class="reports-price-note">{{ "Delivered by email within 7 days." if page_lang == "en" else "Raporlar, hazırlık sürecinin ardından en geç 7 gün içinde e-posta ile teslim edilir." }}</span>
                         </div>
                         <p class="reports-muted">{{ "A focused report for reading professional direction, work style, potential, and decision areas more strategically." if page_lang == "en" else "Mesleki yönünüzü, çalışma biçiminizi, potansiyelinizi ve karar alanlarınızı daha stratejik okumak için odaklı rapor." }}</p>
@@ -508,7 +509,7 @@ Birden fazla soru
                         <span class="reports-card-label">{{ "Family dynamics" if page_lang == "en" else "Aile dinamiği" }}</span>
                         <h3>{{ "Parent-Child" if page_lang == "en" else "Ebeveyn-Çocuk" }}</h3>
                         <div class="reports-price-row">
-                            <strong class="reports-price">₺1.790</strong>
+                            <strong class="reports-price">{{ format_price(1790, page_lang)|safe }}</strong>
                             <span class="reports-price-note">{{ "Delivered by email within 7 days." if page_lang == "en" else "Raporlar, hazırlık sürecinin ardından en geç 7 gün içinde e-posta ile teslim edilir." }}</span>
                         </div>
                         <p class="reports-muted">{{ "A sensitive report for understanding a child’s nature, parent-child flow, and communication patterns more consciously." if page_lang == "en" else "Çocuğun doğasını, ebeveyn-çocuk ilişkisindeki akışı ve iletişim kalıplarını daha bilinçli anlamak için hassas rapor." }}</p>

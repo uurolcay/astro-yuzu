@@ -32,6 +32,11 @@
       <label>Rapor Teslim Süresi (gün)</label>
       <input type="number" name="site_report_delivery_days" value="{{ settings.get('site_report_delivery_days', '7') }}" min="1" max="30" style="max-width:120px;">
     </div>
+    <div class="admin-field">
+      <label>USD/TRY Kuru</label>
+      <input type="number" name="site_usd_try_rate" value="{{ settings.get('site_usd_try_rate', '') }}" min="0" step="0.0001" placeholder="32.50" style="max-width:160px;">
+      <p class="admin-muted" style="margin:6px 0 0;">İngilizce sayfalarda yaklaşık USD karşılığını göstermek için kullanılır. Boş bırakılırsa USD karşılığı gizlenir.</p>
+    </div>
   </div>
   <div class="admin-card">
     <div class="admin-card-title">Sistem</div>
