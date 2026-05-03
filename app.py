@@ -1178,6 +1178,7 @@ def _client_ip(request):
 _RATE_LIMIT_BUCKETS = {}
 CSRF_SESSION_KEY = "_csrf_token"
 CSRF_FORM_FIELD = "csrf_token"
+LOGIN_CSRF_ERROR_MESSAGE = "Güvenlik oturumu süresi doldu. Lütfen sayfayı yenileyip tekrar deneyin."
 
 
 def enforce_rate_limit(request, scope, limit=10, window_seconds=600):
@@ -7619,12 +7620,39 @@ async def login_page(request: Request):
 @app.post("/login", response_class=HTMLResponse)
 async def login_submit(
     request: Request,
-    email: str = Form(...),
-    password: str = Form(...),
-    csrf_token: str = Form(default=""),
-    next_path: str = Form(default="/"),
     db: Session = Depends(get_db),
 ):
+    logger.info("login-handler-version=csrf-v3-entered")
+    try:
+        form_data = await request.form()
+    except Exception as exc:
+        if "session" in getattr(request, "scope", {}):
+            request.session.pop(CSRF_SESSION_KEY, None)
+        refreshed_csrf_token = ensure_csrf_token(request)
+        logger.warning(
+            "Login failed email=%s admin_email_match=%s password_configured=%s reason=form_parse_failed error_type=%s",
+            "-",
+            False,
+            _admin_password_configured(),
+            type(exc).__name__,
+        )
+        return templates.TemplateResponse(
+            request=request,
+            name="login.html",
+            context=_auth_template_context(
+                request,
+                csrf_token=refreshed_csrf_token,
+                error_message=LOGIN_CSRF_ERROR_MESSAGE,
+                form_data={},
+                next_path=_safe_next_path(request.query_params.get("next"), default="/dashboard"),
+            ),
+            status_code=403,
+        )
+
+    email = str(form_data.get("email", "") or "")
+    password = str(form_data.get("password", "") or "")
+    csrf_token = str(form_data.get(CSRF_FORM_FIELD, "") or "")
+    next_path = str(form_data.get("next_path", "/") or "/")
     normalized_email = str(email or "").strip().lower()
     admin_email_match = normalized_email in _configured_admin_emails()
     admin_email_configured = bool(_configured_admin_emails())
@@ -7665,7 +7693,7 @@ async def login_submit(
             context=_auth_template_context(
                 request,
                 csrf_token=refreshed_csrf_token,
-                error_message="Güvenlik oturumu süresi doldu. Lütfen sayfayı yenileyip tekrar deneyin.",
+                error_message=LOGIN_CSRF_ERROR_MESSAGE,
                 form_data={"email": normalized_email},
                 next_path=safe_next,
             ),

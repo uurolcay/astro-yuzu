@@ -69,11 +69,25 @@ class AdminAccessRoutingTests(unittest.TestCase):
             follow_redirects=False,
         )
 
+    def _post_login_routes(self):
+        return [
+            route
+            for route in app.app.routes
+            if getattr(route, "path", None) == "/login" and "POST" in (getattr(route, "methods", set()) or set())
+        ]
+
+    def test_post_login_route_is_unique(self):
+        routes = self._post_login_routes()
+        self.assertEqual(len(routes), 1)
+        self.assertEqual(getattr(routes[0], "endpoint", None).__name__, "login_submit")
+
     def test_login_page_returns_csrf_hidden_input_and_template_version(self):
         response = self.client.get("/login?next=/admin")
         self.assertEqual(response.status_code, 200)
         self.assertIn("login-template-version: csrf-v3", response.text)
-        self.assertRegex(response.text, r'name=["\']csrf_token["\'][^>]*value=["\'][^"\']+["\']')
+        match = re.search(r'name=["\']csrf_token["\'][^>]*value=["\']([^"\']+)["\']', response.text)
+        self.assertIsNotNone(match, response.text[:500])
+        self.assertTrue(match.group(1).strip())
         self.assertIn('name="next_path" value="/admin"', response.text)
         self.assertIn('method="post"', response.text)
         self.assertIn('action="/login"', response.text)
@@ -146,35 +160,43 @@ class AdminAccessRoutingTests(unittest.TestCase):
 
     def test_login_rejects_missing_csrf_token(self):
         self._create_user(email="admin@example.com", is_admin=True)
-        response = self.client.post(
-            "/login?next=/admin",
-            data={"email": "admin@example.com", "password": "password123", "next_path": "/admin"},
-            follow_redirects=False,
-        )
+        with self.assertLogs(app.logger, level="INFO") as logs:
+            response = self.client.post(
+                "/login?next=/admin",
+                data={"email": "admin@example.com", "password": "password123", "next_path": "/admin"},
+                follow_redirects=False,
+            )
         self.assertEqual(response.status_code, 403)
+        self.assertNotEqual(response.text.strip(), "")
+        self.assertNotEqual(response.text, "Invalid CSRF token")
         self.assertIn("login-template-version: csrf-v3", response.text)
         self.assertIn(self.SECURITY_SESSION_ERROR, response.text)
         self.assertRegex(response.text, r'name=["\']csrf_token["\'][^>]*value=["\'][^"\']+["\']')
         self.assertIn('name="next_path" value="/admin"', response.text)
+        self.assertIn("login-handler-version=csrf-v3-entered", "\n".join(logs.output))
 
     def test_login_invalid_csrf_renders_visible_security_session_error(self):
         self._create_user(email="admin@example.com", is_admin=True)
         self.client.get("/login?next=/admin")
-        response = self.client.post(
-            "/login?next=/admin",
-            data={
-                "email": "admin@example.com",
-                "password": "password123",
-                "csrf_token": "invalid-token",
-                "next_path": "/admin",
-            },
-            follow_redirects=False,
-        )
+        with self.assertLogs(app.logger, level="INFO") as logs:
+            response = self.client.post(
+                "/login?next=/admin",
+                data={
+                    "email": "admin@example.com",
+                    "password": "password123",
+                    "csrf_token": "invalid-token",
+                    "next_path": "/admin",
+                },
+                follow_redirects=False,
+            )
         self.assertEqual(response.status_code, 403)
+        self.assertNotEqual(response.text.strip(), "")
+        self.assertNotEqual(response.text, "Invalid CSRF token")
         self.assertIn("login-template-version: csrf-v3", response.text)
         self.assertIn(self.SECURITY_SESSION_ERROR, response.text)
         self.assertRegex(response.text, r'name=["\']csrf_token["\'][^>]*value=["\'][^"\']+["\']')
         self.assertIn('name="next_path" value="/admin"', response.text)
+        self.assertIn("login-handler-version=csrf-v3-entered", "\n".join(logs.output))
 
     def test_login_preserves_admin_next_path(self):
         self._create_user(email="admin-next@example.com", is_admin=True)
