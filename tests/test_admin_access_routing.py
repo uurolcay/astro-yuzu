@@ -1,6 +1,7 @@
 import inspect
 import re
 import unittest
+from urllib.parse import urlencode
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -103,6 +104,9 @@ class AdminAccessRoutingTests(unittest.TestCase):
         self.assertTrue(match.group(1).strip())
         self.assertIn('name="next_path"', response.text)
         self.assertIn('name="next_path" value="/admin"', response.text)
+        self.assertIn('name="email"', response.text)
+        self.assertIn('name="password"', response.text)
+        self.assertIn('name="csrf_token"', response.text)
         self.assertIn('method="post"', response.text)
         self.assertIn('action="/login"', response.text)
 
@@ -165,10 +169,48 @@ class AdminAccessRoutingTests(unittest.TestCase):
         self.assertEqual(response.status_code, 303)
         self.assertEqual(response.headers["location"], "/admin")
 
+    def test_valid_urlencoded_post_redirects_to_admin(self):
+        self._create_user(email="admin-urlencoded@example.com", is_admin=True)
+        csrf_token = self._login_csrf_token("/admin")
+        response = self.client.post(
+            "/login",
+            content=urlencode(
+                {
+                    "email": "admin-urlencoded@example.com",
+                    "password": "password123",
+                    "csrf_token": csrf_token,
+                    "next_path": "/admin",
+                }
+            ),
+            headers={"content-type": "application/x-www-form-urlencoded"},
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers["location"], "/admin")
+
+    def test_login_tolerates_non_urlencoded_content_type_when_body_is_parseable(self):
+        self._create_user(email="admin-plain@example.com", is_admin=True)
+        csrf_token = self._login_csrf_token("/admin")
+        response = self.client.post(
+            "/login",
+            content=urlencode(
+                {
+                    "email": "admin-plain@example.com",
+                    "password": "password123",
+                    "csrf_token": csrf_token,
+                    "next_path": "/admin",
+                }
+            ),
+            headers={"content-type": "text/plain"},
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers["location"], "/admin")
+
     def test_wrong_password_shows_clear_error_message(self):
         self._create_user(email="admin@example.com", is_admin=True)
         response = self._login(email="admin@example.com", password="wrong-password")
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 200)
         self.assertIn("E-posta veya \u015fifre hatal\u0131.", response.text)
         self.assertIn('value="/admin"', response.text)
 
@@ -181,6 +223,7 @@ class AdminAccessRoutingTests(unittest.TestCase):
                 follow_redirects=False,
             )
         self.assertEqual(response.status_code, 403)
+        self.assertNotEqual(response.status_code, 400)
         self.assertNotEqual(response.text.strip(), "")
         self.assertNotEqual(response.text, "Invalid CSRF token")
         self.assertIn("login-template-version: csrf-v4-raw", response.text)
@@ -203,12 +246,39 @@ class AdminAccessRoutingTests(unittest.TestCase):
                 follow_redirects=False,
             )
         self.assertEqual(response.status_code, 403)
+        self.assertNotEqual(response.status_code, 400)
         self.assertNotEqual(response.text.strip(), "")
         self.assertNotEqual(response.text, "Invalid CSRF token")
         self.assertIn("login-template-version: csrf-v4-raw", response.text)
         self.assertIn(self.SECURITY_SESSION_ERROR, response.text)
         self.assertRegex(response.text, r'name="csrf_token"\s+value="[^"]+"')
         self.assertIn('name="next_path" value="/admin"', response.text)
+
+    def test_login_empty_body_renders_form_parse_error_not_blank_400(self):
+        response = self.client.post(
+            "/login?next=/admin",
+            content=b"",
+            headers={"content-type": "application/octet-stream"},
+            follow_redirects=False,
+        )
+        self.assertNotEqual(response.status_code, 400)
+        self.assertNotEqual(response.text.strip(), "")
+        self.assertIn("login-template-version: csrf-v4-raw", response.text)
+        self.assertIn("Form verisi okunamad\u0131. L\u00fctfen sayfay\u0131 yenileyip tekrar deneyin.", response.text)
+        self.assertRegex(response.text, r'name="csrf_token"\s+value="[^"]+"')
+
+    def test_login_missing_email_or_password_renders_visible_error_not_400(self):
+        csrf_token = self._login_csrf_token("/admin")
+        response = self.client.post(
+            "/login?next=/admin",
+            data={"csrf_token": csrf_token, "next_path": "/admin"},
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertNotEqual(response.status_code, 400)
+        self.assertIn("login-template-version: csrf-v4-raw", response.text)
+        self.assertIn("E-posta ve \u015fifre alanlar\u0131 zorunludur.", response.text)
+        self.assertRegex(response.text, r'name="csrf_token"\s+value="[^"]+"')
 
     def test_login_preserves_admin_next_path(self):
         self._create_user(email="admin-next@example.com", is_admin=True)

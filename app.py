@@ -7622,145 +7622,150 @@ async def login_page(request: Request):
 @app.post("/login", response_class=HTMLResponse)
 async def login_submit(request: Request):
     print("login-handler-version=csrf-v4-raw-entered", flush=True)
+
+    def _render_login_error(message, *, status_code=200, email="", next_path="/dashboard", reason="login_error", extra_log=None):
+        refreshed_csrf_token = ensure_csrf_token(request)
+        logger.warning(
+            "Login failed email=%s reason=%s status_code=%s next_path=%s%s",
+            str(email or "").strip().lower() or "-",
+            reason,
+            status_code,
+            next_path or "-",
+            f" {extra_log}" if extra_log else "",
+        )
+        return templates.TemplateResponse(
+            request=request,
+            name="login.html",
+            context=_auth_template_context(
+                request,
+                csrf_token=refreshed_csrf_token,
+                error_message=message,
+                form_data={"email": str(email or "").strip().lower()} if email else {},
+                next_path=next_path,
+            ),
+            status_code=status_code,
+        )
+
     try:
         raw_body = await request.body()
         content_type = str(request.headers.get("content-type", "") or "").lower()
-        parsed_form = {}
-        if "application/x-www-form-urlencoded" in content_type or not content_type:
-            parsed_form = parse_qs(raw_body.decode("utf-8", errors="ignore"), keep_blank_values=True)
-    except Exception as exc:
-        if "session" in getattr(request, "scope", {}):
-            request.session.pop(CSRF_SESSION_KEY, None)
-        refreshed_csrf_token = ensure_csrf_token(request)
-        logger.warning(
-            "Login failed email=%s admin_email_match=%s password_configured=%s reason=raw_body_parse_failed error_type=%s",
-            "-",
-            False,
-            _admin_password_configured(),
-            type(exc).__name__,
-        )
-        return templates.TemplateResponse(
-            request=request,
-            name="login.html",
-            context=_auth_template_context(
-                request,
-                csrf_token=refreshed_csrf_token,
-                error_message=LOGIN_CSRF_ERROR_MESSAGE,
-                form_data={},
-                next_path=_safe_next_path(request.query_params.get("next"), default="/dashboard"),
-            ),
-            status_code=403,
-        )
+        decoded_body = raw_body.decode("utf-8", errors="ignore")
+        parsed_form = parse_qs(decoded_body, keep_blank_values=True)
 
-    def _raw_form_value(name, default=""):
-        values = parsed_form.get(name) or []
-        return str(values[0] if values else default)
+        def _raw_form_value(name, default=""):
+            values = parsed_form.get(name) or []
+            return str(values[0] if values else default)
 
-    email = _raw_form_value("email")
-    password = _raw_form_value("password")
-    csrf_token = _raw_form_value(CSRF_FORM_FIELD)
-    next_path = _raw_form_value("next_path", "/")
-    normalized_email = str(email or "").strip().lower()
-    admin_email_match = normalized_email in _configured_admin_emails()
-    admin_email_configured = bool(_configured_admin_emails())
-    password_configured = _admin_password_configured()
-    submitted_next_path = str(next_path or "").strip()
-    next_candidate = submitted_next_path if submitted_next_path not in {"", "/"} else request.query_params.get("next")
-    safe_next = _safe_next_path(next_candidate, default="/dashboard")
-    submitted_csrf = str(csrf_token or "").strip()
-    session_csrf = str(request.session.get(CSRF_SESSION_KEY, "") or "") if "session" in getattr(request, "scope", {}) else ""
-    session_has_csrf = bool(session_csrf)
-    logger.info(
-        "Login POST received csrf_present=%s csrf_value_length=%s session_has_csrf=%s session_csrf_length=%s attempted_email=%s next_path=%s admin_email_configured=%s password_configured=%s admin_email_match=%s content_type=%s body_length=%s",
-        bool(submitted_csrf),
-        len(submitted_csrf),
-        session_has_csrf,
-        len(session_csrf),
-        normalized_email,
-        safe_next or "-",
-        admin_email_configured,
-        password_configured,
-        admin_email_match,
-        content_type or "-",
-        len(raw_body),
-    )
-    if not verify_csrf_token(request, submitted_csrf):
-        if "session" in getattr(request, "scope", {}):
-            request.session.pop(CSRF_SESSION_KEY, None)
-        refreshed_csrf_token = ensure_csrf_token(request)
-        logger.warning(
-            "Login failed email=%s admin_email_match=%s password_configured=%s reason=csrf_invalid",
-            normalized_email,
-            admin_email_match,
+        email = _raw_form_value("email")
+        password = _raw_form_value("password")
+        csrf_token = _raw_form_value(CSRF_FORM_FIELD)
+        next_path = _raw_form_value("next_path", "/")
+        normalized_email = str(email or "").strip().lower()
+        admin_email_match = normalized_email in _configured_admin_emails()
+        admin_email_configured = bool(_configured_admin_emails())
+        password_configured = _admin_password_configured()
+        submitted_next_path = str(next_path or "").strip()
+        next_candidate = submitted_next_path if submitted_next_path not in {"", "/"} else request.query_params.get("next")
+        safe_next = _safe_next_path(next_candidate, default="/dashboard")
+        submitted_csrf = str(csrf_token or "").strip()
+        session_csrf = str(request.session.get(CSRF_SESSION_KEY, "") or "") if "session" in getattr(request, "scope", {}) else ""
+        session_has_csrf = bool(session_csrf)
+        parsed_keys = sorted(parsed_form.keys())
+        logger.info(
+            "Login POST received content_type=%s body_length=%s parsed_keys=%s csrf_present=%s csrf_value_length=%s session_has_csrf=%s session_csrf_length=%s email_present=%s password_present=%s next_path=%s admin_email_configured=%s password_configured=%s admin_email_match=%s",
+            content_type or "-",
+            len(raw_body),
+            ",".join(parsed_keys) if parsed_keys else "-",
+            bool(submitted_csrf),
+            len(submitted_csrf),
+            session_has_csrf,
+            len(session_csrf),
+            bool(str(email or "").strip()),
+            bool(str(password or "")),
+            safe_next or "-",
+            admin_email_configured,
             password_configured,
-        )
-        return templates.TemplateResponse(
-            request=request,
-            name="login.html",
-            context=_auth_template_context(
-                request,
-                csrf_token=refreshed_csrf_token,
-                error_message=LOGIN_CSRF_ERROR_MESSAGE,
-                form_data={"email": normalized_email},
-                next_path=safe_next,
-            ),
-            status_code=403,
+            admin_email_match,
         )
 
-    if not check_rate_limit(f"login:{_client_ip(request)}", max_calls=10, window_seconds=300):
-        logger.warning(
-            "Login failed email=%s admin_email_match=%s password_configured=%s reason=rate_limited",
-            normalized_email,
-            admin_email_match,
-            password_configured,
-        )
-        return templates.TemplateResponse(
-            request=request,
-            name="login.html",
-            context=_auth_template_context(
-                request,
-                error_message="Çok fazla giriş denemesi. Lütfen 5 dakika bekleyin.",
-                form_data={"email": normalized_email},
+        if not parsed_keys:
+            return _render_login_error(
+                "Form verisi okunamadı. Lütfen sayfayı yenileyip tekrar deneyin.",
+                status_code=200,
                 next_path=safe_next,
-            ),
-            status_code=429,
-        )
-    db = db_mod.SessionLocal()
-    try:
-        user = db.query(db_mod.AppUser).filter(db_mod.AppUser.email == normalized_email, db_mod.AppUser.is_active.is_(True)).first()
-        if not user or not check_password_hash(user.password_hash, password):
+                reason="form_data_empty",
+                extra_log=f"content_type={content_type or '-'} body_length={len(raw_body)}",
+            )
+
+        if not verify_csrf_token(request, submitted_csrf):
+            if "session" in getattr(request, "scope", {}):
+                request.session.pop(CSRF_SESSION_KEY, None)
+            return _render_login_error(
+                LOGIN_CSRF_ERROR_MESSAGE,
+                status_code=403,
+                email=normalized_email,
+                next_path=safe_next,
+                reason="csrf_invalid",
+                extra_log=f"csrf_present={bool(submitted_csrf)} session_has_csrf={session_has_csrf}",
+            )
+
+        if not normalized_email or not str(password or ""):
+            return _render_login_error(
+                "E-posta ve şifre alanları zorunludur.",
+                status_code=422,
+                email=normalized_email,
+                next_path=safe_next,
+                reason="missing_credentials",
+            )
+
+        if not check_rate_limit(f"login:{_client_ip(request)}", max_calls=10, window_seconds=300):
+            return _render_login_error(
+                "Çok fazla giriş denemesi. Lütfen 5 dakika bekleyin.",
+                status_code=429,
+                email=normalized_email,
+                next_path=safe_next,
+                reason="rate_limited",
+            )
+
+        db = db_mod.SessionLocal()
+        try:
+            user = db.query(db_mod.AppUser).filter(db_mod.AppUser.email == normalized_email, db_mod.AppUser.is_active.is_(True)).first()
+            if not user or not check_password_hash(user.password_hash, password):
+                return _render_login_error(
+                    "E-posta veya şifre hatalı.",
+                    status_code=200,
+                    email=normalized_email,
+                    next_path=safe_next,
+                    reason="invalid_credentials",
+                    extra_log=f"admin_email_match={admin_email_match} password_configured={password_configured}",
+                )
+
+            request.session["user_id"] = user.id
             logger.info(
-                "Login failed email=%s admin_email_match=%s password_configured=%s reason=invalid_credentials",
+                "Login succeeded email=%s user_id=%s admin_email_match=%s password_configured=%s reason=success",
                 normalized_email,
+                user.id,
                 admin_email_match,
                 password_configured,
             )
-            return templates.TemplateResponse(
-                request=request,
-                name="login.html",
-                context=_auth_template_context(
-                    request,
-                    error_message="E-posta veya şifre hatalı.",
-                    form_data={"email": normalized_email},
-                    next_path=safe_next,
-                ),
-                status_code=400,
-            )
-
-        request.session["user_id"] = user.id
-        logger.info(
-            "Login succeeded email=%s user_id=%s admin_email_match=%s password_configured=%s reason=success",
-            normalized_email,
-            user.id,
-            admin_email_match,
-            password_configured,
+            redirect_target = safe_next
+            if redirect_target.startswith("/admin") and not is_admin_user(user):
+                redirect_target = "/dashboard"
+            return RedirectResponse(url=redirect_target, status_code=303)
+        finally:
+            db.close()
+    except Exception as exc:
+        if "session" in getattr(request, "scope", {}):
+            request.session.pop(CSRF_SESSION_KEY, None)
+        print(f"login-unexpected-error type={type(exc).__name__}", flush=True)
+        logger.exception("Login unexpected failure error_type=%s", type(exc).__name__)
+        return _render_login_error(
+            "Giriş sırasında beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.",
+            status_code=500,
+            next_path=_safe_next_path(request.query_params.get("next"), default="/dashboard"),
+            reason="unexpected_exception",
+            extra_log=f"error_type={type(exc).__name__}",
         )
-        redirect_target = safe_next
-        if redirect_target.startswith("/admin") and not is_admin_user(user):
-            redirect_target = "/dashboard"
-        return RedirectResponse(url=redirect_target, status_code=303)
-    finally:
-        db.close()
 
 
 @app.get("/debug/version")
