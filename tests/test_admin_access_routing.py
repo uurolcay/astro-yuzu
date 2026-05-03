@@ -1,3 +1,4 @@
+import inspect
 import re
 import unittest
 from unittest.mock import patch
@@ -47,12 +48,12 @@ class AdminAccessRoutingTests(unittest.TestCase):
     def _login_csrf_token(self, next_path="/admin"):
         response = self.client.get(f"/login?next={next_path}")
         self.assertEqual(response.status_code, 200)
-        match = re.search(r'name=["\']csrf_token["\'][^>]*value=["\']([^"\']+)["\']', response.text)
+        match = re.search(r'name="csrf_token"\s+value="([^"]+)"', response.text)
         self.assertIsNotNone(match, response.text[:500])
         self.assertIn('method="post"', response.text)
         self.assertIn('action="/login"', response.text)
         self.assertIn('name="next_path"', response.text)
-        self.assertIn("login-template-version: csrf-v3", response.text)
+        self.assertIn("login-template-version: csrf-v4-raw", response.text)
         return match.group(1)
 
     def _login(self, *, email, password="password123", next_path="/admin", csrf_token=None):
@@ -81,13 +82,26 @@ class AdminAccessRoutingTests(unittest.TestCase):
         self.assertEqual(len(routes), 1)
         self.assertEqual(getattr(routes[0], "endpoint", None).__name__, "login_submit")
 
+    def test_post_login_handler_uses_request_only_signature(self):
+        signature = inspect.signature(app.login_submit)
+        self.assertEqual(list(signature.parameters), ["request"])
+
+    def test_debug_version_endpoint_returns_login_version(self):
+        response = self.client.get("/debug/version")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {"app_version": "csrf-v4-raw", "login_template_version": "csrf-v4-raw"},
+        )
+
     def test_login_page_returns_csrf_hidden_input_and_template_version(self):
         response = self.client.get("/login?next=/admin")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("login-template-version: csrf-v3", response.text)
-        match = re.search(r'name=["\']csrf_token["\'][^>]*value=["\']([^"\']+)["\']', response.text)
+        self.assertIn("login-template-version: csrf-v4-raw", response.text)
+        match = re.search(r'name="csrf_token"\s+value="([^"]+)"', response.text)
         self.assertIsNotNone(match, response.text[:500])
         self.assertTrue(match.group(1).strip())
+        self.assertIn('name="next_path"', response.text)
         self.assertIn('name="next_path" value="/admin"', response.text)
         self.assertIn('method="post"', response.text)
         self.assertIn('action="/login"', response.text)
@@ -160,7 +174,7 @@ class AdminAccessRoutingTests(unittest.TestCase):
 
     def test_login_rejects_missing_csrf_token(self):
         self._create_user(email="admin@example.com", is_admin=True)
-        with self.assertLogs(app.logger, level="INFO") as logs:
+        with self.assertLogs(app.logger, level="INFO"):
             response = self.client.post(
                 "/login?next=/admin",
                 data={"email": "admin@example.com", "password": "password123", "next_path": "/admin"},
@@ -169,16 +183,15 @@ class AdminAccessRoutingTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertNotEqual(response.text.strip(), "")
         self.assertNotEqual(response.text, "Invalid CSRF token")
-        self.assertIn("login-template-version: csrf-v3", response.text)
+        self.assertIn("login-template-version: csrf-v4-raw", response.text)
         self.assertIn(self.SECURITY_SESSION_ERROR, response.text)
-        self.assertRegex(response.text, r'name=["\']csrf_token["\'][^>]*value=["\'][^"\']+["\']')
+        self.assertRegex(response.text, r'name="csrf_token"\s+value="[^"]+"')
         self.assertIn('name="next_path" value="/admin"', response.text)
-        self.assertIn("login-handler-version=csrf-v3-entered", "\n".join(logs.output))
 
     def test_login_invalid_csrf_renders_visible_security_session_error(self):
         self._create_user(email="admin@example.com", is_admin=True)
         self.client.get("/login?next=/admin")
-        with self.assertLogs(app.logger, level="INFO") as logs:
+        with self.assertLogs(app.logger, level="INFO"):
             response = self.client.post(
                 "/login?next=/admin",
                 data={
@@ -192,11 +205,10 @@ class AdminAccessRoutingTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertNotEqual(response.text.strip(), "")
         self.assertNotEqual(response.text, "Invalid CSRF token")
-        self.assertIn("login-template-version: csrf-v3", response.text)
+        self.assertIn("login-template-version: csrf-v4-raw", response.text)
         self.assertIn(self.SECURITY_SESSION_ERROR, response.text)
-        self.assertRegex(response.text, r'name=["\']csrf_token["\'][^>]*value=["\'][^"\']+["\']')
+        self.assertRegex(response.text, r'name="csrf_token"\s+value="[^"]+"')
         self.assertIn('name="next_path" value="/admin"', response.text)
-        self.assertIn("login-handler-version=csrf-v3-entered", "\n".join(logs.output))
 
     def test_login_preserves_admin_next_path(self):
         self._create_user(email="admin-next@example.com", is_admin=True)

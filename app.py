@@ -1179,6 +1179,8 @@ _RATE_LIMIT_BUCKETS = {}
 CSRF_SESSION_KEY = "_csrf_token"
 CSRF_FORM_FIELD = "csrf_token"
 LOGIN_CSRF_ERROR_MESSAGE = "Güvenlik oturumu süresi doldu. Lütfen sayfayı yenileyip tekrar deneyin."
+APP_VERSION = "csrf-v4-raw"
+LOGIN_TEMPLATE_VERSION = "csrf-v4-raw"
 
 
 def enforce_rate_limit(request, scope, limit=10, window_seconds=600):
@@ -7618,19 +7620,20 @@ async def login_page(request: Request):
 
 
 @app.post("/login", response_class=HTMLResponse)
-async def login_submit(
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    logger.info("login-handler-version=csrf-v3-entered")
+async def login_submit(request: Request):
+    print("login-handler-version=csrf-v4-raw-entered", flush=True)
     try:
-        form_data = await request.form()
+        raw_body = await request.body()
+        content_type = str(request.headers.get("content-type", "") or "").lower()
+        parsed_form = {}
+        if "application/x-www-form-urlencoded" in content_type or not content_type:
+            parsed_form = parse_qs(raw_body.decode("utf-8", errors="ignore"), keep_blank_values=True)
     except Exception as exc:
         if "session" in getattr(request, "scope", {}):
             request.session.pop(CSRF_SESSION_KEY, None)
         refreshed_csrf_token = ensure_csrf_token(request)
         logger.warning(
-            "Login failed email=%s admin_email_match=%s password_configured=%s reason=form_parse_failed error_type=%s",
+            "Login failed email=%s admin_email_match=%s password_configured=%s reason=raw_body_parse_failed error_type=%s",
             "-",
             False,
             _admin_password_configured(),
@@ -7649,10 +7652,14 @@ async def login_submit(
             status_code=403,
         )
 
-    email = str(form_data.get("email", "") or "")
-    password = str(form_data.get("password", "") or "")
-    csrf_token = str(form_data.get(CSRF_FORM_FIELD, "") or "")
-    next_path = str(form_data.get("next_path", "/") or "/")
+    def _raw_form_value(name, default=""):
+        values = parsed_form.get(name) or []
+        return str(values[0] if values else default)
+
+    email = _raw_form_value("email")
+    password = _raw_form_value("password")
+    csrf_token = _raw_form_value(CSRF_FORM_FIELD)
+    next_path = _raw_form_value("next_path", "/")
     normalized_email = str(email or "").strip().lower()
     admin_email_match = normalized_email in _configured_admin_emails()
     admin_email_configured = bool(_configured_admin_emails())
@@ -7664,7 +7671,7 @@ async def login_submit(
     session_csrf = str(request.session.get(CSRF_SESSION_KEY, "") or "") if "session" in getattr(request, "scope", {}) else ""
     session_has_csrf = bool(session_csrf)
     logger.info(
-        "Login POST received csrf_present=%s csrf_value_length=%s session_has_csrf=%s session_csrf_length=%s attempted_email=%s next_path=%s admin_email_configured=%s password_configured=%s admin_email_match=%s",
+        "Login POST received csrf_present=%s csrf_value_length=%s session_has_csrf=%s session_csrf_length=%s attempted_email=%s next_path=%s admin_email_configured=%s password_configured=%s admin_email_match=%s content_type=%s body_length=%s",
         bool(submitted_csrf),
         len(submitted_csrf),
         session_has_csrf,
@@ -7674,10 +7681,10 @@ async def login_submit(
         admin_email_configured,
         password_configured,
         admin_email_match,
+        content_type or "-",
+        len(raw_body),
     )
-    try:
-        await validate_csrf_token(request, csrf_token)
-    except HTTPException:
+    if not verify_csrf_token(request, submitted_csrf):
         if "session" in getattr(request, "scope", {}):
             request.session.pop(CSRF_SESSION_KEY, None)
         refreshed_csrf_token = ensure_csrf_token(request)
@@ -7718,38 +7725,47 @@ async def login_submit(
             ),
             status_code=429,
         )
-    user = db.query(db_mod.AppUser).filter(db_mod.AppUser.email == normalized_email, db_mod.AppUser.is_active.is_(True)).first()
-    if not user or not check_password_hash(user.password_hash, password):
+    db = db_mod.SessionLocal()
+    try:
+        user = db.query(db_mod.AppUser).filter(db_mod.AppUser.email == normalized_email, db_mod.AppUser.is_active.is_(True)).first()
+        if not user or not check_password_hash(user.password_hash, password):
+            logger.info(
+                "Login failed email=%s admin_email_match=%s password_configured=%s reason=invalid_credentials",
+                normalized_email,
+                admin_email_match,
+                password_configured,
+            )
+            return templates.TemplateResponse(
+                request=request,
+                name="login.html",
+                context=_auth_template_context(
+                    request,
+                    error_message="E-posta veya şifre hatalı.",
+                    form_data={"email": normalized_email},
+                    next_path=safe_next,
+                ),
+                status_code=400,
+            )
+
+        request.session["user_id"] = user.id
         logger.info(
-            "Login failed email=%s admin_email_match=%s password_configured=%s reason=invalid_credentials",
+            "Login succeeded email=%s user_id=%s admin_email_match=%s password_configured=%s reason=success",
             normalized_email,
+            user.id,
             admin_email_match,
             password_configured,
         )
-        return templates.TemplateResponse(
-            request=request,
-            name="login.html",
-            context=_auth_template_context(
-                request,
-                error_message="E-posta veya şifre hatalı.",
-                form_data={"email": normalized_email},
-                next_path=safe_next,
-            ),
-            status_code=400,
-        )
+        redirect_target = safe_next
+        if redirect_target.startswith("/admin") and not is_admin_user(user):
+            redirect_target = "/dashboard"
+        return RedirectResponse(url=redirect_target, status_code=303)
+    finally:
+        db.close()
 
-    request.session["user_id"] = user.id
-    logger.info(
-        "Login succeeded email=%s user_id=%s admin_email_match=%s password_configured=%s reason=success",
-        normalized_email,
-        user.id,
-        admin_email_match,
-        password_configured,
-    )
-    redirect_target = safe_next
-    if redirect_target.startswith("/admin") and not is_admin_user(user):
-        redirect_target = "/dashboard"
-    return RedirectResponse(url=redirect_target, status_code=303)
+
+@app.get("/debug/version")
+async def debug_version():
+    return JSONResponse({"app_version": APP_VERSION, "login_template_version": LOGIN_TEMPLATE_VERSION})
 
 
 @app.get("/logout")
