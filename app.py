@@ -201,6 +201,15 @@ def _configured_admin_emails():
 def _admin_password_configured():
     return bool(str(os.getenv("ADMIN_PASSWORD", "") or "").strip())
 
+
+def _session_secret_configured():
+    return bool(str(os.getenv("SECRET_KEY", "") or os.getenv("APP_SECRET_KEY", "")).strip())
+
+
+def _using_development_session_secret():
+    return SESSION_SECRET_KEY == "jyotish-dev-secret-change-me"
+
+
 app = FastAPI(title="Astro-Yuzu Intelligence Core", version="5.3")
 templates = Jinja2Templates(directory="templates")
 
@@ -409,10 +418,12 @@ finally:
     _seed_db.close()
 
 logger = logging.getLogger(__name__)
-if SESSION_SECRET_KEY == "jyotish-dev-secret-change-me":
+if _using_development_session_secret():
     logger.warning("Using development session secret. Set SECRET_KEY or APP_SECRET_KEY in production.")
-if _is_production_runtime() and not str(os.getenv("SECRET_KEY", "") or os.getenv("APP_SECRET_KEY", "")).strip():
+if _is_production_runtime() and not _session_secret_configured():
     logger.warning("Production runtime detected without SECRET_KEY/APP_SECRET_KEY; session cookies are using the development fallback.")
+if _is_production_runtime() and _using_development_session_secret():
+    logger.warning("Production is using development session secret; login/CSRF may be unstable.")
 if not _configured_admin_emails():
     logger.warning("ADMIN_EMAIL/ADMIN_USERNAME/ADMIN_EMAILS is not configured; admin login bootstrap may be unavailable.")
 if not _admin_password_configured():
@@ -551,6 +562,10 @@ def _storage_diagnostics(db: Session):
         "uploads_file_count": len([item for item in uploads_dir.iterdir() if item.is_file()]) if uploads_dir_exists else 0,
         "is_render_env": is_render_env,
         "warnings": warnings,
+        "session_config": {
+            "secret_configured": _session_secret_configured(),
+            "using_dev_secret": _using_development_session_secret(),
+        },
     }
 
 
@@ -7580,12 +7595,23 @@ async def login_page(request: Request):
         if next_path.startswith("/admin") and not is_admin_user(current_user):
             next_path = "/dashboard"
         return RedirectResponse(url=next_path, status_code=303)
+    session_token_before = request.session.get(CSRF_SESSION_KEY, "") if "session" in getattr(request, "scope", {}) else ""
+    csrf_token = ensure_csrf_token(request)
+    session_has_csrf = bool(request.session.get(CSRF_SESSION_KEY, "")) if "session" in getattr(request, "scope", {}) else False
+    next_path = _safe_next_path(request.query_params.get("next"), default="")
+    logger.info(
+        "Login page rendered csrf_generated=%s session_has_csrf=%s next_path=%s",
+        bool(csrf_token and not session_token_before),
+        session_has_csrf,
+        next_path or "-",
+    )
     return templates.TemplateResponse(
         request=request,
         name="login.html",
         context=_auth_template_context(
             request,
-            next_path=_safe_next_path(request.query_params.get("next"), default="/dashboard"),
+            csrf_token=csrf_token,
+            next_path=next_path,
         ),
     )
 
@@ -7596,23 +7622,55 @@ async def login_submit(
     email: str = Form(...),
     password: str = Form(...),
     csrf_token: str = Form(default=""),
-    next_path: str = Form(default=""),
+    next_path: str = Form(default="/"),
     db: Session = Depends(get_db),
 ):
     normalized_email = str(email or "").strip().lower()
     admin_email_match = normalized_email in _configured_admin_emails()
+    admin_email_configured = bool(_configured_admin_emails())
     password_configured = _admin_password_configured()
-    safe_next = _safe_next_path(next_path or request.query_params.get("next"), default="/dashboard")
+    submitted_next_path = str(next_path or "").strip()
+    next_candidate = submitted_next_path if submitted_next_path not in {"", "/"} else request.query_params.get("next")
+    safe_next = _safe_next_path(next_candidate, default="/dashboard")
+    submitted_csrf = str(csrf_token or "").strip()
+    session_csrf = str(request.session.get(CSRF_SESSION_KEY, "") or "") if "session" in getattr(request, "scope", {}) else ""
+    session_has_csrf = bool(session_csrf)
+    logger.info(
+        "Login POST received csrf_present=%s csrf_value_length=%s session_has_csrf=%s session_csrf_length=%s attempted_email=%s next_path=%s admin_email_configured=%s password_configured=%s admin_email_match=%s",
+        bool(submitted_csrf),
+        len(submitted_csrf),
+        session_has_csrf,
+        len(session_csrf),
+        normalized_email,
+        safe_next or "-",
+        admin_email_configured,
+        password_configured,
+        admin_email_match,
+    )
     try:
         await validate_csrf_token(request, csrf_token)
     except HTTPException:
+        if "session" in getattr(request, "scope", {}):
+            request.session.pop(CSRF_SESSION_KEY, None)
+        refreshed_csrf_token = ensure_csrf_token(request)
         logger.warning(
             "Login failed email=%s admin_email_match=%s password_configured=%s reason=csrf_invalid",
             normalized_email,
             admin_email_match,
             password_configured,
         )
-        raise
+        return templates.TemplateResponse(
+            request=request,
+            name="login.html",
+            context=_auth_template_context(
+                request,
+                csrf_token=refreshed_csrf_token,
+                error_message="Güvenlik oturumu süresi doldu. Lütfen sayfayı yenileyip tekrar deneyin.",
+                form_data={"email": normalized_email},
+                next_path=safe_next,
+            ),
+            status_code=403,
+        )
 
     if not check_rate_limit(f"login:{_client_ip(request)}", max_calls=10, window_seconds=300):
         logger.warning(

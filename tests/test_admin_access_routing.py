@@ -10,6 +10,8 @@ import database as db_mod
 
 
 class AdminAccessRoutingTests(unittest.TestCase):
+    SECURITY_SESSION_ERROR = "G\u00fcvenlik oturumu s\u00fcresi doldu. L\u00fctfen sayfay\u0131 yenileyip tekrar deneyin."
+
     def setUp(self):
         self.db = db_mod.SessionLocal()
         self.db.query(db_mod.ServiceOrder).delete()
@@ -50,6 +52,7 @@ class AdminAccessRoutingTests(unittest.TestCase):
         self.assertIn('method="post"', response.text)
         self.assertIn('action="/login"', response.text)
         self.assertIn('name="next_path"', response.text)
+        self.assertIn("login-template-version: csrf-v3", response.text)
         return match.group(1)
 
     def _login(self, *, email, password="password123", next_path="/admin", csrf_token=None):
@@ -65,6 +68,15 @@ class AdminAccessRoutingTests(unittest.TestCase):
             },
             follow_redirects=False,
         )
+
+    def test_login_page_returns_csrf_hidden_input_and_template_version(self):
+        response = self.client.get("/login?next=/admin")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("login-template-version: csrf-v3", response.text)
+        self.assertRegex(response.text, r'name=["\']csrf_token["\'][^>]*value=["\'][^"\']+["\']')
+        self.assertIn('name="next_path" value="/admin"', response.text)
+        self.assertIn('method="post"', response.text)
+        self.assertIn('action="/login"', response.text)
 
     def test_allowlisted_user_reaches_admin_dashboard_from_admin_login_flow(self):
         self._create_user(email="admin-allow@example.com", is_admin=False)
@@ -129,7 +141,7 @@ class AdminAccessRoutingTests(unittest.TestCase):
         self._create_user(email="admin@example.com", is_admin=True)
         response = self._login(email="admin@example.com", password="wrong-password")
         self.assertEqual(response.status_code, 400)
-        self.assertIn("E-posta veya şifre hatalı.", response.text)
+        self.assertIn("E-posta veya \u015fifre hatal\u0131.", response.text)
         self.assertIn('value="/admin"', response.text)
 
     def test_login_rejects_missing_csrf_token(self):
@@ -140,6 +152,29 @@ class AdminAccessRoutingTests(unittest.TestCase):
             follow_redirects=False,
         )
         self.assertEqual(response.status_code, 403)
+        self.assertIn("login-template-version: csrf-v3", response.text)
+        self.assertIn(self.SECURITY_SESSION_ERROR, response.text)
+        self.assertRegex(response.text, r'name=["\']csrf_token["\'][^>]*value=["\'][^"\']+["\']')
+        self.assertIn('name="next_path" value="/admin"', response.text)
+
+    def test_login_invalid_csrf_renders_visible_security_session_error(self):
+        self._create_user(email="admin@example.com", is_admin=True)
+        self.client.get("/login?next=/admin")
+        response = self.client.post(
+            "/login?next=/admin",
+            data={
+                "email": "admin@example.com",
+                "password": "password123",
+                "csrf_token": "invalid-token",
+                "next_path": "/admin",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("login-template-version: csrf-v3", response.text)
+        self.assertIn(self.SECURITY_SESSION_ERROR, response.text)
+        self.assertRegex(response.text, r'name=["\']csrf_token["\'][^>]*value=["\'][^"\']+["\']')
+        self.assertIn('name="next_path" value="/admin"', response.text)
 
     def test_login_preserves_admin_next_path(self):
         self._create_user(email="admin-next@example.com", is_admin=True)
