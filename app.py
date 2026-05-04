@@ -142,11 +142,31 @@ ENABLE_SYNC_UPLOAD_PROCESSING = get_bool_env("ENABLE_SYNC_UPLOAD_PROCESSING", Fa
 ENABLE_ASYNC_DOCUMENT_PROCESSING = get_bool_env("ENABLE_ASYNC_DOCUMENT_PROCESSING", False)
 MAX_PDF_PAGES_PER_REQUEST = get_int_env("MAX_PDF_PAGES_PER_REQUEST", 20)
 MAX_CHUNKS_PER_REQUEST = get_int_env("MAX_CHUNKS_PER_REQUEST", 100)
+DEFAULT_ADMIN_PAGE_SIZE = get_int_env("DEFAULT_ADMIN_PAGE_SIZE", 50)
+MAX_ADMIN_PAGE_SIZE = get_int_env("MAX_ADMIN_PAGE_SIZE", 100)
+ADMIN_COVERAGE_MAX_CHUNKS = get_int_env("ADMIN_COVERAGE_MAX_CHUNKS", 1000)
+ENABLE_ADMIN_REQUEST_TRACING = get_bool_env("ENABLE_ADMIN_REQUEST_TRACING", True)
+COVERAGE_REBUILD_SYNC_ENABLED = get_bool_env("COVERAGE_REBUILD_SYNC_ENABLED", False)
 PORT = int(os.getenv("PORT", 8000))
 
 
 def _env_flag_value(name, default=False):
     return get_bool_env(name, default)
+
+
+def _admin_page_params(page=1, page_size=None):
+    try:
+        page = max(1, int(page or 1))
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        raw_size = int(page_size or DEFAULT_ADMIN_PAGE_SIZE)
+    except (TypeError, ValueError):
+        raw_size = DEFAULT_ADMIN_PAGE_SIZE
+    max_size = max(1, int(MAX_ADMIN_PAGE_SIZE or 100))
+    default_size = max(1, min(int(DEFAULT_ADMIN_PAGE_SIZE or 50), max_size))
+    page_size = max(1, min(raw_size or default_size, max_size))
+    return page, page_size, (page - 1) * page_size
 
 
 def launch_mode_enabled():
@@ -252,6 +272,33 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def admin_request_tracing_middleware(request: Request, call_next):
+    path = str(request.url.path or "")
+    should_trace = bool(ENABLE_ADMIN_REQUEST_TRACING and (path.startswith("/admin") or path.startswith("/api/admin")))
+    if not should_trace:
+        return await call_next(request)
+    request_id = secrets.token_hex(6)
+    started = time.perf_counter()
+    logger.info("ADMIN_REQUEST_START %s %s %s", request_id, request.method, path)
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        duration_ms = int((time.perf_counter() - started) * 1000)
+        logger.exception(
+            "ADMIN_REQUEST_ERROR %s %s %s %s %s",
+            request_id,
+            request.method,
+            path,
+            type(exc).__name__,
+            duration_ms,
+        )
+        raise
+    duration_ms = int((time.perf_counter() - started) * 1000)
+    logger.info("ADMIN_REQUEST_END %s %s %s %s %s", request_id, request.method, path, response.status_code, duration_ms)
+    return response
 
 db_mod.init_db()
 os.makedirs("static/reports", exist_ok=True)
@@ -638,6 +685,18 @@ def _storage_diagnostics(db: Session):
             "max_pdf_pages_per_request": int(MAX_PDF_PAGES_PER_REQUEST),
             "max_chunks_per_request": int(MAX_CHUNKS_PER_REQUEST),
         },
+        "admin_performance": {
+            "admin_page_size_default": int(DEFAULT_ADMIN_PAGE_SIZE),
+            "admin_page_size_max": int(MAX_ADMIN_PAGE_SIZE),
+            "request_tracing_enabled": bool(ENABLE_ADMIN_REQUEST_TRACING),
+            "coverage_rebuild_sync_enabled": bool(COVERAGE_REBUILD_SYNC_ENABLED),
+            "admin_coverage_max_chunks": int(ADMIN_COVERAGE_MAX_CHUNKS),
+        },
+        "admin_page_size_default": int(DEFAULT_ADMIN_PAGE_SIZE),
+        "admin_page_size_max": int(MAX_ADMIN_PAGE_SIZE),
+        "request_tracing_enabled": bool(ENABLE_ADMIN_REQUEST_TRACING),
+        "coverage_rebuild_sync_enabled": bool(COVERAGE_REBUILD_SYNC_ENABLED),
+        "approved_chunks_count": db.query(db_mod.KnowledgeChunk).join(db_mod.KnowledgeItem).filter(db_mod.KnowledgeItem.status.in_(["published", "active"])).count(),
         "warnings": warnings,
         "session_config": {
             "secret_configured": _session_secret_configured(),
@@ -6905,8 +6964,17 @@ def _knowledge_review_rows(items):
     return rows
 
 
-def _review_required_items(db):
-    items = db.query(db_mod.KnowledgeItem).order_by(db_mod.KnowledgeItem.created_at.desc()).all()
+def _review_required_items(db, *, limit=None, offset=0):
+    query = (
+        db.query(db_mod.KnowledgeItem)
+        .filter(db_mod.KnowledgeItem.status == "review_required")
+        .order_by(db_mod.KnowledgeItem.created_at.desc())
+    )
+    if offset:
+        query = query.offset(max(0, int(offset)))
+    if limit:
+        query = query.limit(max(1, int(limit)))
+    items = query.all()
     results = []
     for item in items:
         metadata = _knowledge_item_metadata(item)
@@ -12106,7 +12174,7 @@ async def admin_astro_workspace_chat_session_message(
 @app.get("/admin/astro-workspace/quality/insights", response_class=HTMLResponse)
 @admin_required
 async def admin_astro_workspace_quality_insights(request: Request, db: Session = Depends(get_db), notice: str = ""):
-    insights = quality_svc.list_prompt_insights(db)
+    insights = quality_svc.list_prompt_insights(db, limit=DEFAULT_ADMIN_PAGE_SIZE)
     grouped = defaultdict(list)
     for item in insights:
         grouped[item.insight_type].append(item)
@@ -12162,7 +12230,7 @@ async def admin_astro_workspace_quality_insights_new(request: Request, db: Sessi
 @app.get("/admin/astro-workspace/quality", response_class=HTMLResponse)
 @admin_required
 async def admin_astro_workspace_quality(request: Request, db: Session = Depends(get_db), notice: str = ""):
-    dashboard = quality_svc.build_quality_dashboard(db)
+    dashboard = quality_svc.build_quality_dashboard(db, limit=MAX_ADMIN_PAGE_SIZE)
     interpretations = db.query(db_mod.InternalInterpretation).order_by(db_mod.InternalInterpretation.created_at.desc()).limit(30).all()
     review_map = {review.interpretation_id: review for review in quality_svc.list_reviews(db, limit=200)}
     rows = []
@@ -12365,7 +12433,7 @@ async def admin_training_hub(
     ).count()
 
     try:
-        coverage = coverage_svc.compute_knowledge_coverage(db)
+        coverage = coverage_svc.compute_knowledge_coverage(db, max_chunks=ADMIN_COVERAGE_MAX_CHUNKS)
     except Exception:
         coverage = {"summary": {}, "by_category": {}}
 
@@ -12469,11 +12537,12 @@ async def admin_training_qa(
 
 @app.get("/admin/training/dashboard", response_class=HTMLResponse)
 @admin_required
-async def admin_training_dashboard(request: Request, db: Session = Depends(get_db)):
-    evaluations = db.query(db_mod.EvaluationResult).order_by(db_mod.EvaluationResult.created_at.desc()).all()
-    tasks = db.query(db_mod.TrainingTask).order_by(db_mod.TrainingTask.created_at.desc()).all()
-    gaps = db.query(db_mod.KnowledgeGap).order_by(db_mod.KnowledgeGap.created_at.desc()).all()
-    knowledge_items = db.query(db_mod.KnowledgeItem).order_by(db_mod.KnowledgeItem.updated_at.desc()).all()
+async def admin_training_dashboard(request: Request, db: Session = Depends(get_db), page_size: int | None = None):
+    _page, limit, _offset = _admin_page_params(1, page_size)
+    evaluations = db.query(db_mod.EvaluationResult).order_by(db_mod.EvaluationResult.created_at.desc()).limit(limit).all()
+    tasks = db.query(db_mod.TrainingTask).order_by(db_mod.TrainingTask.created_at.desc()).limit(limit).all()
+    gaps = db.query(db_mod.KnowledgeGap).order_by(db_mod.KnowledgeGap.created_at.desc()).limit(limit).all()
+    knowledge_items = db.query(db_mod.KnowledgeItem).order_by(db_mod.KnowledgeItem.updated_at.desc()).limit(limit).all()
     by_report_type = defaultdict(lambda: {"count": 0, "accuracy_total": 0.0, "depth_total": 0.0, "safety_total": 0.0})
     issue_frequency = defaultdict(int)
     for row in evaluations:
@@ -12519,7 +12588,7 @@ async def admin_training_dashboard(request: Request, db: Session = Depends(get_d
 @app.get("/admin/knowledge/coverage", response_class=HTMLResponse)
 @admin_required
 async def admin_knowledge_coverage(request: Request, db: Session = Depends(get_db), notice: str = ""):
-    coverage = coverage_svc.compute_knowledge_coverage(db)
+    coverage = coverage_svc.compute_knowledge_coverage(db, max_chunks=ADMIN_COVERAGE_MAX_CHUNKS)
     return templates.TemplateResponse(
         request=request,
         name="admin/knowledge_coverage.html",
@@ -12531,6 +12600,14 @@ async def admin_knowledge_coverage(request: Request, db: Session = Depends(get_d
             notice=notice,
         ),
     )
+
+
+@app.post("/admin/knowledge/coverage/rebuild")
+@admin_required
+async def admin_knowledge_coverage_rebuild(request: Request, db: Session = Depends(get_db), csrf_token: str = Form(default="")):
+    await validate_csrf_token(request, csrf_token)
+    coverage_svc.compute_knowledge_coverage(db, max_chunks=ADMIN_COVERAGE_MAX_CHUNKS)
+    return RedirectResponse(url="/admin/knowledge/coverage?notice=coverage_refreshed", status_code=303)
 
 
 @app.post("/admin/knowledge/import-json")
@@ -12565,8 +12642,15 @@ async def admin_knowledge_import_json(
 
 @app.get("/admin/knowledge/review", response_class=HTMLResponse)
 @admin_required
-async def admin_knowledge_review_list(request: Request, db: Session = Depends(get_db), notice: str = ""):
-    items = _review_required_items(db)
+async def admin_knowledge_review_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    notice: str = "",
+    page: int = 1,
+    page_size: int | None = None,
+):
+    page, limit, offset = _admin_page_params(page, page_size)
+    items = _review_required_items(db, limit=limit, offset=offset)
     return templates.TemplateResponse(
         request=request,
         name="admin/knowledge_review.html",
@@ -12575,6 +12659,7 @@ async def admin_knowledge_review_list(request: Request, db: Session = Depends(ge
             active_page="knowledge_library",
             items=_knowledge_review_rows(items),
             notice=notice,
+            pagination={"page": page, "page_size": limit},
         ),
     )
 
@@ -12630,7 +12715,7 @@ async def admin_knowledge_review_auto_approve(
 ):
     await validate_csrf_token(request, csrf_token)
     approved_count = 0
-    for item in _review_required_items(db):
+    for item in _review_required_items(db, limit=MAX_ADMIN_PAGE_SIZE):
         metadata = _knowledge_item_metadata(item)
         confidence_level = str(metadata.get("confidence_level") or "").strip().lower()
         sensitivity_level = str(metadata.get("sensitivity_level") or "").strip().lower()
@@ -12761,18 +12846,28 @@ async def admin_knowledge_review_reject(
 
 @app.get("/admin/knowledge", response_class=HTMLResponse)
 @admin_required
-async def admin_knowledge_library(request: Request, db: Session = Depends(get_db), q: str = "", entity: str = ""):
+async def admin_knowledge_library(
+    request: Request,
+    db: Session = Depends(get_db),
+    q: str = "",
+    entity: str = "",
+    page: int = 1,
+    page_size: int | None = None,
+):
+    page, limit, offset = _admin_page_params(page, page_size)
     query = db.query(db_mod.KnowledgeItem)
     if str(q or "").strip():
         like = f"%{str(q).strip()}%"
         query = query.filter(or_(db_mod.KnowledgeItem.title.ilike(like), db_mod.KnowledgeItem.body_text.ilike(like)))
-    items = query.order_by(db_mod.KnowledgeItem.updated_at.desc()).all()
     if str(entity or "").strip():
-        items = [
-            item
-            for item in items
-            if str(entity).strip().lower() in (_json_loads_safe(item.entities_json, []) or [])
-        ]
+        entity_like = f"%{str(entity).strip().lower()}%"
+        query = query.filter(
+            or_(
+                db_mod.KnowledgeItem.entities_json.ilike(entity_like),
+                db_mod.KnowledgeItem.coverage_entities_json.ilike(entity_like),
+            )
+        )
+    items = query.order_by(db_mod.KnowledgeItem.updated_at.desc()).offset(offset).limit(limit).all()
     documents = db.query(db_mod.SourceDocument).order_by(db_mod.SourceDocument.updated_at.desc()).limit(50).all()
     return templates.TemplateResponse(
         request=request,
@@ -12783,14 +12878,22 @@ async def admin_knowledge_library(request: Request, db: Session = Depends(get_db
             items=items,
             documents=documents,
             filters={"q": q, "entity": entity},
+            pagination={"page": page, "page_size": limit},
         ),
     )
 
 
 @app.get("/admin/documents", response_class=HTMLResponse)
 @admin_required
-async def admin_documents(request: Request, db: Session = Depends(get_db), notice: str = ""):
-    documents = db.query(db_mod.SourceDocument).order_by(db_mod.SourceDocument.updated_at.desc()).all()
+async def admin_documents(
+    request: Request,
+    db: Session = Depends(get_db),
+    notice: str = "",
+    page: int = 1,
+    page_size: int | None = None,
+):
+    page, limit, offset = _admin_page_params(page, page_size)
+    documents = db.query(db_mod.SourceDocument).order_by(db_mod.SourceDocument.updated_at.desc()).offset(offset).limit(limit).all()
     rows = []
     for document in documents:
         metadata = _json_loads_safe(document.metadata_json, {}) or {}
@@ -12826,6 +12929,7 @@ async def admin_documents(request: Request, db: Session = Depends(get_db), notic
             active_page="documents",
             documents=rows,
             notice=notice,
+            pagination={"page": page, "page_size": limit},
         ),
     )
 
@@ -13226,11 +13330,18 @@ async def admin_knowledge_library_create(request: Request, db: Session = Depends
 
 @app.get("/admin/gaps", response_class=HTMLResponse)
 @admin_required
-async def admin_knowledge_gaps(request: Request, db: Session = Depends(get_db), status: str = "open"):
+async def admin_knowledge_gaps(
+    request: Request,
+    db: Session = Depends(get_db),
+    status: str = "open",
+    page: int = 1,
+    page_size: int | None = None,
+):
+    page, limit, offset = _admin_page_params(page, page_size)
     query = db.query(db_mod.KnowledgeGap)
     if str(status or "").strip():
         query = query.filter(db_mod.KnowledgeGap.status == str(status).strip())
-    gaps = query.order_by(db_mod.KnowledgeGap.created_at.desc()).all()
+    gaps = query.order_by(db_mod.KnowledgeGap.created_at.desc()).offset(offset).limit(limit).all()
     return templates.TemplateResponse(
         request=request,
         name="admin/knowledge_gaps.html",
@@ -13239,17 +13350,25 @@ async def admin_knowledge_gaps(request: Request, db: Session = Depends(get_db), 
             active_page="knowledge_gaps",
             gaps=gaps,
             status=status,
+            pagination={"page": page, "page_size": limit},
         ),
     )
 
 
 @app.get("/admin/evaluations", response_class=HTMLResponse)
 @admin_required
-async def admin_evaluation_logs(request: Request, db: Session = Depends(get_db), report_type: str = ""):
+async def admin_evaluation_logs(
+    request: Request,
+    db: Session = Depends(get_db),
+    report_type: str = "",
+    page: int = 1,
+    page_size: int | None = None,
+):
+    page, limit, offset = _admin_page_params(page, page_size)
     query = db.query(db_mod.EvaluationResult)
     if str(report_type or "").strip():
         query = query.filter(db_mod.EvaluationResult.report_type == str(report_type).strip())
-    evaluations = query.order_by(db_mod.EvaluationResult.created_at.desc()).all()
+    evaluations = query.order_by(db_mod.EvaluationResult.created_at.desc()).offset(offset).limit(limit).all()
     return templates.TemplateResponse(
         request=request,
         name="admin/evaluation_logs.html",
@@ -13258,20 +13377,29 @@ async def admin_evaluation_logs(request: Request, db: Session = Depends(get_db),
             active_page="evaluation_logs",
             evaluations=evaluations,
             report_type=report_type,
+            pagination={"page": page, "page_size": limit},
         ),
     )
 
 
 @app.get("/admin/tasks", response_class=HTMLResponse)
 @admin_required
-async def admin_training_tasks(request: Request, db: Session = Depends(get_db), status: str = ""):
-    if not str(status or "").strip():
-        training_service.generate_training_tasks_from_gaps(db, created_by_user_id=getattr(request.state.admin_user, "id", None))
+async def admin_training_tasks(
+    request: Request,
+    db: Session = Depends(get_db),
+    status: str = "",
+    page: int = 1,
+    page_size: int | None = None,
+    refresh: str = "",
+):
+    page, limit, offset = _admin_page_params(page, page_size)
+    if str(refresh or "").lower() in {"1", "true", "yes", "on"}:
+        training_service.generate_training_tasks_from_gaps(db, created_by_user_id=getattr(request.state.admin_user, "id", None), limit=limit)
         db.commit()
     query = db.query(db_mod.TrainingTask)
     if str(status or "").strip():
         query = query.filter(db_mod.TrainingTask.status == str(status).strip())
-    tasks = query.order_by(db_mod.TrainingTask.created_at.desc()).all()
+    tasks = query.order_by(db_mod.TrainingTask.created_at.desc()).offset(offset).limit(limit).all()
     return templates.TemplateResponse(
         request=request,
         name="admin/training_tasks.html",
@@ -13280,6 +13408,7 @@ async def admin_training_tasks(request: Request, db: Session = Depends(get_db), 
             active_page="training_tasks",
             tasks=tasks,
             status=status,
+            pagination={"page": page, "page_size": limit},
         ),
     )
 

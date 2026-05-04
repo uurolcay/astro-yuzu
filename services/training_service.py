@@ -10,12 +10,20 @@ def _loads(value, default):
         return default
 
 
-def generate_training_tasks_from_gaps(db, *, created_by_user_id=None, status="open"):
-    gaps = (
+def generate_training_tasks_from_gaps(db, *, created_by_user_id=None, status="open", limit=None):
+    try:
+        limit = int(limit) if limit is not None else None
+    except (TypeError, ValueError):
+        limit = None
+    query = (
         db.query(db_mod.KnowledgeGap)
         .filter(db_mod.KnowledgeGap.status == status)
         .order_by(db_mod.KnowledgeGap.created_at.desc())
-        .all()
+    )
+    if limit and limit > 0:
+        query = query.limit(limit)
+    gaps = (
+        query.all()
     )
     created = []
     for gap in gaps:

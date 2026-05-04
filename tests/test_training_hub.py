@@ -120,6 +120,23 @@ class TrainingHubTests(unittest.TestCase):
         self.assertIn("Knowledge K", response.text)
         self.assertIn("Training Hub", response.text)
 
+    def test_knowledge_library_route_is_paginated(self):
+        for index in range(3):
+            self.db.add(
+                db_mod.KnowledgeItem(
+                    title=f"Paged Library {index}",
+                    item_type="reference",
+                    language="tr",
+                    body_text="Paged body",
+                    status="active",
+                )
+            )
+        self.db.commit()
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            response = self.client.get("/admin/knowledge?page_size=2")
+        self.assertEqual(response.status_code, 200)
+        self.assertLessEqual(response.text.count("Paged Library"), 2)
+
     def test_existing_documents_route_still_works(self):
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
             response = self.client.get("/admin/documents")

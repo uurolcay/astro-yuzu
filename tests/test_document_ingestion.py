@@ -387,6 +387,14 @@ class DocumentIngestionTests(unittest.TestCase):
         self.assertIn("Process", page.text)
         self.assertIn("/process", page.text)
 
+    def test_documents_page_is_paginated_for_large_document_lists(self):
+        for index in range(3):
+            self._uploaded_document(title=f"Paged Document {index}")
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            page = self.client.get("/admin/documents?page_size=2")
+        self.assertEqual(page.status_code, 200)
+        self.assertLessEqual(page.text.count("Paged Document"), 2)
+
     def test_non_admin_access_is_blocked(self):
         response = self.client.get("/admin/documents", follow_redirects=False)
         self.assertIn(response.status_code, {302, 303, 307, 401, 403})

@@ -121,6 +121,21 @@ class BulkReviewWorkflowTests(unittest.TestCase):
         self.assertEqual(refreshed_two.status, "published")
         self.assertFalse(json.loads(refreshed_one.metadata_json).get("review_required"))
 
+    def test_bulk_approve_does_not_rebuild_coverage_synchronously(self):
+        item_id = self._review_item(title="Bulk No Coverage Rebuild")
+        csrf = self._csrf()
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair), patch.object(
+            app.coverage_svc,
+            "compute_knowledge_coverage",
+            side_effect=AssertionError("coverage rebuild must stay manual"),
+        ):
+            response = self.client.post(
+                "/admin/knowledge/review/bulk-approve",
+                data={"csrf_token": csrf, "knowledge_ids": [str(item_id)]},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
+
     def test_bulk_reject_works(self):
         item_one_id = self._review_item(title="Bulk Reject One")
         item_two_id = self._review_item(title="Bulk Reject Two")

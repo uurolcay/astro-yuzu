@@ -1,4 +1,5 @@
 import json
+import re
 import unittest
 from unittest.mock import patch
 
@@ -229,6 +230,41 @@ class KnowledgeCoverageTests(unittest.TestCase):
             response = self.client.get("/admin/knowledge/coverage")
         self.assertEqual(response.status_code, 200)
 
+    def test_admin_knowledge_coverage_route_uses_limited_scan(self):
+        safe_coverage = {
+            "summary": {"total_entities": 0, "missing_count": 0, "weak_count": 0, "moderate_count": 0, "strong_count": 0, "overall_pct": 0},
+            "by_category": {},
+            "missing_entities": [],
+            "weak_entities": [],
+        }
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair), patch.object(
+            app.coverage_svc,
+            "compute_knowledge_coverage",
+            return_value=safe_coverage,
+        ) as compute:
+            response = self.client.get("/admin/knowledge/coverage")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(compute.call_args.kwargs.get("max_chunks"), app.ADMIN_COVERAGE_MAX_CHUNKS)
+
+    def test_coverage_rebuild_is_manual_post_route(self):
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            page = self.client.get("/admin/knowledge/coverage")
+        match = re.search(r'name=["\']csrf_token["\'][^>]*value=["\']([^"\']+)["\']', page.text)
+        self.assertIsNotNone(match)
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair), patch.object(
+            app.coverage_svc,
+            "compute_knowledge_coverage",
+            return_value={"summary": {}, "by_category": {}, "missing_entities": [], "weak_entities": []},
+        ) as compute:
+            response = self.client.post(
+                "/admin/knowledge/coverage/rebuild",
+                data={"csrf_token": match.group(1)},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("coverage_refreshed", response.headers.get("location", ""))
+        self.assertEqual(compute.call_args.kwargs.get("max_chunks"), app.ADMIN_COVERAGE_MAX_CHUNKS)
+
     def test_admin_interpretation_knowledge_route_returns_200_for_admin(self):
         interpretation = db_mod.InternalInterpretation(
             profile=self.profile,
@@ -247,4 +283,3 @@ class KnowledgeCoverageTests(unittest.TestCase):
         response_two = self.client.get("/admin/astro-workspace/quality/1/knowledge", follow_redirects=False)
         self.assertIn(response_one.status_code, {302, 303, 307, 401, 403})
         self.assertIn(response_two.status_code, {302, 303, 307, 401, 403})
-

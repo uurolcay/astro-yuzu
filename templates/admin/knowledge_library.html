@@ -96,7 +96,7 @@
     </thead>
     <tbody>
       {% for item in items %}
-      {% set entities = json_loads_safe(item.entities_json, []) %}
+      {% set entities = json_loads_safe(item.entities_json, []) or [] %}
       <tr>
         <td>{{ item.title }}</td>
         <td>

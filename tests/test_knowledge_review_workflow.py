@@ -94,6 +94,14 @@ class KnowledgeReviewWorkflowTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(item_title, response.text)
 
+    def test_review_list_is_paginated(self):
+        for index in range(3):
+            self._review_item(title=f"Paged Review {index}")
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            response = self.client.get("/admin/knowledge/review?page_size=2")
+        self.assertEqual(response.status_code, 200)
+        self.assertLessEqual(response.text.count("Paged Review"), 2)
+
     def test_detail_page_opens(self):
         item = self._review_item()
         item_id = item.id
@@ -158,6 +166,22 @@ class KnowledgeReviewWorkflowTests(unittest.TestCase):
         self.db.expire_all()
         after = retrieval_service.build_prompt_knowledge_context(payload, db=self.db)
         self.assertGreaterEqual(len(after["chunks"]), 1)
+
+    def test_publish_does_not_rebuild_coverage_synchronously(self):
+        item = self._review_item(title="No Sync Coverage", entities=["career", "ashwini"])
+        item_id = item.id
+        csrf = self._csrf(f"/admin/knowledge/review/{item_id}")
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair), patch.object(
+            app.coverage_svc,
+            "compute_knowledge_coverage",
+            side_effect=AssertionError("coverage rebuild must stay manual"),
+        ):
+            response = self.client.post(
+                f"/admin/knowledge/review/{item_id}/publish",
+                data={"csrf_token": csrf},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
 
     def test_reject_item_excludes_it_from_retrieval(self):
         item = self._review_item(title="Rejectable Ashwini", entities=["career", "ashwini"])

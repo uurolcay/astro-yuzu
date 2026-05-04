@@ -350,7 +350,7 @@ def _coverage_level(chunk_count: int) -> tuple[str, int]:
     return "strong", 100
 
 
-def compute_knowledge_coverage(db) -> dict:
+def compute_knowledge_coverage(db, *, max_chunks=None) -> dict:
     """
     Compute coverage across ASTRO_ENTITY_TAXONOMY.
     """
@@ -368,6 +368,38 @@ def compute_knowledge_coverage(db) -> dict:
         "weak_entities": [],
     }
     try:
+        try:
+            max_chunks = int(max_chunks) if max_chunks is not None else None
+        except (TypeError, ValueError):
+            max_chunks = None
+        chunk_query = db.query(db_mod.KnowledgeChunk).order_by(db_mod.KnowledgeChunk.created_at.desc())
+        if max_chunks and max_chunks > 0:
+            chunk_query = chunk_query.limit(max_chunks)
+        chunks = chunk_query.all()
+        entity_counts = Counter()
+        for chunk in chunks:
+            chunk_entities = set()
+            for candidate in _loads(getattr(chunk, "coverage_entities_json", None), []):
+                normalized = normalize_entity(candidate)
+                if normalized:
+                    chunk_entities.add(normalized)
+            knowledge_item = getattr(chunk, "knowledge_item", None)
+            if knowledge_item is not None:
+                for candidate in _loads(getattr(knowledge_item, "coverage_entities_json", None), []):
+                    normalized = normalize_entity(candidate)
+                    if normalized:
+                        chunk_entities.add(normalized)
+            chunk_text = str(getattr(chunk, "chunk_text", "") or "").lower()
+            for category_entities in ASTRO_ENTITY_TAXONOMY.values():
+                for entity in category_entities:
+                    normalized_entity = normalize_entity(entity)
+                    if normalized_entity in chunk_entities:
+                        continue
+                    if any(variant in chunk_text for variant in _readable_variants(normalized_entity)):
+                        chunk_entities.add(normalized_entity)
+            for entity in chunk_entities:
+                entity_counts[entity] += 1
+
         by_category = {}
         all_pcts = []
         missing_entities = []
@@ -377,7 +409,7 @@ def compute_knowledge_coverage(db) -> dict:
         for category, entities in ASTRO_ENTITY_TAXONOMY.items():
             category_rows = {}
             for entity in entities:
-                chunk_count = count_chunks_for_entity(db, entity)
+                chunk_count = entity_counts[normalize_entity(entity)]
                 level, pct = _coverage_level(chunk_count)
                 category_rows[entity] = {
                     "chunk_count": chunk_count,

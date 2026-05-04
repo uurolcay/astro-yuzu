@@ -8,6 +8,10 @@
   </div>
   <div class="admin-page-actions">
     <a class="btn-admin btn-admin-secondary" href="/admin/astro-workspace/quality">AI Yorum Kalitesi</a>
+    <form method="post" action="/admin/knowledge/coverage/rebuild" style="display:inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn-admin btn-admin-primary" type="submit">Refresh Knowledge Coverage</button>
+    </form>
   </div>
 </section>
 

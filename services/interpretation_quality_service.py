@@ -207,7 +207,7 @@ def list_reviews(db, *, report_type: str | None = None, status: str | None = Non
     return query.order_by(db_mod.InterpretationReview.created_at.desc()).limit(limit).all()
 
 
-def build_quality_dashboard(db) -> dict:
+def build_quality_dashboard(db, *, limit: int = 200) -> dict:
     empty = {
         "total_reviews": 0,
         "avg_rating_overall": None,
@@ -219,7 +219,13 @@ def build_quality_dashboard(db) -> dict:
         "recent_rejected": [],
     }
     try:
-        reviews = db.query(db_mod.InterpretationReview).join(db_mod.InternalInterpretation).order_by(db_mod.InterpretationReview.created_at.desc()).all()
+        reviews = (
+            db.query(db_mod.InterpretationReview)
+            .join(db_mod.InternalInterpretation)
+            .order_by(db_mod.InterpretationReview.created_at.desc())
+            .limit(max(1, int(limit or 200)))
+            .all()
+        )
         if not reviews:
             return empty
         ratings = [review.rating_overall for review in reviews if review.rating_overall is not None]

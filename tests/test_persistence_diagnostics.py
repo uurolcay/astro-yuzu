@@ -121,6 +121,12 @@ class PersistenceDiagnosticsTests(unittest.TestCase):
             "db_disconnect_patterns_enabled",
             "upload_dir_writable",
             "document_processing",
+            "admin_performance",
+            "admin_page_size_default",
+            "admin_page_size_max",
+            "request_tracing_enabled",
+            "coverage_rebuild_sync_enabled",
+            "approved_chunks_count",
         ):
             self.assertIn(key, payload)
         for key in (
@@ -131,12 +137,25 @@ class PersistenceDiagnosticsTests(unittest.TestCase):
             "is_sqlite",
             "db_disconnect_patterns_enabled",
             "upload_dir_writable",
+            "request_tracing_enabled",
+            "coverage_rebuild_sync_enabled",
         ):
             self.assertIsInstance(payload[key], bool)
         self.assertIn("sync_upload_processing_enabled", payload["document_processing"])
         self.assertIn("async_document_processing_enabled", payload["document_processing"])
         self.assertIn("max_pdf_pages_per_request", payload["document_processing"])
         self.assertIn("max_chunks_per_request", payload["document_processing"])
+        self.assertIn("admin_page_size_default", payload["admin_performance"])
+        self.assertIn("admin_page_size_max", payload["admin_performance"])
+
+    def test_admin_request_tracing_logs_start_and_end(self):
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair), self.assertLogs(app.logger, level="INFO") as captured:
+            response = self.client.get("/admin/debug/storage")
+        self.assertEqual(response.status_code, 200)
+        joined = "\n".join(captured.output)
+        self.assertIn("ADMIN_REQUEST_START", joined)
+        self.assertIn("ADMIN_REQUEST_END", joined)
+        self.assertIn("GET /admin/debug/storage", joined)
 
     def test_storage_debug_route_blocks_non_admin(self):
         with patch.object(app, "_require_admin_user", side_effect=self._request_member_pair):
