@@ -292,7 +292,14 @@ def parse_usd_try_rate(value) -> Decimal | None:
 
 
 def get_usd_try_rate(db: Session) -> Decimal | None:
-    return parse_usd_try_rate(get_setting(db, "site_usd_try_rate", ""))
+    configured_rate = parse_usd_try_rate(get_setting(db, "site_usd_try_rate", ""))
+    if configured_rate:
+        return configured_rate
+    for env_key in ("SITE_USD_TRY_RATE", "USD_TRY_RATE"):
+        env_rate = parse_usd_try_rate(os.getenv(env_key, ""))
+        if env_rate:
+            return env_rate
+    return None
 
 
 def format_price_html(value, language: str = "tr", usd_try_rate: Decimal | None = None) -> str:

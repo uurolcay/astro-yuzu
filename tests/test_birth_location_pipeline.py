@@ -427,6 +427,18 @@ class BirthLocationPipelineTests(unittest.TestCase):
         self.assertIn('data-language-btn="en" aria-current="true" aria-disabled="true" disabled', en_response.text)
         self.assertIn('data-language-btn="tr">TR</button>', en_response.text)
 
+    def test_mobile_header_keeps_language_switcher_in_tappable_utility_row(self):
+        client = TestClient(app.app)
+        response = client.get("/", headers={"accept-language": "tr"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('@media (max-width: 960px)', response.text)
+        self.assertIn('"brand utilities"', response.text)
+        self.assertIn('"nav nav"', response.text)
+        self.assertIn(".nav-utilities", response.text)
+        self.assertIn("grid-area: utilities", response.text)
+        self.assertIn("min-height: 38px", response.text)
+
     def test_homepage_instagram_links_use_feruze_account(self):
         client = TestClient(app.app)
         response = client.get("/")

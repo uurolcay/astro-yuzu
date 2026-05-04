@@ -591,10 +591,19 @@ class MonetizationFlowTests(unittest.TestCase):
         self.assertIn("≈ $58", response.text)
         self.assertIn("Charged in Turkish lira. USD amounts are approximate.", response.text)
 
+    def test_reports_page_formats_english_prices_with_approximate_usd_from_env_fallback(self):
+        with patch.dict("os.environ", {"SITE_USD_TRY_RATE": "45.2", "USD_TRY_RATE": ""}, clear=False):
+            response = self.client.get("/reports", headers={"accept-language": "en"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("₺1,900 TL", response.text)
+        self.assertIn("≈ $42", response.text)
+
     def test_reports_page_hides_approximate_usd_when_rate_setting_is_blank(self):
         self._set_site_setting("site_usd_try_rate", "")
 
-        response = self.client.get("/reports", headers={"accept-language": "en"})
+        with patch.dict("os.environ", {"SITE_USD_TRY_RATE": "", "USD_TRY_RATE": ""}, clear=False):
+            response = self.client.get("/reports", headers={"accept-language": "en"})
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("₺1,900 TL", response.text)

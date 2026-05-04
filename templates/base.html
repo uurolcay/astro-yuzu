@@ -1015,6 +1015,10 @@
         }
 
         @media (max-width: 960px) {
+            :root {
+                --nav-height: 124px;
+            }
+
             .grid-4,
             .grid-3,
             .grid-2 {
@@ -1022,15 +1026,24 @@
             }
 
             .site-header-inner {
-                align-items: flex-start;
-                padding: 10px 0;
-                flex-direction: column;
+                grid-template-columns: minmax(0, 1fr) auto;
+                grid-template-areas:
+                    "brand utilities"
+                    "nav nav";
+                align-items: center;
+                gap: 8px 10px;
+                padding: 8px 0 10px;
                 width: min(var(--max-width), calc(100% - 32px));
             }
 
+            .site-header-inner > .brand {
+                grid-area: brand;
+                min-width: 0;
+            }
+
             .brand-logo {
-                width: 300px;
-                height: 68px;
+                width: clamp(150px, 44vw, 220px);
+                height: 52px;
             }
 
             .nav-cluster,
@@ -1041,7 +1054,15 @@
             }
 
             .nav-links {
-                gap: 14px;
+                grid-area: nav;
+                gap: 12px;
+                overflow-x: auto;
+                padding-bottom: 4px;
+                scrollbar-width: none;
+            }
+
+            .nav-links::-webkit-scrollbar {
+                display: none;
             }
 
             .nav-dropdown-panel {
@@ -1055,9 +1076,26 @@
 
             .nav-utilities,
             .auth-links {
-                width: 100%;
-                justify-content: flex-start;
-                flex-wrap: wrap;
+                flex-wrap: nowrap;
+            }
+
+            .nav-utilities {
+                grid-area: utilities;
+                width: auto;
+                justify-content: flex-end;
+                gap: 6px;
+                position: relative;
+                z-index: 25;
+            }
+
+            .language-toggle {
+                flex-shrink: 0;
+            }
+
+            .language-btn {
+                min-width: 40px;
+                min-height: 38px;
+                padding: 0 10px;
             }
 
             .theme-toggle {
