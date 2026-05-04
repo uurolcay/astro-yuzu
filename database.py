@@ -1,13 +1,31 @@
 import os
+import logging
 from datetime import datetime
 from pathlib import Path
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, create_engine, inspect, text
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, create_engine, event, inspect, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_SQLITE_PATH = BASE_DIR / "astro_logic.db"
+logger = logging.getLogger(__name__)
+
+DB_DISCONNECT_PATTERNS = (
+    "SSL error: decryption failed or bad record mac",
+    "SSL SYSCALL",
+    "server closed the connection unexpectedly",
+    "connection already closed",
+    "terminating connection",
+    "EOF detected",
+)
+
+
+def _int_env(name: str, default: str) -> int:
+    try:
+        return int(os.getenv(name, default))
+    except (TypeError, ValueError):
+        return int(default)
 
 
 def resolve_database_url(raw_value: str | None = None) -> str:
@@ -20,8 +38,61 @@ def resolve_database_url(raw_value: str | None = None) -> str:
 
 
 SQLALCHEMY_DATABASE_URL = resolve_database_url()
-_ENGINE_CONNECT_ARGS = {"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {}
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args=_ENGINE_CONNECT_ARGS)
+
+
+def _is_postgresql_url(database_url: str) -> bool:
+    return str(database_url or "").split(":", 1)[0].split("+", 1)[0].lower() == "postgresql"
+
+
+def get_postgresql_pool_settings() -> dict:
+    return {
+        "pool_pre_ping": True,
+        "pool_recycle": _int_env("DB_POOL_RECYCLE_SECONDS", "300"),
+        "pool_timeout": _int_env("DB_POOL_TIMEOUT_SECONDS", "30"),
+        "pool_size": _int_env("DB_POOL_SIZE", "5"),
+        "max_overflow": _int_env("DB_MAX_OVERFLOW", "5"),
+    }
+
+
+def build_engine_kwargs(database_url: str) -> dict:
+    if str(database_url or "").startswith("sqlite"):
+        return {"connect_args": {"check_same_thread": False}}
+    if _is_postgresql_url(database_url):
+        return get_postgresql_pool_settings()
+    return {}
+
+
+def is_db_disconnect_error(exc) -> bool:
+    message = str(exc or "")
+    lowered = message.lower()
+    return any(pattern.lower() in lowered for pattern in DB_DISCONNECT_PATTERNS)
+
+
+def _database_url_uses_internal_hint(value: str) -> bool:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return False
+    host_part = raw.split("@", 1)[-1].split("/", 1)[0].split(":", 1)[0]
+    return "internal" in host_part or ".svc" in host_part
+
+
+_ENGINE_KWARGS = build_engine_kwargs(SQLALCHEMY_DATABASE_URL)
+engine = create_engine(SQLALCHEMY_DATABASE_URL, **_ENGINE_KWARGS)
+
+
+if _is_postgresql_url(SQLALCHEMY_DATABASE_URL):
+    @event.listens_for(engine, "handle_error")
+    def _mark_disconnect_errors(context):
+        original_exception = getattr(context, "original_exception", None)
+        sqlalchemy_exception = getattr(context, "sqlalchemy_exception", None)
+        if is_db_disconnect_error(original_exception) or is_db_disconnect_error(sqlalchemy_exception):
+            try:
+                context.is_disconnect = True
+            except Exception:
+                pass
+            logger.warning("Database disconnect detected; SQLAlchemy will recycle connection")
+
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -46,6 +117,8 @@ def get_engine_diagnostics():
     url_obj = engine.url
     dialect = str(getattr(url_obj, "drivername", "") or "").split("+", 1)[0]
     database_value = str(getattr(url_obj, "database", "") or "").strip()
+    is_postgresql = dialect == "postgresql"
+    pool_settings = get_postgresql_pool_settings()
     sqlite_file_path = ""
     sqlite_file_exists = False
     sqlite_file_size = 0
@@ -64,6 +137,12 @@ def get_engine_diagnostics():
         "sqlite_file_size": sqlite_file_size,
         "database_url_missing": not bool(str(os.getenv("DATABASE_URL", "")).strip()),
         "is_in_memory": dialect == "sqlite" and database_value == ":memory:",
+        "db_pool_pre_ping": bool(pool_settings["pool_pre_ping"]) if is_postgresql else False,
+        "db_pool_recycle_seconds": pool_settings["pool_recycle"] if is_postgresql else None,
+        "db_pool_size": pool_settings["pool_size"] if is_postgresql else None,
+        "db_max_overflow": pool_settings["max_overflow"] if is_postgresql else None,
+        "database_url_uses_internal_hint": _database_url_uses_internal_hint(str(os.getenv("DATABASE_URL", "") or SQLALCHEMY_DATABASE_URL)),
+        "db_disconnect_patterns_enabled": True,
     }
 
 class UserRecord(Base):

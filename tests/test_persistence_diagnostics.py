@@ -3,10 +3,13 @@ import os
 import re
 import tempfile
 import unittest
+import base64
+from types import SimpleNamespace
 from unittest.mock import patch
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import OperationalError
 
 import app
 import database as db_mod
@@ -110,8 +113,22 @@ class PersistenceDiagnosticsTests(unittest.TestCase):
             "upload_dir_may_be_ephemeral",
             "is_postgresql",
             "is_sqlite",
+            "db_pool_pre_ping",
+            "db_pool_recycle_seconds",
+            "db_pool_size",
+            "db_max_overflow",
+            "database_url_uses_internal_hint",
+            "db_disconnect_patterns_enabled",
         ):
             self.assertIn(key, payload)
+        for key in (
+            "database_url_missing",
+            "production_sqlite_detected",
+            "upload_dir_may_be_ephemeral",
+            "is_postgresql",
+            "is_sqlite",
+            "db_disconnect_patterns_enabled",
+        ):
             self.assertIsInstance(payload[key], bool)
 
     def test_storage_debug_route_blocks_non_admin(self):
@@ -184,6 +201,64 @@ class PersistenceDiagnosticsTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertTrue(payload["upload_dir_may_be_ephemeral"])
+
+    def test_postgres_engine_options_include_pool_pre_ping(self):
+        kwargs = db_mod.build_engine_kwargs("postgresql://user:pass@localhost/db")
+        self.assertTrue(kwargs["pool_pre_ping"])
+        self.assertEqual(kwargs["pool_timeout"], int(os.getenv("DB_POOL_TIMEOUT_SECONDS", "30")))
+        self.assertIn("pool_size", kwargs)
+        self.assertIn("max_overflow", kwargs)
+
+    def test_postgres_pool_recycle_env_is_read(self):
+        with patch.dict(os.environ, {"DB_POOL_RECYCLE_SECONDS": "123"}, clear=False):
+            kwargs = db_mod.build_engine_kwargs("postgresql://user:pass@localhost/db")
+        self.assertEqual(kwargs["pool_recycle"], 123)
+
+    def test_disconnect_error_detects_ssl_bad_record_mac(self):
+        exc = OperationalError(
+            "SELECT 1",
+            {},
+            Exception("SSL error: decryption failed or bad record mac"),
+        )
+        self.assertTrue(db_mod.is_db_disconnect_error(exc))
+
+    def test_signed_cookie_user_lookup_operational_error_returns_none(self):
+        class _BrokenQuery:
+            def filter(self, *args, **kwargs):
+                return self
+
+            def first(self):
+                raise OperationalError(
+                    "SELECT app_users",
+                    {},
+                    Exception("SSL error: decryption failed or bad record mac"),
+                )
+
+        class _BrokenDb:
+            def __init__(self):
+                self.rolled_back = False
+
+            def query(self, *args, **kwargs):
+                return _BrokenQuery()
+
+            def rollback(self):
+                self.rolled_back = True
+
+        class _RetryDb(_BrokenDb):
+            def close(self):
+                pass
+
+        payload = base64.b64encode(json.dumps({"user_id": self.admin_id}).encode("utf-8")).decode("utf-8")
+        signed = app.TimestampSigner(str(app.SESSION_SECRET_KEY)).sign(payload.encode("utf-8")).decode("utf-8")
+        request = SimpleNamespace(cookies={"session": signed})
+        broken_db = _BrokenDb()
+        retry_db = _RetryDb()
+        with patch.object(db_mod, "SessionLocal", return_value=retry_db), patch.object(db_mod.engine, "dispose") as dispose:
+            user = app._request_user_from_signed_cookie(request, broken_db)
+        self.assertIsNone(user)
+        self.assertTrue(broken_db.rolled_back)
+        self.assertTrue(retry_db.rolled_back)
+        self.assertTrue(dispose.called)
 
     def test_init_db_does_not_delete_existing_data(self):
         self._review_item()

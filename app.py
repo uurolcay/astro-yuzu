@@ -33,7 +33,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, inspect as sa_inspect, or_, text as sa_text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 from itsdangerous import BadSignature, TimestampSigner
@@ -1160,8 +1160,58 @@ def get_request_user(request, db):
     user_id = request.session.get("user_id") if "session" in request.scope else None
     if not user_id:
         return None
-    user = db.query(db_mod.AppUser).filter(db_mod.AppUser.id == user_id, db_mod.AppUser.is_active.is_(True)).first()
-    return user
+    return _lookup_active_user_with_recovery(db, user_id, context="session")
+
+
+def _short_exception_message(exc, limit=220):
+    text = " ".join(str(exc or "").split())
+    return text[:limit]
+
+
+def _rollback_quietly(db):
+    try:
+        db.rollback()
+    except Exception:
+        pass
+
+
+def _dispose_engine_for_disconnect(exc):
+    if db_mod.is_db_disconnect_error(exc):
+        try:
+            db_mod.engine.dispose()
+        except Exception:
+            pass
+
+
+def _lookup_active_user_with_recovery(db, user_id, *, context):
+    try:
+        return db.query(db_mod.AppUser).filter(db_mod.AppUser.id == user_id, db_mod.AppUser.is_active.is_(True)).first()
+    except OperationalError as exc:
+        _rollback_quietly(db)
+        _dispose_engine_for_disconnect(exc)
+        logger.warning(
+            "User context DB lookup failed context=%s exception_type=%s short_message=%s disconnect=%s",
+            context,
+            type(exc).__name__,
+            _short_exception_message(exc),
+            db_mod.is_db_disconnect_error(exc),
+        )
+        retry_db = db_mod.SessionLocal()
+        try:
+            return retry_db.query(db_mod.AppUser).filter(db_mod.AppUser.id == user_id, db_mod.AppUser.is_active.is_(True)).first()
+        except OperationalError as retry_exc:
+            _rollback_quietly(retry_db)
+            _dispose_engine_for_disconnect(retry_exc)
+            logger.warning(
+                "User context DB retry failed context=%s exception_type=%s short_message=%s disconnect=%s",
+                context,
+                type(retry_exc).__name__,
+                _short_exception_message(retry_exc),
+                db_mod.is_db_disconnect_error(retry_exc),
+            )
+            return None
+        finally:
+            retry_db.close()
 
 
 def _request_user_from_signed_cookie(request, db):
@@ -1177,7 +1227,7 @@ def _request_user_from_signed_cookie(request, db):
         return None
     if not user_id:
         return None
-    return db.query(db_mod.AppUser).filter(db_mod.AppUser.id == user_id, db_mod.AppUser.is_active.is_(True)).first()
+    return _lookup_active_user_with_recovery(db, user_id, context="signed_cookie")
 
 
 def _admin_email_allowlist():
@@ -5283,6 +5333,27 @@ async def load_user_context(request: Request, call_next):
             body = await request.body()
             if not verify_csrf_token(request, _csrf_token_from_body(request, body)):
                 return Response("Invalid CSRF token", status_code=403, media_type="text/plain")
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+        return response
+    except OperationalError as exc:
+        _rollback_quietly(db)
+        _dispose_engine_for_disconnect(exc)
+        logger.warning(
+            "User context middleware DB failure path=%s exception_type=%s short_message=%s disconnect=%s",
+            request.url.path,
+            type(exc).__name__,
+            _short_exception_message(exc),
+            db_mod.is_db_disconnect_error(exc),
+        )
+        request.state.current_user = None
+        request.state.current_user_id = None
+        request.state.plan_code = "free"
+        request.state.plan_features = get_plan_features("free")
+        request.state.lang = get_preferred_language(request, None)
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
@@ -12748,78 +12819,89 @@ async def admin_documents_upload(
     destination = upload_dir / stored_name
     contents = await file.read()
     destination.write_bytes(contents)
-    source_document = db_mod.SourceDocument(
-        title=str(title or "").strip() or Path(filename).stem or "Uploaded document",
-        file_path=str(destination),
-        document_type=str(document_type or "book").strip() or "book",
-        source_label=filename,
-        content_text=None,
-        created_by_user_id=getattr(admin_user, "id", None),
-        uploaded_at=datetime.utcnow(),
-    )
-    db.add(source_document)
-    db.flush()
+    try:
+        source_document = db_mod.SourceDocument(
+            title=str(title or "").strip() or Path(filename).stem or "Uploaded document",
+            file_path=str(destination),
+            document_type=str(document_type or "book").strip() or "book",
+            source_label=filename,
+            content_text=None,
+            created_by_user_id=getattr(admin_user, "id", None),
+            uploaded_at=datetime.utcnow(),
+        )
+        db.add(source_document)
+        db.flush()
 
-    diagnostics = document_parser.parse_pdf_with_diagnostics(destination)
-    text_blocks = list(diagnostics.get("blocks") or [])
-    page_blocks = list(diagnostics.get("page_blocks") or [])
-    chunk_input = page_blocks or text_blocks
-    meaningful_chunks = document_chunker.chunk_text_blocks(chunk_input)
-    source_document.content_text = "\n\n".join(
-        (block.get("text") if isinstance(block, dict) else str(block)) for block in (page_blocks or text_blocks)
-    ) if (page_blocks or text_blocks) else None
-    source_document.metadata_json = json.dumps(
-        {
-            "processing_status": "processed" if meaningful_chunks else "parse_empty",
-            "block_count": len(text_blocks),
-            "chunk_count": len(meaningful_chunks),
-            "parser_diagnostics": diagnostics,
-        },
-        ensure_ascii=False,
-    )
-    for index, chunk in enumerate(meaningful_chunks, start=1):
-        chunk_title = str(chunk.get("title") or f"{source_document.title} {index}").strip()
-        coverage_entities = chunk.get("coverage_entities") or []
-        item = knowledge_service.create_knowledge_item(
-            db,
-            title=chunk_title,
-            body_text=str(chunk.get("text") or "").strip(),
-            language="tr",
-            item_type=str(chunk.get("category") or "reference"),
-            summary_text=str(chunk.get("topic") or "").strip() or chunk_title,
-            entities=coverage_entities,
-            source_document=source_document,
-                metadata={
-                    "document_id": source_document.id,
-                    "document_type": source_document.document_type,
-                    "topic": chunk.get("topic"),
-                    "primary_entity": chunk.get("entity"),
-                    "category": chunk.get("category"),
-                    "source_file_path": str(destination),
-                    "source_page_start": chunk.get("source_page_start"),
-                    "source_page_end": chunk.get("source_page_end"),
-                    "is_toc": bool(chunk.get("is_toc")),
-                    "is_index": bool(chunk.get("is_index")),
-                    "noise_score": chunk.get("noise_score"),
-                },
-                created_by_user_id=getattr(admin_user, "id", None),
-            )
-        if not (item.chunks or []):
-            chunk_text = str(chunk.get("text") or "").strip()
-            if chunk_text:
-                vector = embedding_service.generate_embedding(chunk_text)
-                db.add(
-                    db_mod.KnowledgeChunk(
-                        knowledge_item=item,
-                        chunk_index=0,
-                        chunk_text=chunk_text,
-                        embedding_json=embedding_service.serialize_embedding(vector),
-                        entities_json=json.dumps(coverage_entities, ensure_ascii=False),
-                        coverage_entities_json=json.dumps(coverage_entities, ensure_ascii=False),
-                        token_count=len(chunk_text.split()),
-                    )
+        diagnostics = document_parser.parse_pdf_with_diagnostics(destination)
+        text_blocks = list(diagnostics.get("blocks") or [])
+        page_blocks = list(diagnostics.get("page_blocks") or [])
+        chunk_input = page_blocks or text_blocks
+        meaningful_chunks = document_chunker.chunk_text_blocks(chunk_input)
+        source_document.content_text = "\n\n".join(
+            (block.get("text") if isinstance(block, dict) else str(block)) for block in (page_blocks or text_blocks)
+        ) if (page_blocks or text_blocks) else None
+        source_document.metadata_json = json.dumps(
+            {
+                "processing_status": "processed" if meaningful_chunks else "parse_empty",
+                "block_count": len(text_blocks),
+                "chunk_count": len(meaningful_chunks),
+                "parser_diagnostics": diagnostics,
+            },
+            ensure_ascii=False,
+        )
+        for index, chunk in enumerate(meaningful_chunks, start=1):
+            chunk_title = str(chunk.get("title") or f"{source_document.title} {index}").strip()
+            coverage_entities = chunk.get("coverage_entities") or []
+            item = knowledge_service.create_knowledge_item(
+                db,
+                title=chunk_title,
+                body_text=str(chunk.get("text") or "").strip(),
+                language="tr",
+                item_type=str(chunk.get("category") or "reference"),
+                summary_text=str(chunk.get("topic") or "").strip() or chunk_title,
+                entities=coverage_entities,
+                source_document=source_document,
+                    metadata={
+                        "document_id": source_document.id,
+                        "document_type": source_document.document_type,
+                        "topic": chunk.get("topic"),
+                        "primary_entity": chunk.get("entity"),
+                        "category": chunk.get("category"),
+                        "source_file_path": str(destination),
+                        "source_page_start": chunk.get("source_page_start"),
+                        "source_page_end": chunk.get("source_page_end"),
+                        "is_toc": bool(chunk.get("is_toc")),
+                        "is_index": bool(chunk.get("is_index")),
+                        "noise_score": chunk.get("noise_score"),
+                    },
+                    created_by_user_id=getattr(admin_user, "id", None),
                 )
-    db.commit()
+            if not (item.chunks or []):
+                chunk_text = str(chunk.get("text") or "").strip()
+                if chunk_text:
+                    vector = embedding_service.generate_embedding(chunk_text)
+                    db.add(
+                        db_mod.KnowledgeChunk(
+                            knowledge_item=item,
+                            chunk_index=0,
+                            chunk_text=chunk_text,
+                            embedding_json=embedding_service.serialize_embedding(vector),
+                            entities_json=json.dumps(coverage_entities, ensure_ascii=False),
+                            coverage_entities_json=json.dumps(coverage_entities, ensure_ascii=False),
+                            token_count=len(chunk_text.split()),
+                        )
+                    )
+        db.commit()
+    except OperationalError as exc:
+        _rollback_quietly(db)
+        _dispose_engine_for_disconnect(exc)
+        logger.warning(
+            "Admin document upload DB failure route=/admin/documents/upload exception_type=%s short_message=%s disconnect=%s",
+            type(exc).__name__,
+            _short_exception_message(exc),
+            db_mod.is_db_disconnect_error(exc),
+        )
+        return RedirectResponse(url="/admin/documents?notice=db_temp_failed", status_code=303)
     if not meaningful_chunks:
         return RedirectResponse(url="/admin/documents?notice=parse_empty", status_code=303)
     return RedirectResponse(url=f"/admin/documents?notice=uploaded:{len(meaningful_chunks)}", status_code=303)

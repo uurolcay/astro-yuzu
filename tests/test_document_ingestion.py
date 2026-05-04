@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import OperationalError
 
 import app
 import database as db_mod
@@ -183,6 +184,71 @@ class DocumentIngestionTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 303)
         self.assertIn("invalid_pdf", response.headers.get("location", ""))
+
+    def test_upload_route_db_operational_error_returns_visible_notice(self):
+        class _FakeQuery:
+            def __init__(self, user):
+                self.user = user
+
+            def filter(self, *args, **kwargs):
+                return self
+
+            def first(self):
+                return self.user
+
+        class _BrokenUploadDb:
+            def __init__(self, user):
+                self.user = user
+                self.rolled_back = False
+
+            def query(self, *args, **kwargs):
+                return _FakeQuery(self.user)
+
+            def add(self, *args, **kwargs):
+                raise OperationalError(
+                    "INSERT INTO source_documents",
+                    {},
+                    Exception("SSL error: decryption failed or bad record mac"),
+                )
+
+            def rollback(self):
+                self.rolled_back = True
+
+            def close(self):
+                pass
+
+        csrf = self._csrf()
+        broken_db = _BrokenUploadDb(self.admin)
+
+        def override_get_db():
+            yield broken_db
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            app.app.dependency_overrides[app.get_db] = override_get_db
+            try:
+                with patch.dict(app.os.environ, {"UPLOAD_DIR": tmpdir}, clear=False), patch.object(
+                    app, "_require_admin_user", side_effect=self._request_admin_pair
+                ), patch.object(db_mod.engine, "dispose") as dispose:
+                    response = self.client.post(
+                        "/admin/documents/upload",
+                        data={
+                            "csrf_token": csrf,
+                            "title": "Broken Import",
+                            "document_type": "book",
+                        },
+                        files={"file": ("import.pdf", io.BytesIO(b"%PDF-1.4 fake pdf"), "application/pdf")},
+                        follow_redirects=False,
+                    )
+            finally:
+                app.app.dependency_overrides.clear()
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("db_temp_failed", response.headers.get("location", ""))
+        self.assertTrue(broken_db.rolled_back)
+        self.assertTrue(dispose.called)
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            page = self.client.get("/admin/documents?notice=db_temp_failed")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("Database connection temporarily failed. Please try again.", page.text)
 
     def test_non_admin_access_is_blocked(self):
         response = self.client.get("/admin/documents", follow_redirects=False)

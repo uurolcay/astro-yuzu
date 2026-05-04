@@ -16,6 +16,7 @@
 {% set parse_empty = notice == 'parse_empty' %}
 {% set invalid_pdf = notice == 'invalid_pdf' %}
 {% set missing_file = notice == 'missing_file' %}
+{% set db_temp_failed = notice == 'db_temp_failed' %}
 {% set extraction_notice = notice.startswith('nakshatra_extracted:') if notice else false %}
 {% set sections_empty = notice == 'nakshatra_sections_empty' %}
 
@@ -28,6 +29,8 @@
   <div class="admin-alert admin-alert-danger">Sadece PDF yuklenebilir.</div>
 {% elif missing_file %}
   <div class="admin-alert admin-alert-danger">PDF secilmedi.</div>
+{% elif db_temp_failed %}
+  <div class="admin-alert admin-alert-danger">Database connection temporarily failed. Please try again.</div>
 {% elif sections_empty %}
   <div class="admin-alert admin-alert-warning">PDF metni okundu ama nakshatra basliklari bulunamadi. Baslik varyasyonlari veya OCR bozuk olabilir.</div>
 {% elif extraction_notice %}
