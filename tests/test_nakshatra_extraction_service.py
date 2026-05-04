@@ -176,7 +176,7 @@ class NakshatraExtractionServiceTests(unittest.TestCase):
     def test_empty_parse_result_does_not_crash_route(self):
         document = db_mod.SourceDocument(
             title="Empty Source",
-            file_path="fake.pdf",
+            file_path=__file__,
             document_type="book",
             uploaded_at=datetime.utcnow(),
         )

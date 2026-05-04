@@ -126,11 +126,22 @@ def get_bool_env(key, default):
     return os.getenv(key, str(default)).lower() == "true"
 
 
+def get_int_env(key, default):
+    try:
+        return int(os.getenv(key, str(default)))
+    except (TypeError, ValueError):
+        return int(default)
+
+
 LAUNCH_MODE = get_bool_env("LAUNCH_MODE", True)
 ENABLE_PAYMENTS = get_bool_env("ENABLE_PAYMENTS", False)
 ENABLE_FREE_CALCULATOR = get_bool_env("ENABLE_FREE_CALCULATOR", False)
 ENABLE_AI_INTERPRETATION = get_bool_env("ENABLE_AI_INTERPRETATION", False)
 ENABLE_CONSULTATION_BOOKING = get_bool_env("ENABLE_CONSULTATION_BOOKING", False)
+ENABLE_SYNC_UPLOAD_PROCESSING = get_bool_env("ENABLE_SYNC_UPLOAD_PROCESSING", False)
+ENABLE_ASYNC_DOCUMENT_PROCESSING = get_bool_env("ENABLE_ASYNC_DOCUMENT_PROCESSING", False)
+MAX_PDF_PAGES_PER_REQUEST = get_int_env("MAX_PDF_PAGES_PER_REQUEST", 20)
+MAX_CHUNKS_PER_REQUEST = get_int_env("MAX_CHUNKS_PER_REQUEST", 100)
 PORT = int(os.getenv("PORT", 8000))
 
 
@@ -592,6 +603,14 @@ def _storage_diagnostics(db: Session):
     engine_meta = db_mod.get_engine_diagnostics()
     uploads_dir = get_upload_dir()
     uploads_dir_exists = uploads_dir.exists()
+    uploads_dir_writable = False
+    try:
+        probe = uploads_dir / ".write-probe"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        uploads_dir_writable = True
+    except Exception:
+        uploads_dir_writable = False
     is_render_env = _is_render_env()
     warnings = _storage_warnings(engine_meta, uploads_dir, is_render_env=is_render_env)
     risk_flags = _storage_risk_flags(engine_meta, uploads_dir, is_render_env=is_render_env)
@@ -610,8 +629,15 @@ def _storage_diagnostics(db: Session):
         "published_count": published_count,
         "uploads_dir_path": str(uploads_dir),
         "uploads_dir_exists": uploads_dir_exists,
+        "upload_dir_writable": uploads_dir_writable,
         "uploads_file_count": len([item for item in uploads_dir.iterdir() if item.is_file()]) if uploads_dir_exists else 0,
         "is_render_env": is_render_env,
+        "document_processing": {
+            "sync_upload_processing_enabled": bool(ENABLE_SYNC_UPLOAD_PROCESSING),
+            "async_document_processing_enabled": bool(ENABLE_ASYNC_DOCUMENT_PROCESSING),
+            "max_pdf_pages_per_request": int(MAX_PDF_PAGES_PER_REQUEST),
+            "max_chunks_per_request": int(MAX_CHUNKS_PER_REQUEST),
+        },
         "warnings": warnings,
         "session_config": {
             "secret_configured": _session_secret_configured(),
@@ -12769,19 +12795,27 @@ async def admin_documents(request: Request, db: Session = Depends(get_db), notic
     for document in documents:
         metadata = _json_loads_safe(document.metadata_json, {}) or {}
         chunk_count = sum(len(item.chunks or []) for item in (document.knowledge_items or []))
-        status = str(metadata.get("processing_status") or ("processed" if chunk_count else "uploaded"))
+        status = str(
+            getattr(document, "processing_status", None)
+            or metadata.get("processing_status")
+            or ("completed" if chunk_count else "uploaded")
+        )
         diagnostics = metadata.get("parser_diagnostics") or {}
+        page_count = getattr(document, "page_count", None) or diagnostics.get("page_count") or 0
+        cursor_page = int(getattr(document, "processing_cursor_page", 0) or metadata.get("processing_cursor_page") or 0)
         rows.append(
             {
                 "document": document,
                 "processing_status": status,
                 "chunk_count": chunk_count,
                 "file_name": Path(str(document.file_path or "")).name if str(document.file_path or "").strip() else None,
-                "parser_used": diagnostics.get("parser_used") or "-",
-                "page_count": diagnostics.get("page_count") or 0,
-                "block_count": diagnostics.get("block_count") or 0,
+                "parser_used": getattr(document, "parser_used", None) or diagnostics.get("parser_used") or "-",
+                "page_count": page_count,
+                "block_count": getattr(document, "block_count", None) or diagnostics.get("block_count") or 0,
+                "cursor_page": cursor_page,
+                "has_more_pages": bool(page_count and cursor_page and cursor_page < int(page_count)),
                 "preview": diagnostics.get("preview") or "",
-                "parse_error": diagnostics.get("error"),
+                "parse_error": getattr(document, "processing_error", None) or diagnostics.get("error"),
             }
         )
     return templates.TemplateResponse(
@@ -12794,6 +12828,145 @@ async def admin_documents(request: Request, db: Session = Depends(get_db), notic
             notice=notice,
         ),
     )
+
+
+def _document_processing_config():
+    return {
+        "max_pdf_pages_per_request": max(1, int(MAX_PDF_PAGES_PER_REQUEST or 20)),
+        "max_chunks_per_request": max(1, int(MAX_CHUNKS_PER_REQUEST or 100)),
+    }
+
+
+def _set_document_status(document, status, *, metadata=None, diagnostics=None, error=None):
+    metadata = dict(metadata or _json_loads_safe(document.metadata_json, {}) or {})
+    metadata["processing_status"] = status
+    if diagnostics is not None:
+        metadata["parser_diagnostics"] = diagnostics
+    if error:
+        metadata["processing_error"] = str(error)
+    elif "processing_error" in metadata:
+        metadata.pop("processing_error", None)
+    document.processing_status = status
+    document.processing_error = str(error) if error else None
+    document.metadata_json = json.dumps(metadata, ensure_ascii=False, default=str)
+    document.updated_at = datetime.utcnow()
+    return metadata
+
+
+def _clear_document_knowledge(db, document):
+    for item in list(document.knowledge_items or []):
+        db.delete(item)
+    db.flush()
+
+
+def _create_document_chunk_item(db, document, chunk, *, index, admin_user):
+    chunk_title = str(chunk.get("title") or f"{document.title} {index}").strip()
+    coverage_entities = chunk.get("coverage_entities") or []
+    return knowledge_service.create_knowledge_item(
+        db,
+        title=chunk_title,
+        body_text=str(chunk.get("text") or "").strip(),
+        language="tr",
+        item_type=str(chunk.get("category") or "reference"),
+        summary_text=str(chunk.get("topic") or "").strip() or chunk_title,
+        entities=coverage_entities,
+        source_document=document,
+        metadata={
+            "document_id": document.id,
+            "document_type": document.document_type,
+            "topic": chunk.get("topic"),
+            "primary_entity": chunk.get("entity"),
+            "category": chunk.get("category"),
+            "source_file_path": str(document.file_path or ""),
+            "source_page_start": chunk.get("source_page_start"),
+            "source_page_end": chunk.get("source_page_end"),
+            "is_toc": bool(chunk.get("is_toc")),
+            "is_index": bool(chunk.get("is_index")),
+            "noise_score": chunk.get("noise_score"),
+        },
+        created_by_user_id=getattr(admin_user, "id", None),
+    )
+
+
+def _process_source_document(db, document, *, admin_user=None, reprocess=False):
+    config = _document_processing_config()
+    metadata = _json_loads_safe(document.metadata_json, {}) or {}
+    if reprocess:
+        _clear_document_knowledge(db, document)
+        document.content_text = None
+        document.processing_cursor_page = 0
+        document.page_count = None
+        document.block_count = 0
+        document.parser_used = None
+        metadata = {"processing_status": "uploaded"}
+
+    file_path = Path(str(document.file_path or ""))
+    if not file_path.exists():
+        _set_document_status(document, "failed", metadata=metadata, error="file_missing")
+        db.commit()
+        return {"status": "failed", "notice": "file_missing", "created_chunks": 0}
+
+    _set_document_status(document, "processing", metadata=metadata)
+    db.commit()
+
+    start_page = int(getattr(document, "processing_cursor_page", 0) or metadata.get("processing_cursor_page") or 0) + 1
+    diagnostics = document_parser.parse_pdf_with_diagnostics(
+        file_path,
+        start_page=start_page,
+        max_pages=config["max_pdf_pages_per_request"],
+    )
+    text_blocks = list(diagnostics.get("blocks") or [])
+    page_blocks = list(diagnostics.get("page_blocks") or [])
+    chunk_input = page_blocks or text_blocks
+    meaningful_chunks = document_chunker.chunk_text_blocks(chunk_input)[: config["max_chunks_per_request"]]
+    existing_text = str(document.content_text or "").strip()
+    parsed_text = "\n\n".join(
+        (block.get("text") if isinstance(block, dict) else str(block)) for block in chunk_input
+    ).strip()
+    if parsed_text:
+        document.content_text = f"{existing_text}\n\n{parsed_text}".strip() if existing_text else parsed_text
+
+    previous_block_count = int(getattr(document, "block_count", 0) or metadata.get("block_count") or 0)
+    document.page_count = int(diagnostics.get("page_count") or 0)
+    document.block_count = previous_block_count + len(text_blocks)
+    document.parser_used = diagnostics.get("parser_used") or None
+    document.processing_cursor_page = int(diagnostics.get("range_end_page") or document.processing_cursor_page or 0)
+    metadata["processing_cursor_page"] = document.processing_cursor_page
+    metadata["page_count"] = document.page_count
+    metadata["block_count"] = document.block_count
+    metadata["chunk_count"] = sum(len(item.chunks or []) for item in (document.knowledge_items or []))
+
+    created_count = 0
+    for index, chunk in enumerate(meaningful_chunks, start=1):
+        _create_document_chunk_item(db, document, chunk, index=index, admin_user=admin_user)
+        created_count += 1
+        if created_count % 20 == 0:
+            db.commit()
+
+    total_chunk_count = sum(len(item.chunks or []) for item in (document.knowledge_items or []))
+    metadata["chunk_count"] = total_chunk_count
+    has_more_pages = bool(diagnostics.get("has_more_pages"))
+    parser_error = diagnostics.get("error")
+    if has_more_pages:
+        final_status = "processing"
+        notice = f"processing_started:{created_count}"
+    elif total_chunk_count or created_count:
+        final_status = "completed"
+        notice = f"processing_completed:{created_count}"
+    elif parser_error:
+        final_status = "parse_empty"
+        notice = "parse_empty"
+    else:
+        final_status = "parse_empty"
+        notice = "parse_empty"
+    _set_document_status(document, final_status, metadata=metadata, diagnostics=diagnostics, error=parser_error if final_status == "failed" else None)
+    db.commit()
+    return {
+        "status": final_status,
+        "notice": notice,
+        "created_chunks": created_count,
+        "has_more_pages": has_more_pages,
+    }
 
 
 @app.post("/admin/documents/upload")
@@ -12813,84 +12986,26 @@ async def admin_documents_upload(
     filename = str(getattr(file, "filename", "") or "")
     if not filename.lower().endswith(".pdf"):
         return RedirectResponse(url="/admin/documents?notice=invalid_pdf", status_code=303)
-    upload_dir = get_upload_dir()
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    stored_name = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}.pdf"
-    destination = upload_dir / stored_name
-    contents = await file.read()
-    destination.write_bytes(contents)
     try:
+        upload_dir = get_upload_dir()
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        stored_name = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}.pdf"
+        destination = upload_dir / stored_name
+        contents = await file.read()
+        destination.write_bytes(contents)
         source_document = db_mod.SourceDocument(
             title=str(title or "").strip() or Path(filename).stem or "Uploaded document",
             file_path=str(destination),
             document_type=str(document_type or "book").strip() or "book",
             source_label=filename,
             content_text=None,
+            metadata_json=json.dumps({"processing_status": "uploaded"}, ensure_ascii=False),
+            processing_status="uploaded",
+            processing_cursor_page=0,
             created_by_user_id=getattr(admin_user, "id", None),
             uploaded_at=datetime.utcnow(),
         )
         db.add(source_document)
-        db.flush()
-
-        diagnostics = document_parser.parse_pdf_with_diagnostics(destination)
-        text_blocks = list(diagnostics.get("blocks") or [])
-        page_blocks = list(diagnostics.get("page_blocks") or [])
-        chunk_input = page_blocks or text_blocks
-        meaningful_chunks = document_chunker.chunk_text_blocks(chunk_input)
-        source_document.content_text = "\n\n".join(
-            (block.get("text") if isinstance(block, dict) else str(block)) for block in (page_blocks or text_blocks)
-        ) if (page_blocks or text_blocks) else None
-        source_document.metadata_json = json.dumps(
-            {
-                "processing_status": "processed" if meaningful_chunks else "parse_empty",
-                "block_count": len(text_blocks),
-                "chunk_count": len(meaningful_chunks),
-                "parser_diagnostics": diagnostics,
-            },
-            ensure_ascii=False,
-        )
-        for index, chunk in enumerate(meaningful_chunks, start=1):
-            chunk_title = str(chunk.get("title") or f"{source_document.title} {index}").strip()
-            coverage_entities = chunk.get("coverage_entities") or []
-            item = knowledge_service.create_knowledge_item(
-                db,
-                title=chunk_title,
-                body_text=str(chunk.get("text") or "").strip(),
-                language="tr",
-                item_type=str(chunk.get("category") or "reference"),
-                summary_text=str(chunk.get("topic") or "").strip() or chunk_title,
-                entities=coverage_entities,
-                source_document=source_document,
-                    metadata={
-                        "document_id": source_document.id,
-                        "document_type": source_document.document_type,
-                        "topic": chunk.get("topic"),
-                        "primary_entity": chunk.get("entity"),
-                        "category": chunk.get("category"),
-                        "source_file_path": str(destination),
-                        "source_page_start": chunk.get("source_page_start"),
-                        "source_page_end": chunk.get("source_page_end"),
-                        "is_toc": bool(chunk.get("is_toc")),
-                        "is_index": bool(chunk.get("is_index")),
-                        "noise_score": chunk.get("noise_score"),
-                    },
-                    created_by_user_id=getattr(admin_user, "id", None),
-                )
-            if not (item.chunks or []):
-                chunk_text = str(chunk.get("text") or "").strip()
-                if chunk_text:
-                    vector = embedding_service.generate_embedding(chunk_text)
-                    db.add(
-                        db_mod.KnowledgeChunk(
-                            knowledge_item=item,
-                            chunk_index=0,
-                            chunk_text=chunk_text,
-                            embedding_json=embedding_service.serialize_embedding(vector),
-                            entities_json=json.dumps(coverage_entities, ensure_ascii=False),
-                            coverage_entities_json=json.dumps(coverage_entities, ensure_ascii=False),
-                            token_count=len(chunk_text.split()),
-                        )
-                    )
         db.commit()
     except OperationalError as exc:
         _rollback_quietly(db)
@@ -12902,9 +13017,64 @@ async def admin_documents_upload(
             db_mod.is_db_disconnect_error(exc),
         )
         return RedirectResponse(url="/admin/documents?notice=db_temp_failed", status_code=303)
-    if not meaningful_chunks:
-        return RedirectResponse(url="/admin/documents?notice=parse_empty", status_code=303)
-    return RedirectResponse(url=f"/admin/documents?notice=uploaded:{len(meaningful_chunks)}", status_code=303)
+    except (OSError, PermissionError) as exc:
+        _rollback_quietly(db)
+        logger.warning("Admin document upload file failure: %s", _short_exception_message(exc))
+        return RedirectResponse(url="/admin/documents?notice=processing_failed", status_code=303)
+    return RedirectResponse(url="/admin/documents?notice=upload_saved", status_code=303)
+
+
+@app.post("/admin/documents/{document_id}/process")
+@admin_required
+async def admin_document_process(
+    request: Request,
+    document_id: int,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(default=""),
+    reprocess: str = Form(default=""),
+):
+    await validate_csrf_token(request, csrf_token)
+    admin_user = get_request_user(request, db)
+    document = db.query(db_mod.SourceDocument).filter(db_mod.SourceDocument.id == document_id).first()
+    if not document:
+        return RedirectResponse(url="/admin/documents?notice=file_missing", status_code=303)
+    try:
+        result = _process_source_document(
+            db,
+            document,
+            admin_user=admin_user,
+            reprocess=str(reprocess or "").lower() in {"1", "true", "yes", "on"},
+        )
+    except OperationalError as exc:
+        _rollback_quietly(db)
+        _dispose_engine_for_disconnect(exc)
+        logger.warning(
+            "Admin document process DB failure document_id=%s exception_type=%s short_message=%s disconnect=%s",
+            document_id,
+            type(exc).__name__,
+            _short_exception_message(exc),
+            db_mod.is_db_disconnect_error(exc),
+        )
+        try:
+            document = db.query(db_mod.SourceDocument).filter(db_mod.SourceDocument.id == document_id).first()
+            if document:
+                _set_document_status(document, "failed", error="db_temp_failed")
+                db.commit()
+        except Exception:
+            _rollback_quietly(db)
+        return RedirectResponse(url="/admin/documents?notice=db_temp_failed", status_code=303)
+    except Exception as exc:
+        _rollback_quietly(db)
+        logger.exception("Admin document process failed document_id=%s", document_id)
+        try:
+            document = db.query(db_mod.SourceDocument).filter(db_mod.SourceDocument.id == document_id).first()
+            if document:
+                _set_document_status(document, "failed", error=_short_exception_message(exc))
+                db.commit()
+        except Exception:
+            _rollback_quietly(db)
+        return RedirectResponse(url="/admin/documents?notice=processing_failed", status_code=303)
+    return RedirectResponse(url=f"/admin/documents?notice={result.get('notice') or 'processing_completed'}", status_code=303)
 
 
 @app.post("/admin/documents/{document_id}/extract-nakshatra")
@@ -12920,20 +13090,49 @@ async def admin_document_extract_nakshatra(
     document = db.query(db_mod.SourceDocument).filter(db_mod.SourceDocument.id == document_id).first()
     if not document:
         _public_error("Document not found.", 404)
-    diagnostics = document_parser.parse_pdf_with_diagnostics(document.file_path)
-    text_blocks = list(diagnostics.get("blocks") or [])
-    page_blocks = list(diagnostics.get("page_blocks") or [])
+    try:
+        metadata = _json_loads_safe(document.metadata_json, {}) or {}
+        diagnostics = metadata.get("parser_diagnostics") or {}
+        if str(document.content_text or "").strip():
+            page_blocks = [
+                {"page": index, "text": block.strip()}
+                for index, block in enumerate(re.split(r"\n\s*\n", document.content_text), start=1)
+                if block.strip()
+            ]
+            text_blocks = [block["text"] for block in page_blocks]
+        else:
+            file_path = Path(str(document.file_path or ""))
+            if not file_path.exists():
+                return RedirectResponse(url="/admin/documents?notice=file_missing", status_code=303)
+            diagnostics = document_parser.parse_pdf_with_diagnostics(
+                file_path,
+                start_page=1,
+                max_pages=_document_processing_config()["max_pdf_pages_per_request"],
+            )
+            text_blocks = list(diagnostics.get("blocks") or [])
+            page_blocks = list(diagnostics.get("page_blocks") or [])
+    except Exception as exc:
+        _rollback_quietly(db)
+        logger.warning("Nakshatra extraction parse failed document_id=%s error=%s", document_id, _short_exception_message(exc))
+        return RedirectResponse(url="/admin/documents?notice=processing_failed", status_code=303)
     if not text_blocks:
         metadata = _json_loads_safe(document.metadata_json, {}) or {}
         metadata["processing_status"] = "parse_empty"
         metadata["parser_diagnostics"] = diagnostics
         document.metadata_json = json.dumps(metadata, ensure_ascii=False)
+        document.processing_status = "parse_empty"
+        document.processing_error = diagnostics.get("error") or "parse_empty"
         db.commit()
         return RedirectResponse(url="/admin/documents?notice=parse_empty", status_code=303)
-    extracted = nakshatra_extraction_service.extract_nakshatra_knowledge_from_document(
-        page_blocks or text_blocks,
-        document.title,
-    )
+    try:
+        extracted = nakshatra_extraction_service.extract_nakshatra_knowledge_from_document(
+            page_blocks or text_blocks,
+            document.title,
+        )
+    except Exception as exc:
+        _rollback_quietly(db)
+        logger.warning("Nakshatra extraction failed document_id=%s error=%s", document_id, _short_exception_message(exc))
+        return RedirectResponse(url="/admin/documents?notice=processing_failed", status_code=303)
     if not extracted.get("section_count", 0):
         metadata = _json_loads_safe(document.metadata_json, {}) or {}
         metadata["processing_status"] = str(metadata.get("processing_status") or "processed")

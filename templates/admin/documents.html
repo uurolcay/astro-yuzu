@@ -4,23 +4,36 @@
 <section class="admin-page-header">
   <div>
     <h1 class="admin-page-title">Knowledge Documents</h1>
-    <p class="admin-page-sub">PDF yukle, parse et, nakshatra extraction calistir</p>
+    <p class="admin-page-sub">PDF yukle, batch process et, nakshatra extraction calistir</p>
   </div>
   <div class="admin-page-actions">
-    <a class="btn-admin btn-admin-secondary" href="/admin/training">Training Hub →</a>
-    <a class="btn-admin btn-admin-primary" href="/admin/knowledge/review">Review Queue →</a>
+    <a class="btn-admin btn-admin-secondary" href="/admin/training">Training Hub -></a>
+    <a class="btn-admin btn-admin-primary" href="/admin/knowledge/review">Review Queue -></a>
   </div>
 </section>
 
 {% set upload_ok = notice.startswith('uploaded:') if notice else false %}
+{% set upload_saved = notice == 'upload_saved' %}
+{% set processing_started = notice.startswith('processing_started:') if notice else false %}
+{% set processing_completed = notice.startswith('processing_completed:') if notice else false %}
 {% set parse_empty = notice == 'parse_empty' %}
 {% set invalid_pdf = notice == 'invalid_pdf' %}
 {% set missing_file = notice == 'missing_file' %}
+{% set file_missing = notice == 'file_missing' %}
 {% set db_temp_failed = notice == 'db_temp_failed' %}
+{% set processing_failed = notice == 'processing_failed' %}
 {% set extraction_notice = notice.startswith('nakshatra_extracted:') if notice else false %}
 {% set sections_empty = notice == 'nakshatra_sections_empty' %}
 
-{% if upload_ok %}
+{% if upload_saved %}
+  <div class="admin-alert admin-alert-success">PDF kaydedildi. Parser web worker'i bloklamasin diye isleme manuel Process butonu ile baslatilir.</div>
+{% elif processing_started %}
+  {% set parts = notice.split(':') %}
+  <div class="admin-alert admin-alert-success">Processing batch tamamlandi. {{ parts[1] }} yeni chunk uretildi; devam gerekiyorsa Continue Processing'e basin.</div>
+{% elif processing_completed %}
+  {% set parts = notice.split(':') %}
+  <div class="admin-alert admin-alert-success">Processing tamamlandi. Bu batch'te {{ parts[1] }} chunk uretildi.</div>
+{% elif upload_ok %}
   {% set parts = notice.split(':') %}
   <div class="admin-alert admin-alert-success">Upload basarili. {{ parts[1] }} chunk uretildi.</div>
 {% elif parse_empty %}
@@ -29,8 +42,12 @@
   <div class="admin-alert admin-alert-danger">Sadece PDF yuklenebilir.</div>
 {% elif missing_file %}
   <div class="admin-alert admin-alert-danger">PDF secilmedi.</div>
+{% elif file_missing %}
+  <div class="admin-alert admin-alert-danger">Kaydedilmis PDF dosyasi bulunamadi. Upload dizinini ve kalici disk ayarini kontrol edin.</div>
 {% elif db_temp_failed %}
   <div class="admin-alert admin-alert-danger">Database connection temporarily failed. Please try again.</div>
+{% elif processing_failed %}
+  <div class="admin-alert admin-alert-danger">Document processing failed. Satirdaki error/warning mesajini ve storage debug ekranini kontrol edin.</div>
 {% elif sections_empty %}
   <div class="admin-alert admin-alert-warning">PDF metni okundu ama nakshatra basliklari bulunamadi. Baslik varyasyonlari veya OCR bozuk olabilir.</div>
 {% elif extraction_notice %}
@@ -68,18 +85,18 @@
       </div>
     </form>
     <div class="admin-alert" style="margin-top:14px;">
-      PDF → text block'lara ayrilir → chunk uretilir → Nakshatra Extract butonu ile nakshatra bolumleri ayrica islenebilir → Review Queue'da onaylanir → aktif olur
+      PDF once yalnizca kaydedilir. Sonra Process butonu kontrollu batch halinde parser/chunk islemini calistirir. Nakshatra Extract, islenmis metin uzerinden ayrica review chunk'lari uretir.
     </div>
   </article>
 
   <article class="admin-card">
     <div class="admin-card-title">Akis Ozeti</div>
     <div class="admin-muted" style="line-height:1.7;">
-      Bu ekran gercek PDF ingestion akisina ayrilmistir. Upload sonrasi parser tanisi, block sayisi ve preview burada gorunur. Boylece 0 chunk / 0 section durumlari kolayca ayiklanir.
+      Upload request'i PDF parse etmez. Process butonu varsayilan olarak request basina sinirli sayfa ve chunk isler; buyuk kitaplarda Continue Processing ile kaldigi sayfadan devam eder.
     </div>
     <div class="admin-page-actions" style="margin-top:16px;">
-      <a class="btn-admin btn-admin-secondary" href="/admin/knowledge/review">Review Queue →</a>
-      <a class="btn-admin btn-admin-secondary" href="/admin/knowledge/coverage">Coverage →</a>
+      <a class="btn-admin btn-admin-secondary" href="/admin/knowledge/review">Review Queue -></a>
+      <a class="btn-admin btn-admin-secondary" href="/admin/knowledge/coverage">Coverage -></a>
     </div>
   </article>
 </section>
@@ -96,7 +113,7 @@
         <th>File</th>
         <th>Uploaded At</th>
         <th>Status</th>
-        <th>Chunk</th>
+        <th>Counts</th>
         <th>Diagnostics / Parser / Preview</th>
         <th>Actions</th>
       </tr>
@@ -109,21 +126,26 @@
         <td>{{ row.file_name or "-" }}</td>
         <td>{{ row.document.uploaded_at.strftime("%Y-%m-%d %H:%M") if row.document.uploaded_at else "-" }}</td>
         <td>
-          {% if row.processing_status == "processed" %}
-          <span class="badge badge-success">processed</span>
-          {% elif row.processing_status == "parse_empty" %}
-          <span class="badge badge-warning">parse_empty</span>
+          {% if row.processing_status in ["completed", "processed"] %}
+          <span class="badge badge-success">{{ row.processing_status }}</span>
+          {% elif row.processing_status == "failed" %}
+          <span class="badge badge-danger">failed</span>
+          {% elif row.processing_status in ["processing", "parse_empty"] %}
+          <span class="badge badge-warning">{{ row.processing_status }}</span>
           {% else %}
-          <span class="badge badge-warning">uploaded</span>
+          <span class="badge badge-warning">{{ row.processing_status }}</span>
           {% endif %}
         </td>
-        <td>{{ row.chunk_count }}</td>
+        <td>
+          <div class="admin-muted">Chunks: {{ row.chunk_count }}</div>
+          <div class="admin-muted">Pages: {{ row.page_count or "-" }}</div>
+          <div class="admin-muted">Cursor: {{ row.cursor_page or 0 }}</div>
+          <div class="admin-muted">Blocks: {{ row.block_count or 0 }}</div>
+        </td>
         <td style="min-width:240px;">
           <div class="admin-muted">Parser: {{ row.parser_used }}</div>
-          <div class="admin-muted">Pages: {{ row.page_count }}</div>
-          <div class="admin-muted">Blocks: {{ row.block_count }}</div>
           {% if row.parse_error %}
-          <div class="admin-muted">Error: {{ row.parse_error }}</div>
+          <div class="admin-alert admin-alert-warning" style="margin-top:6px;">Error: {{ row.parse_error }}</div>
           {% endif %}
           {% if row.preview %}
           <details style="margin-top:6px;">
@@ -133,12 +155,30 @@
           {% endif %}
         </td>
         <td>
+          {% if row.processing_status in ["uploaded", "pending_processing", "failed", "parse_empty"] %}
+          <form method="post" action="/admin/documents/{{ row.document.id }}/process" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="btn-admin btn-admin-primary" type="submit">Process</button>
+          </form>
+          {% elif row.processing_status == "processing" or row.has_more_pages %}
+          <form method="post" action="/admin/documents/{{ row.document.id }}/process" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="btn-admin btn-admin-primary" type="submit">Continue Processing</button>
+          </form>
+          {% endif %}
+          {% if row.chunk_count > 0 %}
           <form method="post" action="/admin/documents/{{ row.document.id }}/extract-nakshatra" style="display:inline;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button class="btn-admin btn-admin-secondary" type="submit">Nakshatra Extract</button>
+            <button class="btn-admin btn-admin-secondary" type="submit">Extract Nakshatra</button>
           </form>
-          <a href="/admin/knowledge/review" style="margin-left:.6rem;">Review Queue →</a>
-          <a href="/admin/knowledge/coverage" style="margin-left:.6rem;">Coverage →</a>
+          <form method="post" action="/admin/documents/{{ row.document.id }}/process" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="reprocess" value="1">
+            <button class="btn-admin btn-admin-secondary" type="submit">Reprocess</button>
+          </form>
+          {% endif %}
+          <a href="/admin/knowledge/review" style="margin-left:.6rem;">Review Queue -></a>
+          <a href="/admin/knowledge/coverage" style="margin-left:.6rem;">Coverage -></a>
         </td>
       </tr>
       {% else %}

@@ -59,6 +59,19 @@ class DocumentIngestionTests(unittest.TestCase):
         self.assertIsNotNone(match)
         return match.group(1)
 
+    def _uploaded_document(self, *, title="Queued PDF", file_path=None):
+        document = db_mod.SourceDocument(
+            title=title,
+            file_path=file_path or __file__,
+            document_type="book",
+            source_label="queued.pdf",
+            processing_status="uploaded",
+            processing_cursor_page=0,
+        )
+        self.db.add(document)
+        self.db.commit()
+        return document.id
+
     def test_parse_pdf_missing_file_returns_empty_list(self):
         self.assertEqual(document_parser.parse_pdf("missing-file.pdf"), [])
 
@@ -105,23 +118,13 @@ class DocumentIngestionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('href="/admin/documents"', response.text)
 
-    def test_upload_pdf_creates_source_document_and_knowledge_chunks(self):
+    def test_upload_route_does_not_synchronously_parse_pdf_by_default(self):
         csrf = self._csrf()
         before_orders = self.db.query(db_mod.ServiceOrder).count()
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair), patch.object(
             app.document_parser,
             "parse_pdf_with_diagnostics",
-            return_value={
-                "blocks": [
-                    "MARS DASHA\n\nMars dasha in the 6th house supports decisive work output.",
-                    "ASHWINI\n\nAshwini can indicate quick response and initiative.",
-                ],
-                "page_count": 2,
-                "block_count": 2,
-                "preview": "MARS DASHA",
-                "parser_used": "pypdf",
-                "error": None,
-            },
+            side_effect=AssertionError("upload must not parse"),
         ):
             response = self.client.post(
                 "/admin/documents/upload",
@@ -134,30 +137,74 @@ class DocumentIngestionTests(unittest.TestCase):
                 follow_redirects=False,
             )
         self.assertEqual(response.status_code, 303)
+        self.assertIn("upload_saved", response.headers.get("location", ""))
         self.db.expire_all()
         self.assertEqual(self.db.query(db_mod.SourceDocument).count(), 1)
-        self.assertGreaterEqual(self.db.query(db_mod.KnowledgeItem).count(), 1)
-        self.assertGreaterEqual(self.db.query(db_mod.KnowledgeChunk).count(), 1)
+        document = self.db.query(db_mod.SourceDocument).first()
+        self.assertEqual(document.processing_status, "uploaded")
+        self.assertEqual(self.db.query(db_mod.KnowledgeItem).count(), 0)
+        self.assertEqual(self.db.query(db_mod.KnowledgeChunk).count(), 0)
         self.assertEqual(self.db.query(db_mod.ServiceOrder).count(), before_orders)
 
-    def test_parse_empty_notice_is_shown_and_document_metadata_keeps_diagnostics(self):
+    def test_process_route_creates_knowledge_chunks(self):
         csrf = self._csrf()
+        document_id = self._uploaded_document(title="Imported Doctrine")
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair), patch.object(
+            app.document_parser,
+            "parse_pdf_with_diagnostics",
+            return_value={
+                "blocks": [
+                    "MARS DASHA\n\nMars dasha in the 6th house supports decisive work output.",
+                    "ASHWINI\n\nAshwini can indicate quick response and initiative.",
+                ],
+                "page_blocks": [
+                    {"page": 1, "text": "MARS DASHA\n\nMars dasha in the 6th house supports decisive work output."},
+                    {"page": 2, "text": "ASHWINI\n\nAshwini can indicate quick response and initiative."},
+                ],
+                "page_count": 2,
+                "block_count": 2,
+                "range_end_page": 2,
+                "has_more_pages": False,
+                "preview": "MARS DASHA",
+                "parser_used": "pypdf",
+                "error": None,
+            },
+        ):
+            response = self.client.post(
+                f"/admin/documents/{document_id}/process",
+                data={"csrf_token": csrf},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("processing_completed", response.headers.get("location", ""))
+        self.db.expire_all()
+        document = self.db.query(db_mod.SourceDocument).filter_by(id=document_id).first()
+        self.assertEqual(document.processing_status, "completed")
+        self.assertEqual(document.processing_cursor_page, 2)
+        self.assertGreaterEqual(self.db.query(db_mod.KnowledgeItem).count(), 1)
+        self.assertGreaterEqual(self.db.query(db_mod.KnowledgeChunk).count(), 1)
+
+    def test_process_parse_empty_notice_is_shown_and_document_metadata_keeps_diagnostics(self):
+        csrf = self._csrf()
+        document_id = self._uploaded_document(title="Empty Parse")
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair), patch.object(
             app.document_parser,
             "parse_pdf_with_diagnostics",
             return_value={
                 "blocks": [],
+                "page_blocks": [],
                 "page_count": 3,
                 "block_count": 0,
+                "range_end_page": 3,
+                "has_more_pages": False,
                 "preview": "",
                 "parser_used": "none",
                 "error": "no_pdf_parser_available",
             },
         ):
             response = self.client.post(
-                "/admin/documents/upload",
-                data={"csrf_token": csrf, "title": "Empty Parse", "document_type": "book"},
-                files={"file": ("import.pdf", io.BytesIO(b"%PDF-1.4 fake pdf"), "application/pdf")},
+                f"/admin/documents/{document_id}/process",
+                data={"csrf_token": csrf},
                 follow_redirects=False,
             )
         self.assertEqual(response.status_code, 303)
@@ -168,6 +215,87 @@ class DocumentIngestionTests(unittest.TestCase):
         self.assertIn("parse sonucu bos dondu", page.text)
         self.assertIn("Parser", page.text)
         self.assertIn("Diagnostics", page.text)
+
+    def test_process_route_handles_parser_exception_without_500(self):
+        csrf = self._csrf()
+        document_id = self._uploaded_document(title="Parser Broken")
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair), patch.object(
+            app.document_parser,
+            "parse_pdf_with_diagnostics",
+            side_effect=RuntimeError("pypdf exploded"),
+        ):
+            response = self.client.post(
+                f"/admin/documents/{document_id}/process",
+                data={"csrf_token": csrf},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("processing_failed", response.headers.get("location", ""))
+        self.db.expire_all()
+        self.assertEqual(self.db.query(db_mod.SourceDocument).filter_by(id=document_id).first().processing_status, "failed")
+
+    def test_process_route_handles_db_operational_error_without_blank_500(self):
+        csrf = self._csrf()
+        document_id = self._uploaded_document(title="DB Broken")
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair), patch.object(
+            app.document_parser,
+            "parse_pdf_with_diagnostics",
+            return_value={
+                "blocks": ["SATURN\n\nSaturn gives discipline and responsibility."],
+                "page_blocks": [{"page": 1, "text": "SATURN\n\nSaturn gives discipline and responsibility."}],
+                "page_count": 1,
+                "block_count": 1,
+                "range_end_page": 1,
+                "has_more_pages": False,
+                "preview": "SATURN",
+                "parser_used": "pypdf",
+                "error": None,
+            },
+        ), patch.object(
+            app.knowledge_service,
+            "create_knowledge_item",
+            side_effect=OperationalError("INSERT", {}, Exception("SSL error: decryption failed or bad record mac")),
+        ), patch.object(db_mod.engine, "dispose") as dispose:
+            response = self.client.post(
+                f"/admin/documents/{document_id}/process",
+                data={"csrf_token": csrf},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("db_temp_failed", response.headers.get("location", ""))
+        self.assertTrue(dispose.called)
+
+    def test_large_document_processes_in_batches(self):
+        csrf = self._csrf()
+        document_id = self._uploaded_document(title="Large Doctrine")
+        with patch.object(app, "MAX_PDF_PAGES_PER_REQUEST", 1), patch.object(
+            app, "MAX_CHUNKS_PER_REQUEST", 100
+        ), patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair), patch.object(
+            app.document_parser,
+            "parse_pdf_with_diagnostics",
+            return_value={
+                "blocks": ["JUPITER\n\nJupiter expands wisdom and teaching."],
+                "page_blocks": [{"page": 1, "text": "JUPITER\n\nJupiter expands wisdom and teaching."}],
+                "page_count": 2,
+                "block_count": 1,
+                "range_end_page": 1,
+                "has_more_pages": True,
+                "preview": "JUPITER",
+                "parser_used": "pypdf",
+                "error": None,
+            },
+        ):
+            response = self.client.post(
+                f"/admin/documents/{document_id}/process",
+                data={"csrf_token": csrf},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("processing_started", response.headers.get("location", ""))
+        self.db.expire_all()
+        document = self.db.query(db_mod.SourceDocument).filter_by(id=document_id).first()
+        self.assertEqual(document.processing_status, "processing")
+        self.assertEqual(document.processing_cursor_page, 1)
 
     def test_upload_route_rejects_non_pdf(self):
         csrf = self._csrf()
@@ -249,6 +377,15 @@ class DocumentIngestionTests(unittest.TestCase):
             page = self.client.get("/admin/documents?notice=db_temp_failed")
         self.assertEqual(page.status_code, 200)
         self.assertIn("Database connection temporarily failed. Please try again.", page.text)
+
+    def test_documents_page_shows_process_button_and_status(self):
+        self._uploaded_document(title="Needs Processing")
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            page = self.client.get("/admin/documents")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("uploaded", page.text)
+        self.assertIn("Process", page.text)
+        self.assertIn("/process", page.text)
 
     def test_non_admin_access_is_blocked(self):
         response = self.client.get("/admin/documents", follow_redirects=False)

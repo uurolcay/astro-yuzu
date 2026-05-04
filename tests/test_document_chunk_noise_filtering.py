@@ -147,6 +147,13 @@ class DocumentChunkNoiseFilteringTests(unittest.TestCase):
                 files={"file": ("import.pdf", io.BytesIO(b"%PDF-1.4 fake pdf"), "application/pdf")},
                 follow_redirects=False,
             )
+            self.assertEqual(response.status_code, 303)
+            document = self.db.query(db_mod.SourceDocument).order_by(db_mod.SourceDocument.id.desc()).first()
+            response = self.client.post(
+                f"/admin/documents/{document.id}/process",
+                data={"csrf_token": csrf},
+                follow_redirects=False,
+            )
         self.assertEqual(response.status_code, 303)
         item = self.db.query(db_mod.KnowledgeItem).order_by(db_mod.KnowledgeItem.id.desc()).first()
         metadata = json.loads(item.metadata_json)

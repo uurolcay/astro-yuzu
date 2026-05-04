@@ -119,6 +119,8 @@ class PersistenceDiagnosticsTests(unittest.TestCase):
             "db_max_overflow",
             "database_url_uses_internal_hint",
             "db_disconnect_patterns_enabled",
+            "upload_dir_writable",
+            "document_processing",
         ):
             self.assertIn(key, payload)
         for key in (
@@ -128,8 +130,13 @@ class PersistenceDiagnosticsTests(unittest.TestCase):
             "is_postgresql",
             "is_sqlite",
             "db_disconnect_patterns_enabled",
+            "upload_dir_writable",
         ):
             self.assertIsInstance(payload[key], bool)
+        self.assertIn("sync_upload_processing_enabled", payload["document_processing"])
+        self.assertIn("async_document_processing_enabled", payload["document_processing"])
+        self.assertIn("max_pdf_pages_per_request", payload["document_processing"])
+        self.assertIn("max_chunks_per_request", payload["document_processing"])
 
     def test_storage_debug_route_blocks_non_admin(self):
         with patch.object(app, "_require_admin_user", side_effect=self._request_member_pair):
