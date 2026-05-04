@@ -141,6 +141,9 @@ class BirthLocationPipelineTests(unittest.TestCase):
         self.assertIn("autocomplete_submit_warning", template)
         self.assertIn('aria-expanded="false"', template)
         self.assertIn('aria-controls="birthplace-suggestions"', template)
+        self.assertIn('role="combobox"', template)
+        self.assertIn('aria-haspopup="listbox"', template)
+        self.assertIn('id="birthplace-clear"', template)
 
     def test_template_includes_keyboard_navigation_hooks(self):
         template = Path("C:\\Users\\uolca\\Documents\\Chatgpt Codex\\astro-yuzu\\templates\\calculator.html").read_text(encoding="utf-8")
@@ -160,6 +163,20 @@ class BirthLocationPipelineTests(unittest.TestCase):
         self.assertIn('button.addEventListener("pointerdown"', template)
         self.assertIn("button._payload = item", template)
         self.assertIn('observeBirthplaceEvent("suggestion_selected"', template)
+        self.assertIn("min-height:48px", template)
+        self.assertIn("max-height:min(312px, 42vh)", template)
+        self.assertIn("-webkit-overflow-scrolling:touch", template)
+
+    def test_template_includes_manual_coordinate_fallback(self):
+        template = Path("C:\\Users\\uolca\\Documents\\Chatgpt Codex\\astro-yuzu\\templates\\calculator.html").read_text(encoding="utf-8")
+        self.assertIn('id="manual-location-toggle"', template)
+        self.assertIn('id="manual_latitude"', template)
+        self.assertIn('id="manual_longitude"', template)
+        self.assertIn('id="manual_timezone"', template)
+        self.assertIn("manual_coordinates_ready", template)
+        self.assertIn('resolvedFields.resolved_latitude.value = latitude', template)
+        self.assertIn('resolvedFields.resolved_longitude.value = longitude', template)
+        self.assertIn('resolvedFields.resolved_geocode_provider.value = "manual_coordinates"', template)
 
     def test_astrology_calculation_path_consumes_lat_lon_timezone(self):
         with patch.object(utils, "resolve_birth_location", return_value={

@@ -144,7 +144,24 @@
         background-color:rgba(255,255,255,0.05);
     }
     .form-select option { background:#111522; color:var(--text); }
-    .autocomplete-shell { position:relative; }
+    .autocomplete-shell { position:relative; display:grid; gap:8px; }
+    .autocomplete-input-wrap { position:relative; }
+    .autocomplete-clear {
+        position:absolute;
+        top:50%;
+        right:8px;
+        transform:translateY(-50%);
+        min-width:44px;
+        min-height:44px;
+        border:0;
+        border-radius:12px;
+        background:rgba(201,168,76,0.12);
+        color:var(--text);
+        cursor:pointer;
+        display:none;
+    }
+    .autocomplete-shell[data-birthplace-selected="true"] .autocomplete-clear { display:inline-flex; align-items:center; justify-content:center; }
+    .autocomplete-shell[data-birthplace-selected="true"] #birth_city { padding-right:60px; }
     .autocomplete-status { margin-top:8px; font-size:0.82rem; color:var(--text-soft); }
     .autocomplete-status.warning { color:#f6d27a; }
     .suggestion-list {
@@ -161,10 +178,15 @@
         background:rgba(12,12,16,0.96);
         box-shadow:0 18px 48px rgba(0,0,0,0.35);
         display:none;
+        max-height:min(312px, 42vh);
+        overflow-y:auto;
+        overscroll-behavior:contain;
+        -webkit-overflow-scrolling:touch;
     }
     .suggestion-list.active { display:block; }
     .suggestion-item {
         width:100%;
+        min-height:48px;
         padding:12px 14px;
         border:0;
         border-radius:12px;
@@ -172,6 +194,8 @@
         color:var(--text);
         text-align:left;
         cursor:pointer;
+        display:grid;
+        align-content:center;
     }
     .suggestion-item:hover, .suggestion-item.active, .suggestion-item:focus {
         background:rgba(201,168,76,0.1);
@@ -179,6 +203,40 @@
     }
     .suggestion-main { display:block; font-weight:600; }
     .suggestion-sub { display:block; margin-top:4px; font-size:0.82rem; color:var(--text-soft); }
+    .manual-location-fallback {
+        display:none;
+        gap:10px;
+        padding:12px;
+        border:1px solid rgba(201,168,76,0.16);
+        border-radius:14px;
+        background:rgba(255,255,255,0.035);
+    }
+    .manual-location-fallback.active { display:grid; }
+    .manual-location-toggle {
+        justify-self:start;
+        min-height:44px;
+        padding:0 14px;
+        border:1px solid rgba(201,168,76,0.24);
+        border-radius:12px;
+        background:rgba(201,168,76,0.1);
+        color:var(--gold-light);
+        cursor:pointer;
+        display:none;
+    }
+    .manual-location-toggle.active { display:inline-flex; align-items:center; }
+    .manual-location-grid {
+        display:grid;
+        grid-template-columns:repeat(3, minmax(0, 1fr));
+        gap:10px;
+    }
+    .manual-location-grid label { display:grid; gap:6px; font-size:0.82rem; color:var(--text-soft); }
+    .manual-location-grid input { font-size:16px; min-height:44px; }
+    .manual-location-status { font-size:0.82rem; color:var(--text-soft); }
+    .manual-location-status.warning { color:#f6d27a; }
+    @media (max-width: 680px) {
+        .manual-location-grid { grid-template-columns:1fr; }
+        .suggestion-list { max-height:min(288px, 38vh); }
+    }
     .cta-row { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 16px; }
     .signal-row { display: flex; flex-wrap: wrap; gap: 10px; }
     .signal-chip {
@@ -267,9 +325,30 @@
                                 </div>
                                 <div class="field-full">
                                     <label for="birth_city">{{ t("index.label_birth_place") }}</label>
-                                    <div class="autocomplete-shell">
-                                        <input id="birth_city" name="birth_city" type="text" autocomplete="off" aria-expanded="false" aria-controls="birthplace-suggestions" aria-autocomplete="list" placeholder="{{ t("index.placeholder_birth_place") }}" required>
+                                    <div class="autocomplete-shell" data-birthplace-selected="false">
+                                        <div class="autocomplete-input-wrap">
+                                            <input id="birth_city" name="birth_city" type="text" autocomplete="off" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="birthplace-suggestions" aria-autocomplete="list" placeholder="{{ t("index.placeholder_birth_place") }}" required>
+                                            <button id="birthplace-clear" class="autocomplete-clear" type="button" aria-label="{{ 'Clear selected birth place' if page_lang == 'en' else 'Secilen dogum yerini temizle' }}">x</button>
+                                        </div>
                                         <ul id="birthplace-suggestions" class="suggestion-list" role="listbox" aria-label="{{ t("index.birthplace_suggestions_label") }}"></ul>
+                                        <button id="manual-location-toggle" class="manual-location-toggle" type="button">{{ t("index.birthplace.manual_coordinates_cta") }}</button>
+                                        <div id="manual-location-fallback" class="manual-location-fallback" aria-live="polite">
+                                            <div class="manual-location-grid">
+                                                <label for="manual_latitude">
+                                                    <span>{{ t("index.birthplace.manual_latitude") }}</span>
+                                                    <input id="manual_latitude" type="text" inputmode="decimal" autocomplete="off" placeholder="41.0082">
+                                                </label>
+                                                <label for="manual_longitude">
+                                                    <span>{{ t("index.birthplace.manual_longitude") }}</span>
+                                                    <input id="manual_longitude" type="text" inputmode="decimal" autocomplete="off" placeholder="28.9784">
+                                                </label>
+                                                <label for="manual_timezone">
+                                                    <span>{{ t("index.birthplace.manual_timezone") }}</span>
+                                                    <input id="manual_timezone" type="text" autocomplete="off" placeholder="Europe/Istanbul">
+                                                </label>
+                                            </div>
+                                            <div id="manual-location-status" class="manual-location-status">{{ t("index.birthplace.manual_coordinates_help") }}</div>
+                                        </div>
                                     </div>
                                     <input id="country" name="country" type="hidden">
                                     <input id="resolved_birth_place" name="resolved_birth_place" type="hidden">
@@ -427,6 +506,14 @@
         const input = document.getElementById("birth_city");
         const list = document.getElementById("birthplace-suggestions");
         const status = document.getElementById("birthplace-status");
+        const shell = input?.closest(".autocomplete-shell");
+        const clearButton = document.getElementById("birthplace-clear");
+        const manualToggle = document.getElementById("manual-location-toggle");
+        const manualPanel = document.getElementById("manual-location-fallback");
+        const manualStatus = document.getElementById("manual-location-status");
+        const manualLatitude = document.getElementById("manual_latitude");
+        const manualLongitude = document.getElementById("manual_longitude");
+        const manualTimezone = document.getElementById("manual_timezone");
         const resolvedFields = {
             resolved_birth_place: document.getElementById("resolved_birth_place"),
             resolved_latitude: document.getElementById("resolved_latitude"),
@@ -444,9 +531,54 @@
         let highlightedIndex = -1;
         let suggestionItems = [];
 
+        function setSelectedState(selected) {
+            birthplaceSuggestionSelected = selected;
+            if (shell) shell.dataset.birthplaceSelected = selected ? "true" : "false";
+            input.readOnly = selected;
+            input.setAttribute("aria-readonly", selected ? "true" : "false");
+        }
+        function setManualFallbackVisible(visible) {
+            manualToggle?.classList.toggle("active", visible);
+            if (!visible) manualPanel?.classList.remove("active");
+        }
+        function parseCoordinate(value, min, max) {
+            const parsed = Number(String(value || "").trim().replace(",", "."));
+            if (!Number.isFinite(parsed) || parsed < min || parsed > max) return null;
+            return parsed;
+        }
+        function applyManualCoordinates() {
+            const latitude = parseCoordinate(manualLatitude?.value, -90, 90);
+            const longitude = parseCoordinate(manualLongitude?.value, -180, 180);
+            const timezone = String(manualTimezone?.value || "").trim();
+            if (latitude === null || longitude === null || !timezone) {
+                Object.values(resolvedFields).forEach((field) => { if (field) field.value = ""; });
+                if (manualStatus) {
+                    manualStatus.textContent = indexText("manual_coordinates_invalid");
+                    manualStatus.classList.add("warning");
+                }
+                setSelectedState(false);
+                return;
+            }
+            const displayName = input.value.trim() || `Manual coordinates: ${latitude}, ${longitude}`;
+            input.value = displayName;
+            resolvedFields.resolved_birth_place.value = displayName;
+            resolvedFields.resolved_latitude.value = latitude;
+            resolvedFields.resolved_longitude.value = longitude;
+            resolvedFields.resolved_timezone.value = timezone;
+            resolvedFields.resolved_geocode_provider.value = "manual_coordinates";
+            resolvedFields.resolved_geocode_confidence.value = "1";
+            resolvedFields.country.value = "";
+            setSelectedState(true);
+            closeSuggestions();
+            if (manualStatus) {
+                manualStatus.textContent = indexText("manual_coordinates_ready");
+                manualStatus.classList.remove("warning");
+            }
+            setStatus(displayName);
+        }
         function clearResolvedFields() {
             Object.values(resolvedFields).forEach((field) => { if (field) field.value = ""; });
-            birthplaceSuggestionSelected = false;
+            setSelectedState(false);
         }
         function setStatus(message, tone = "") {
             status.textContent = message;
@@ -468,6 +600,13 @@
             input.removeAttribute("aria-activedescendant");
             highlightedIndex = -1;
             suggestionItems = [];
+        }
+        function resetBirthplaceInput() {
+            clearResolvedFields();
+            setManualFallbackVisible(false);
+            input.value = "";
+            input.focus();
+            setStatus(indexText("form_help"));
         }
         function setHighlightedIndex(nextIndex) {
             highlightedIndex = nextIndex;
@@ -492,7 +631,8 @@
             resolvedFields.resolved_geocode_confidence.value = item.confidence ?? "";
             const displayParts = String(item.display_name || "").split(",").map((part) => part.trim()).filter(Boolean);
             resolvedFields.country.value = displayParts[displayParts.length - 1] || "";
-            birthplaceSuggestionSelected = true;
+            setSelectedState(true);
+            setManualFallbackVisible(false);
             closeSuggestions();
             setStatus(item.normalized_place || item.display_name);
             observeBirthplaceEvent("suggestion_selected", {
@@ -504,7 +644,12 @@
         }
         function renderSuggestions(items) {
             list.innerHTML = "";
-            if (!items.length) { closeSuggestions(); return; }
+            if (!items.length) {
+                closeSuggestions();
+                setManualFallbackVisible(true);
+                return;
+            }
+            setManualFallbackVisible(false);
             suggestionItems = [];
             items.forEach((item) => {
                 const li = document.createElement("li");
@@ -538,6 +683,7 @@
             } catch (_error) {
                 if (requestId !== activeRequest) return;
                 closeSuggestions();
+                setManualFallbackVisible(true);
                 setStatus(indexText("autocomplete_unavailable"));
             }
         }
@@ -549,6 +695,7 @@
                 clearResolvedFields();
             }
             closeSuggestions();
+            setManualFallbackVisible(false);
             const query = input.value.trim();
             if (debounceTimer) clearTimeout(debounceTimer);
             if (query.length < 2) { setStatus(indexText("form_help")); return; }
@@ -568,7 +715,17 @@
         input.form?.addEventListener("submit", () => {
             if (!birthplaceSuggestionSelected || !resolvedFields.resolved_birth_place.value) setStatus(indexText("autocomplete_submit_warning"), "warning");
         });
-        document.addEventListener("pointerdown", (event) => { if (!list.contains(event.target) && event.target !== input) closeSuggestions(); });
+        clearButton?.addEventListener("click", resetBirthplaceInput);
+        manualToggle?.addEventListener("click", () => {
+            manualPanel?.classList.toggle("active");
+            manualLatitude?.focus();
+        });
+        [manualLatitude, manualLongitude, manualTimezone].forEach((field) => {
+            field?.addEventListener("input", () => {
+                if (manualLatitude?.value || manualLongitude?.value || manualTimezone?.value) applyManualCoordinates();
+            });
+        });
+        document.addEventListener("pointerdown", (event) => { if (!list.contains(event.target) && event.target !== input && !manualPanel?.contains(event.target) && event.target !== manualToggle) closeSuggestions(); });
     })();
 </script>
 {% endblock %}
