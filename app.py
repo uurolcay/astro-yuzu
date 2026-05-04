@@ -527,16 +527,36 @@ def _is_render_env():
 
 
 def _storage_warnings(engine_meta, uploads_dir, *, is_render_env=False):
+    risk_flags = _storage_risk_flags(engine_meta, uploads_dir, is_render_env=is_render_env)
     warnings = []
-    if engine_meta.get("database_url_missing"):
+    if risk_flags["database_url_missing"]:
         warnings.append("DATABASE_URL missing")
-    if is_render_env and engine_meta.get("db_dialect") == "sqlite":
+    if risk_flags["production_sqlite_detected"]:
         warnings.append("Production SQLite detected")
-    normalized_upload_dir = str(uploads_dir).replace("\\", "/").rstrip("/")
-    if is_render_env and not normalized_upload_dir.startswith("/var/data"):
+    if risk_flags["upload_dir_may_be_ephemeral"]:
         warnings.append("Upload dir not under /var/data while Render detected")
         warnings.append("Upload dir may be ephemeral")
     return warnings
+
+
+def _storage_risk_flags(engine_meta, uploads_dir, *, is_render_env=False):
+    current_database_url = str(os.getenv("DATABASE_URL", "") or "").strip()
+    database_url_missing = not bool(current_database_url)
+    effective_dialect = str(engine_meta.get("db_dialect") or "unknown").split("+", 1)[0]
+    if current_database_url:
+        effective_url = db_mod.resolve_database_url(current_database_url)
+        effective_dialect = effective_url.split(":", 1)[0].split("+", 1)[0].lower() or effective_dialect
+    is_postgresql = effective_dialect == "postgresql"
+    is_sqlite = effective_dialect == "sqlite"
+    normalized_upload_dir = str(uploads_dir).replace("\\", "/").rstrip("/")
+    upload_dir_may_be_ephemeral = bool(is_render_env and not normalized_upload_dir.startswith("/var/data"))
+    return {
+        "database_url_missing": database_url_missing,
+        "is_postgresql": is_postgresql,
+        "is_sqlite": is_sqlite,
+        "production_sqlite_detected": bool(is_render_env and database_url_missing and is_sqlite),
+        "upload_dir_may_be_ephemeral": upload_dir_may_be_ephemeral,
+    }
 
 
 def _storage_diagnostics(db: Session):
@@ -545,6 +565,7 @@ def _storage_diagnostics(db: Session):
     uploads_dir_exists = uploads_dir.exists()
     is_render_env = _is_render_env()
     warnings = _storage_warnings(engine_meta, uploads_dir, is_render_env=is_render_env)
+    risk_flags = _storage_risk_flags(engine_meta, uploads_dir, is_render_env=is_render_env)
     source_documents_count = db.query(db_mod.SourceDocument).count()
     knowledge_items_count = db.query(db_mod.KnowledgeItem).count()
     knowledge_chunks_count = db.query(db_mod.KnowledgeChunk).count()
@@ -552,6 +573,7 @@ def _storage_diagnostics(db: Session):
     published_count = db.query(db_mod.KnowledgeItem).filter(db_mod.KnowledgeItem.status.in_(["published", "active"])).count()
     return {
         **engine_meta,
+        **risk_flags,
         "source_documents_count": source_documents_count,
         "knowledge_items_count": knowledge_items_count,
         "knowledge_chunks_count": knowledge_chunks_count,

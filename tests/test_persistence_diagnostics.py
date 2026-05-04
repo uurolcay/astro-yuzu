@@ -104,6 +104,15 @@ class PersistenceDiagnosticsTests(unittest.TestCase):
         payload = response.json()
         self.assertIn("db_dialect", payload)
         self.assertIn("knowledge_items_count", payload)
+        for key in (
+            "database_url_missing",
+            "production_sqlite_detected",
+            "upload_dir_may_be_ephemeral",
+            "is_postgresql",
+            "is_sqlite",
+        ):
+            self.assertIn(key, payload)
+            self.assertIsInstance(payload[key], bool)
 
     def test_storage_debug_route_blocks_non_admin(self):
         with patch.object(app, "_require_admin_user", side_effect=self._request_member_pair):
@@ -143,6 +152,38 @@ class PersistenceDiagnosticsTests(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["uploads_dir_path"], str(Path(tmpdir).resolve()))
         self.assertIn("Upload dir may be ephemeral", payload.get("warnings", []))
+        self.assertTrue(payload["upload_dir_may_be_ephemeral"])
+
+    def test_postgres_database_url_does_not_report_production_sqlite(self):
+        with patch.dict(os.environ, {"DATABASE_URL": "postgres://user:pass@example.com/db", "RENDER": "true"}, clear=False):
+            with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+                response = self.client.get("/admin/debug/storage")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertFalse(payload["database_url_missing"])
+        self.assertTrue(payload["is_postgresql"])
+        self.assertFalse(payload["is_sqlite"])
+        self.assertFalse(payload["production_sqlite_detected"])
+
+    def test_missing_database_url_on_render_reports_production_sqlite(self):
+        with patch.dict(os.environ, {"DATABASE_URL": "", "RENDER": "true"}, clear=False):
+            with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+                response = self.client.get("/admin/debug/storage")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["database_url_missing"])
+        self.assertTrue(payload["is_sqlite"])
+        self.assertFalse(payload["is_postgresql"])
+        self.assertTrue(payload["production_sqlite_detected"])
+
+    def test_missing_upload_dir_on_render_reports_ephemeral_upload_dir(self):
+        with patch.dict(os.environ, {"RENDER": "true"}, clear=False):
+            os.environ.pop("UPLOAD_DIR", None)
+            with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+                response = self.client.get("/admin/debug/storage")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["upload_dir_may_be_ephemeral"])
 
     def test_init_db_does_not_delete_existing_data(self):
         self._review_item()
