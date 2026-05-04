@@ -312,6 +312,28 @@ def format_price_html(value, language: str = "tr", usd_try_rate: Decimal | None 
     return label
 
 
+def normalize_birth_time_input(value: str) -> str | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    compact_match = re.fullmatch(r"([01]?\d|2[0-3])([0-5]\d)", raw)
+    if compact_match:
+        return f"{int(compact_match.group(1)):02d}:{compact_match.group(2)}"
+    match = re.fullmatch(r"([01]?\d|2[0-3])[:.]([0-5]\d)(?:\s*([AaPp][Mm]))?", raw)
+    if not match:
+        return None
+    hour = int(match.group(1))
+    minute = match.group(2)
+    meridiem = match.group(3)
+    if meridiem:
+        marker = meridiem.lower()
+        if marker == "pm" and hour < 12:
+            hour += 12
+        elif marker == "am" and hour == 12:
+            hour = 0
+    return f"{hour:02d}:{minute}"
+
+
 def render_email(template_name: str, **kwargs) -> str:
     return email_utils.render_email(template_name, **kwargs)
 
@@ -13367,6 +13389,10 @@ async def calculate_from_form(
     try:
         current_user = get_request_user(request, db)
         current_language = _result_language(request, current_user)
+        birth_time = normalize_birth_time_input(birth_time) or ""
+        parent_birth_time = normalize_birth_time_input(parent_birth_time) or ""
+        child_birth_time = normalize_birth_time_input(child_birth_time) or ""
+        birth_time_error = "Birth time is required and must use hour and minute." if current_language == "en" else "Doğum saati zorunludur ve saat:dakika formatında olmalıdır."
         if resolved_birth_place and resolved_latitude and resolved_longitude and resolved_timezone:
             _log_birthplace_event(
                 db,
@@ -13387,6 +13413,8 @@ async def calculate_from_form(
         report_type, access_notice = resolve_report_type_for_user(current_user, report_type)
         report_type, report_type_config = get_report_type_config(report_type)
         if report_type == "parent_child":
+            if not parent_birth_time or not child_birth_time:
+                _public_error(birth_time_error, 400)
             if not all([
                 parent_full_name.strip(), parent_birth_date.strip(), parent_birth_time.strip(), parent_birth_city.strip(),
                 child_full_name.strip(), child_birth_date.strip(), child_birth_time.strip(), child_birth_city.strip(),
@@ -13560,6 +13588,8 @@ async def calculate_from_form(
             result_data["payload_json"] = _serialize_temporal_values(payload_json)
             result_data = _apply_report_access_context(result_data, report_record, current_user=current_user)
             return templates.TemplateResponse(request=request, name="result.html", context=result_data)
+        if not birth_time:
+            _public_error(birth_time_error, 400)
         date = f"{birth_date}T{birth_time}"
         resolved_location_payload = _resolved_birth_location_payload_from_form(
             birth_city=birth_city,
@@ -13746,6 +13776,8 @@ async def calculate_from_form(
         result_data["payload_json"] = _serialize_temporal_values(payload_json)
         result_data = _apply_report_access_context(result_data, report_record, current_user=current_user)
         return templates.TemplateResponse(request=request, name="result.html", context=result_data)
+    except HTTPException:
+        raise
     except BirthPlaceResolutionError as exc:
         logger.warning("Calculate birth place validation failed: %s", exc)
         try:

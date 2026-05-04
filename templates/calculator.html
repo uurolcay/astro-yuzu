@@ -90,6 +90,41 @@
         background:rgba(255,255,255,0.03);
         color:var(--text);
         font:inherit;
+        font-size:16px;
+    }
+    .birth-time-shell {
+        display:grid;
+        gap:10px;
+    }
+    .birth-time-controls {
+        display:grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap:10px;
+    }
+    .birth-time-control {
+        display:grid;
+        gap:6px;
+    }
+    .birth-time-control span {
+        color:var(--text-soft);
+        font-family:"Cinzel", serif;
+        font-size:.66rem;
+        font-weight:700;
+        letter-spacing:.14em;
+        text-transform:uppercase;
+    }
+    .birth-time-help,
+    .field-error {
+        margin:0;
+        font-size:.84rem;
+        line-height:1.5;
+    }
+    .birth-time-help { color:var(--text-soft); }
+    .field-error { color:#f6a86f; min-height:1.25em; }
+    .field-error:empty { display:none; }
+    input[aria-invalid="true"] {
+        border-color:rgba(246,168,111,.78);
+        box-shadow:0 0 0 3px rgba(246,168,111,.16);
     }
     .form-select {
         appearance:none;
@@ -173,6 +208,7 @@
         }
         .field-full { grid-column:auto; }
         .calculator-side { padding:22px 0 0; border-left:0; border-top:1px solid rgba(223,192,112,.12); }
+        .birth-time-controls { grid-template-columns:1fr; }
     }
 </style>
 {% endblock %}
@@ -212,8 +248,22 @@
                                     <input id="birth_date" name="birth_date" type="date" required>
                                 </div>
                                 <div>
-                                    <label for="birth_time">{{ t("index.label_birth_time") }}</label>
-                                    <input id="birth_time" name="birth_time" type="time" required>
+                                    <div class="birth-time-shell" data-birth-time-field>
+                                        <label id="birth_time_label" for="birth_time_native">{{ t("index.label_birth_time") }}</label>
+                                        <input id="birth_time" name="birth_time" type="hidden" required>
+                                        <div class="birth-time-controls" role="group" aria-labelledby="birth_time_label" aria-describedby="birth_time_help birth_time_error">
+                                            <label class="birth-time-control" for="birth_time_native">
+                                                <span>{{ "Picker" if page_lang == "en" else "Seçici" }}</span>
+                                                <input id="birth_time_native" type="time" step="60" inputmode="numeric" autocomplete="off" aria-describedby="birth_time_help birth_time_error">
+                                            </label>
+                                            <label class="birth-time-control" for="birth_time_manual">
+                                                <span>{{ "Manual" if page_lang == "en" else "Manuel" }}</span>
+                                                <input id="birth_time_manual" type="text" inputmode="numeric" autocomplete="off" maxlength="8" placeholder="06:42" aria-describedby="birth_time_help birth_time_error">
+                                            </label>
+                                        </div>
+                                        <p id="birth_time_help" class="birth-time-help">{{ "Use the picker or type hour and minute, for example 06:42." if page_lang == "en" else "Seçiciyi kullanın veya saati saat:dakika olarak yazın; örnek 06:42." }}</p>
+                                        <p id="birth_time_error" class="field-error" role="alert" aria-live="polite"></p>
+                                    </div>
                                 </div>
                                 <div class="field-full">
                                     <label for="birth_city">{{ t("index.label_birth_place") }}</label>
@@ -284,6 +334,96 @@
                 event.preventDefault();
             });
         }
+    })();
+
+    (() => {
+        const shell = document.querySelector("[data-birth-time-field]");
+        if (!shell) return;
+        const nativeInput = document.getElementById("birth_time_native");
+        const manualInput = document.getElementById("birth_time_manual");
+        const hiddenInput = document.getElementById("birth_time");
+        const error = document.getElementById("birth_time_error");
+        const form = shell.closest("form");
+        const lang = document.documentElement.lang === "tr" ? "tr" : "en";
+        const messages = {
+            tr: {
+                required: "Doğum saati zorunludur.",
+                invalid: "Geçerli bir saat girin. Örnek: 06:42.",
+            },
+            en: {
+                required: "Birth time is required.",
+                invalid: "Enter a valid time. Example: 06:42.",
+            },
+        };
+        const copy = messages[lang] || messages.en;
+        const markInvalid = (message) => {
+            error.textContent = message;
+            nativeInput.setAttribute("aria-invalid", "true");
+            manualInput.setAttribute("aria-invalid", "true");
+            hiddenInput.value = "";
+        };
+        const clearInvalid = () => {
+            error.textContent = "";
+            nativeInput.removeAttribute("aria-invalid");
+            manualInput.removeAttribute("aria-invalid");
+        };
+        const normalizeTime = (value) => {
+            const raw = String(value || "").trim();
+            if (!raw) return "";
+            const compact = raw.match(/^([01]?\d|2[0-3])([0-5]\d)$/);
+            if (compact) return `${String(Number(compact[1])).padStart(2, "0")}:${compact[2]}`;
+            const match = raw.match(/^([01]?\d|2[0-3])[:.]([0-5]\d)(?:\s*([AaPp][Mm]))?$/);
+            if (!match) return "";
+            let hour = Number(match[1]);
+            const minute = match[2];
+            const meridiem = match[3] ? match[3].toLowerCase() : "";
+            if (meridiem === "pm" && hour < 12) hour += 12;
+            if (meridiem === "am" && hour === 12) hour = 0;
+            return `${String(hour).padStart(2, "0")}:${minute}`;
+        };
+        const syncTime = (source, options = {}) => {
+            const value = normalizeTime(source.value);
+            if (!value) {
+                hiddenInput.value = "";
+                if (options.validate) markInvalid(source.value.trim() ? copy.invalid : copy.required);
+                return "";
+            }
+            hiddenInput.value = value;
+            nativeInput.value = value;
+            manualInput.value = value;
+            clearInvalid();
+            return value;
+        };
+        nativeInput.addEventListener("change", () => syncTime(nativeInput, { validate: true }));
+        manualInput.addEventListener("input", () => {
+            const value = normalizeTime(manualInput.value);
+            if (value) {
+                hiddenInput.value = value;
+                nativeInput.value = value;
+                clearInvalid();
+            } else {
+                hiddenInput.value = "";
+                nativeInput.value = "";
+            }
+        });
+        manualInput.addEventListener("blur", () => syncTime(manualInput, { validate: Boolean(manualInput.value.trim()) }));
+        [nativeInput, manualInput].forEach((input) => {
+            input.addEventListener("focus", () => {
+                window.requestAnimationFrame(() => {
+                    input.scrollIntoView({ block: "center", behavior: "smooth" });
+                });
+            });
+        });
+        form?.addEventListener("submit", (event) => {
+            const value = syncTime(manualInput.value.trim() ? manualInput : nativeInput, { validate: true });
+            if (!value) {
+                event.preventDefault();
+                manualInput.focus();
+            }
+        });
+    })();
+
+    (() => {
         const input = document.getElementById("birth_city");
         const list = document.getElementById("birthplace-suggestions");
         const status = document.getElementById("birthplace-status");

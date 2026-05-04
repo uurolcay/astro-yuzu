@@ -243,6 +243,65 @@ class BirthLocationPipelineTests(unittest.TestCase):
         self.assertIn("resolved_birthplace_label", template)
         self.assertIn("normalized_birth_place", template)
 
+    def test_calculator_birth_time_field_supports_native_and_manual_minute_input(self):
+        template = Path("C:\\Users\\uolca\\Documents\\Chatgpt Codex\\astro-yuzu\\templates\\calculator.html").read_text(encoding="utf-8")
+
+        self.assertIn('id="birth_time" name="birth_time" type="hidden"', template)
+        self.assertIn('id="birth_time_native" type="time" step="60"', template)
+        self.assertIn('id="birth_time_manual" type="text" inputmode="numeric"', template)
+        self.assertIn('id="birth_time_error" class="field-error" role="alert"', template)
+        self.assertIn("font-size:16px", template)
+        self.assertNotIn('type="time" required>', template)
+
+    def test_birth_time_normalizer_accepts_hour_and_minute_without_seconds(self):
+        self.assertEqual(app.normalize_birth_time_input("06:42"), "06:42")
+        self.assertEqual(app.normalize_birth_time_input("642"), "06:42")
+        self.assertEqual(app.normalize_birth_time_input("6:42 PM"), "18:42")
+        self.assertIsNone(app.normalize_birth_time_input(""))
+        self.assertIsNone(app.normalize_birth_time_input("25:99"))
+        self.assertIsNone(app.normalize_birth_time_input("06:42:30"))
+
+    def test_calculate_rejects_invalid_birth_time_before_chart_resolution(self):
+        client = TestClient(app.app)
+        csrf_token = self._csrf_token(client)
+        with patch.object(app, "_build_birth_context") as build_birth_context:
+            response = client.post(
+                "/calculate",
+                data={
+                    "csrf_token": csrf_token,
+                    "full_name": "Test User",
+                    "birth_date": "1990-01-01",
+                    "birth_time": "25:99",
+                    "birth_city": "Istanbul",
+                    "country": "Turkey",
+                    "report_type": "premium",
+                },
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Birth time is required", response.text)
+        build_birth_context.assert_not_called()
+
+    def test_calculate_normalizes_manual_birth_time_before_backend_payload(self):
+        client = TestClient(app.app)
+        csrf_token = self._csrf_token(client)
+        with patch.object(app, "_build_birth_context", side_effect=geocoding.BirthPlaceResolutionError("ambiguous", code="ambiguous_place")) as build_birth_context:
+            response = client.post(
+                "/calculate",
+                data={
+                    "csrf_token": csrf_token,
+                    "full_name": "Test User",
+                    "birth_date": "1990-01-01",
+                    "birth_time": "642",
+                    "birth_city": "Istanbul",
+                    "country": "Turkey",
+                    "report_type": "premium",
+                },
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(build_birth_context.call_args.args[0], "1990-01-01T06:42")
+
     def test_calculator_result_respects_turkish_language_for_preview_unlock_copy(self):
         client = TestClient(app.app)
         csrf_token = self._csrf_token(client)
