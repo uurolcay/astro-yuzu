@@ -7318,6 +7318,13 @@ def _review_status_value(value: str) -> str:
     return normalized
 
 
+def _parse_optional_int(value):
+    cleaned = str(value or "").strip()
+    if not cleaned:
+        return None
+    return int(cleaned) if cleaned.isdigit() else None
+
+
 def _review_items_query(
     db,
     *,
@@ -7332,10 +7339,9 @@ def _review_items_query(
     if normalized_status and normalized_status != "all":
         query = query.filter(db_mod.KnowledgeItem.status == normalized_status)
     if source_document_id:
-        try:
-            query = query.filter(db_mod.KnowledgeItem.source_document_id == int(source_document_id))
-        except (TypeError, ValueError):
-            pass
+        parsed_source_document_id = _parse_optional_int(source_document_id)
+        if parsed_source_document_id:
+            query = query.filter(db_mod.KnowledgeItem.source_document_id == parsed_source_document_id)
     if str(q or "").strip():
         like = f"%{str(q).strip()}%"
         query = query.filter(
@@ -13202,17 +13208,18 @@ async def admin_knowledge_review_list(
     status: str = "review_required",
     sensitivity: str = "",
     category: str = "",
-    source_document_id: int | None = None,
+    source_document_id: str | None = None,
     q: str = "",
 ):
     page, limit, offset = _admin_page_params(page, page_size)
     valid_direction = "asc" if str(direction or order or "desc").lower() == "asc" else "desc"
+    parsed_source_document_id = _parse_optional_int(source_document_id)
     query = _review_items_query(
         db,
         status=status,
         sensitivity=sensitivity,
         category=category,
-        source_document_id=source_document_id,
+        source_document_id=parsed_source_document_id,
         q=q,
     )
     normalized_sort = str(sort or "created_at").strip().lower()
@@ -13265,7 +13272,7 @@ async def admin_knowledge_review_list(
                 "status": _review_status_value(status),
                 "sensitivity": sensitivity,
                 "category": category,
-                "source_document_id": source_document_id or "",
+                "source_document_id": parsed_source_document_id or "",
             },
             source_documents=source_documents,
             pagination={"page": page, "page_size": limit},

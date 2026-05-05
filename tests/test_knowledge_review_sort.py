@@ -94,6 +94,63 @@ def test_review_sort_invalid_field_falls_back_without_crash(review_env):
     assert response.status_code == 200
 
 
+def test_review_empty_source_document_id_returns_200(review_env):
+    _db, client, request_admin_pair = review_env
+    with patch.object(app, "_require_admin_user", side_effect=request_admin_pair):
+        response = client.get("/admin/knowledge/review?source_document_id=")
+    assert response.status_code == 200
+
+
+def test_review_invalid_source_document_id_returns_200(review_env):
+    _db, client, request_admin_pair = review_env
+    with patch.object(app, "_require_admin_user", side_effect=request_admin_pair):
+        response = client.get("/admin/knowledge/review?source_document_id=abc")
+    assert response.status_code == 200
+
+
+def test_review_numeric_source_document_id_filters(review_env):
+    db, client, request_admin_pair = review_env
+    admin = db.query(db_mod.AppUser).filter(db_mod.AppUser.email == "knowledge-sort-admin@example.com").first()
+    other_source = db_mod.SourceDocument(title="Other Source", document_type="book")
+    db.add(other_source)
+    db.flush()
+    knowledge_service.create_knowledge_item(
+        db,
+        title="Other Source Review Chunk",
+        body_text="Other source body text.",
+        language="tr",
+        item_type="nakshatra",
+        summary_text="Other summary.",
+        entities=["ashwini"],
+        source_document=other_source,
+        metadata={
+            "review_required": True,
+            "status": "review_required",
+            "category": "nakshatra",
+            "primary_entity": "ashwini",
+            "source_title": "Other Source",
+            "confidence_level": "medium",
+            "sensitivity_level": "low",
+        },
+        created_by_user_id=admin.id,
+        status="review_required",
+    )
+    db.commit()
+    target = db.query(db_mod.KnowledgeItem).filter(db_mod.KnowledgeItem.title == "Dhanishta Review Chunk").first()
+    with patch.object(app, "_require_admin_user", side_effect=request_admin_pair):
+        response = client.get(f"/admin/knowledge/review?source_document_id={target.source_document_id}")
+    assert response.status_code == 200
+    assert "Dhanishta Review Chunk" in response.text
+    assert "Other Source Review Chunk" not in response.text
+
+
+def test_review_empty_filter_params_return_200(review_env):
+    _db, client, request_admin_pair = review_env
+    with patch.object(app, "_require_admin_user", side_effect=request_admin_pair):
+        response = client.get("/admin/knowledge/review?status=&sensitivity=&category=&q=&sort=&direction=")
+    assert response.status_code == 200
+
+
 def test_sensitivity_sort_key_high_is_greater_than_medium():
     assert app._sensitivity_sort_key("high") > app._sensitivity_sort_key("medium")
 
