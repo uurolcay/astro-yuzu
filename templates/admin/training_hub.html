@@ -68,6 +68,10 @@
     <div class="admin-stat-label">Review Bekleyen</div>
     <div class="admin-stat-value">{{ stats.review_pending }}</div>
   </div>
+  <div class="admin-stat {% if stats.failed_documents > 0 %}finance-kpi-warning{% endif %}">
+    <div class="admin-stat-label">PDF Sorunlu</div>
+    <div class="admin-stat-value">{{ stats.failed_documents }}</div>
+  </div>
 </section>
 
 <section class="admin-card">
@@ -133,6 +137,11 @@
     </div>
     <a class="btn-admin btn-admin-secondary" href="/admin/knowledge/coverage">Detaylı harita →</a>
   </div>
+  {% if not coverage.is_cached %}
+  <div class="admin-muted">Coverage not calculated yet. Detay sayfasından Refresh Knowledge Coverage ile hesaplayabilirsiniz.</div>
+  {% elif coverage.last_updated %}
+  <div class="admin-muted">Cached summary: {{ coverage.last_updated }}</div>
+  {% endif %}
   {% for category_name, entities in coverage.by_category.items() %}
   {% set ns = namespace(total=0, count=0) %}
   {% for _entity, payload in entities.items() %}
@@ -176,7 +185,7 @@
           <span class="admin-muted">-</span>
           {% endfor %}
         </td>
-        <td>{{ item.chunks|length }}</td>
+        <td>{{ item.admin_chunk_count or 0 }}</td>
         <td>
           {% if item.status == "active" %}
           <span class="badge badge-success">aktif</span>

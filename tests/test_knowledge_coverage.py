@@ -26,6 +26,7 @@ class KnowledgeCoverageTests(unittest.TestCase):
         self.db.query(db_mod.InternalProfile).delete()
         self.db.query(db_mod.ServiceOrder).delete()
         self.db.query(db_mod.AppUser).delete()
+        self.db.query(db_mod.SiteSetting).filter(db_mod.SiteSetting.key == app.ADMIN_COVERAGE_CACHE_KEY).delete()
         self.admin = db_mod.AppUser(
             email="coverage-admin@example.com",
             password_hash="hash",
@@ -57,6 +58,7 @@ class KnowledgeCoverageTests(unittest.TestCase):
         self.db.query(db_mod.InternalProfile).delete()
         self.db.query(db_mod.ServiceOrder).delete()
         self.db.query(db_mod.AppUser).delete()
+        self.db.query(db_mod.SiteSetting).filter(db_mod.SiteSetting.key == app.ADMIN_COVERAGE_CACHE_KEY).delete()
         self.db.commit()
         self.db.close()
 
@@ -230,21 +232,24 @@ class KnowledgeCoverageTests(unittest.TestCase):
             response = self.client.get("/admin/knowledge/coverage")
         self.assertEqual(response.status_code, 200)
 
-    def test_admin_knowledge_coverage_route_uses_limited_scan(self):
+    def test_admin_knowledge_coverage_route_uses_cached_summary_without_scan(self):
         safe_coverage = {
             "summary": {"total_entities": 0, "missing_count": 0, "weak_count": 0, "moderate_count": 0, "strong_count": 0, "overall_pct": 0},
             "by_category": {},
             "missing_entities": [],
             "weak_entities": [],
         }
+        app._store_knowledge_coverage_cache(self.db, safe_coverage)
+        self.db.commit()
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair), patch.object(
             app.coverage_svc,
             "compute_knowledge_coverage",
-            return_value=safe_coverage,
+            side_effect=AssertionError("coverage rebuild must be manual"),
         ) as compute:
             response = self.client.get("/admin/knowledge/coverage")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(compute.call_args.kwargs.get("max_chunks"), app.ADMIN_COVERAGE_MAX_CHUNKS)
+        self.assertIn("Cached coverage summary", response.text)
+        self.assertFalse(compute.called)
 
     def test_coverage_rebuild_is_manual_post_route(self):
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
@@ -264,6 +269,8 @@ class KnowledgeCoverageTests(unittest.TestCase):
         self.assertEqual(response.status_code, 303)
         self.assertIn("coverage_refreshed", response.headers.get("location", ""))
         self.assertEqual(compute.call_args.kwargs.get("max_chunks"), app.ADMIN_COVERAGE_MAX_CHUNKS)
+        self.db.expire_all()
+        self.assertTrue(app.get_setting(self.db, app.ADMIN_COVERAGE_CACHE_KEY, ""))
 
     def test_admin_interpretation_knowledge_route_returns_200_for_admin(self):
         interpretation = db_mod.InternalInterpretation(

@@ -389,12 +389,12 @@ def attach_pdf_path(interpretation, pdf_path):
     return interpretation
 
 
-def list_internal_profiles(db, search=""):
+def list_internal_profiles(db, search="", limit=50):
     query = db.query(db_mod.InternalProfile)
     term = str(search or "").strip()
     if term:
         query = query.filter(db_mod.InternalProfile.full_name.ilike(f"%{term}%"))
-    return query.order_by(db_mod.InternalProfile.is_favorite.desc(), db_mod.InternalProfile.updated_at.desc()).all()
+    return query.order_by(db_mod.InternalProfile.is_favorite.desc(), db_mod.InternalProfile.updated_at.desc()).limit(max(1, int(limit or 50))).all()
 
 
 def internal_pdf_output_path(base_dir, interpretation_id):

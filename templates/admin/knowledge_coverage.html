@@ -17,6 +17,12 @@
 
 {% if notice %}<div class="admin-alert admin-alert-success">{{ notice }}</div>{% endif %}
 
+{% if not coverage.is_cached %}
+<div class="admin-alert admin-alert-warning">Coverage not calculated yet. Refresh Knowledge Coverage ile manuel hesaplayabilirsiniz.</div>
+{% elif coverage.last_updated %}
+<div class="admin-alert">Cached coverage summary. Last updated: {{ coverage.last_updated }}</div>
+{% endif %}
+
 {% set summary = coverage.summary or {} %}
 <section class="admin-grid-3">
   <article class="admin-card"><div class="admin-card-title">Total entities</div><div class="admin-stat">{{ summary.total_entities or 0 }}</div></article>

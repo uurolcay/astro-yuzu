@@ -19,6 +19,7 @@ class TrainingHubTests(unittest.TestCase):
         self.db.query(db_mod.SourceDocument).delete()
         self.db.query(db_mod.ServiceOrder).delete()
         self.db.query(db_mod.AppUser).delete()
+        self.db.query(db_mod.SiteSetting).filter(db_mod.SiteSetting.key == app.ADMIN_COVERAGE_CACHE_KEY).delete()
         self.admin = db_mod.AppUser(
             email="training-admin@example.com",
             password_hash="hash",
@@ -68,6 +69,7 @@ class TrainingHubTests(unittest.TestCase):
         self.db.query(db_mod.SourceDocument).delete()
         self.db.query(db_mod.ServiceOrder).delete()
         self.db.query(db_mod.AppUser).delete()
+        self.db.query(db_mod.SiteSetting).filter(db_mod.SiteSetting.key == app.ADMIN_COVERAGE_CACHE_KEY).delete()
         self.db.commit()
         self.db.close()
 
@@ -94,6 +96,25 @@ class TrainingHubTests(unittest.TestCase):
             response = self.client.get("/admin/training")
         self.assertEqual(response.status_code, 200)
         self.assertIn("AI Astrologer Training", response.text)
+
+    def test_training_hub_does_not_rebuild_coverage_on_get(self):
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair), patch.object(
+            app.coverage_svc,
+            "compute_knowledge_coverage",
+            side_effect=AssertionError("training hub must use cached coverage"),
+        ):
+            response = self.client.get("/admin/training")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Coverage not calculated yet", response.text)
+
+    def test_shared_admin_context_does_not_query_unread_contact_count(self):
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair), patch.object(
+            app,
+            "_unread_contact_count",
+            side_effect=AssertionError("sidebar must not run DB count on every admin page"),
+        ):
+            response = self.client.get("/admin/training")
+        self.assertEqual(response.status_code, 200)
 
     def test_admin_training_write_returns_200(self):
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):

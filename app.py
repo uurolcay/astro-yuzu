@@ -312,7 +312,7 @@ async def admin_request_tracing_middleware(request: Request, call_next):
         )
         raise
     duration_ms = int((time.perf_counter() - started) * 1000)
-    logger.info("ADMIN_REQUEST_END %s %s %s %s %s", request_id, request.method, path, response.status_code, duration_ms)
+    logger.info("ADMIN_REQUEST_END %s %s %s %s duration_ms=%s", request_id, request.method, path, response.status_code, duration_ms)
     return response
 
 db_mod.init_db()
@@ -323,6 +323,71 @@ _pdf_env = Environment(loader=FileSystemLoader("templates/pdf"))
 def get_setting(db: Session, key: str, default: str = "") -> str:
     row = db.query(db_mod.SiteSetting).filter(db_mod.SiteSetting.key == key).first()
     return row.value if row and row.value is not None else default
+
+
+def set_setting(db: Session, key: str, value: str) -> db_mod.SiteSetting:
+    row = db.query(db_mod.SiteSetting).filter(db_mod.SiteSetting.key == key).first()
+    if not row:
+        row = db_mod.SiteSetting(key=key)
+        db.add(row)
+    row.value = value
+    row.updated_at = datetime.utcnow()
+    return row
+
+
+ADMIN_COVERAGE_CACHE_KEY = "admin_metric:knowledge_coverage"
+
+
+def _empty_knowledge_coverage():
+    return {
+        "summary": {
+            "total_entities": 0,
+            "missing_count": 0,
+            "weak_count": 0,
+            "moderate_count": 0,
+            "strong_count": 0,
+            "overall_pct": 0.0,
+        },
+        "by_category": {},
+        "missing_entities": [],
+        "weak_entities": [],
+        "last_updated": "",
+        "is_cached": False,
+    }
+
+
+def _cached_knowledge_coverage(db: Session) -> dict:
+    payload = _json_loads_safe(get_setting(db, ADMIN_COVERAGE_CACHE_KEY, ""), {})
+    if not isinstance(payload, dict) or not payload:
+        return _empty_knowledge_coverage()
+    coverage = payload.get("coverage") if isinstance(payload.get("coverage"), dict) else payload
+    coverage.setdefault("summary", {})
+    coverage.setdefault("by_category", {})
+    coverage.setdefault("missing_entities", [])
+    coverage.setdefault("weak_entities", [])
+    coverage["last_updated"] = payload.get("updated_at") or coverage.get("last_updated") or ""
+    coverage["is_cached"] = True
+    return coverage
+
+
+def _store_knowledge_coverage_cache(db: Session, coverage: dict) -> dict:
+    payload = {
+        "coverage": coverage or _empty_knowledge_coverage(),
+        "updated_at": datetime.utcnow().isoformat(),
+        "max_chunks": int(ADMIN_COVERAGE_MAX_CHUNKS),
+    }
+    set_setting(db, ADMIN_COVERAGE_CACHE_KEY, json.dumps(payload, ensure_ascii=False, default=str))
+    cached = dict(payload["coverage"])
+    cached["last_updated"] = payload["updated_at"]
+    cached["is_cached"] = True
+    return cached
+
+
+def _admin_stage_log(request: Request | None, stage: str, started: float):
+    path = str(getattr(getattr(request, "url", None), "path", "") or "")
+    if path.startswith("/admin") or path.startswith("/api/admin"):
+        duration_ms = int((time.perf_counter() - started) * 1000)
+        logger.info("ADMIN_STAGE path=%s stage=%s duration_ms=%s", path, stage, duration_ms)
 
 
 def parse_price_amount(value) -> Decimal:
@@ -6953,7 +7018,7 @@ def _auth_template_context(request, **extra):
         "current_user": current_user,
         "flash_success": extra.get("flash_success") or flash.get("flash_success") or extra.get("notice") or "",
         "flash_error": extra.get("flash_error") or flash.get("flash_error") or extra.get("error") or "",
-        "unread_contact": extra.get("unread_contact", _unread_contact_count() if str(getattr(request, "url", "")).find("/admin") >= 0 else 0),
+        "unread_contact": extra.get("unread_contact", 0),
     }
     context.update(_launch_mode_flags())
     context.update(extra)
@@ -6985,6 +7050,23 @@ def _knowledge_item_metadata(item):
     if not isinstance(metadata, dict):
         metadata = {}
     return metadata
+
+
+def _attach_knowledge_chunk_counts(db, items):
+    items = list(items or [])
+    item_ids = [item.id for item in items if getattr(item, "id", None)]
+    if not item_ids:
+        return items
+    rows = (
+        db.query(db_mod.KnowledgeChunk.knowledge_item_id, func.count(db_mod.KnowledgeChunk.id))
+        .filter(db_mod.KnowledgeChunk.knowledge_item_id.in_(item_ids))
+        .group_by(db_mod.KnowledgeChunk.knowledge_item_id)
+        .all()
+    )
+    counts = {int(item_id): int(count or 0) for item_id, count in rows}
+    for item in items:
+        item.admin_chunk_count = counts.get(int(item.id), 0)
+    return items
 
 
 def _csv_to_list(value):
@@ -12586,7 +12668,7 @@ async def admin_astro_workspace_profile_detail(request: Request, profile_id: int
             db_mod.InternalInterpretation.profile_id == profile.id,
             db_mod.InternalInterpretation.secondary_profile_id == profile.id,
         )
-    ).order_by(db_mod.InternalInterpretation.created_at.desc()).all()
+    ).order_by(db_mod.InternalInterpretation.created_at.desc()).limit(MAX_ADMIN_PAGE_SIZE).all()
     return templates.TemplateResponse(
         request=request,
         name="admin/astro_workspace_profile_detail.html",
@@ -12631,6 +12713,7 @@ async def admin_training_hub(
     db: Session = Depends(get_db),
     notice: str = "",
 ):
+    started = time.perf_counter()
     total_items = db.query(db_mod.KnowledgeItem).count()
     review_pending = db.query(db_mod.KnowledgeItem).filter(
         db_mod.KnowledgeItem.status == "review_required"
@@ -12638,24 +12721,27 @@ async def admin_training_hub(
     open_gaps = db.query(db_mod.KnowledgeGap).filter(
         db_mod.KnowledgeGap.status == "open"
     ).count()
+    source_documents = db.query(db_mod.SourceDocument).count()
+    failed_documents = db.query(db_mod.SourceDocument).filter(db_mod.SourceDocument.processing_status.in_(["failed", "parse_empty"])).count()
+    _admin_stage_log(request, "db_counts", started)
 
-    try:
-        coverage = coverage_svc.compute_knowledge_coverage(db, max_chunks=ADMIN_COVERAGE_MAX_CHUNKS)
-    except Exception:
-        coverage = {"summary": {}, "by_category": {}}
+    started = time.perf_counter()
+    coverage = _cached_knowledge_coverage(db)
+    _admin_stage_log(request, "coverage_summary", started)
 
     recent_items = (
         db.query(db_mod.KnowledgeItem)
         .order_by(db_mod.KnowledgeItem.updated_at.desc())
-        .limit(8)
+        .limit(5)
         .all()
     )
+    _attach_knowledge_chunk_counts(db, recent_items)
 
     priority_gaps = (
         db.query(db_mod.KnowledgeGap)
         .filter(db_mod.KnowledgeGap.status == "open")
         .order_by(db_mod.KnowledgeGap.created_at.desc())
-        .limit(10)
+        .limit(5)
         .all()
     )
 
@@ -12670,6 +12756,8 @@ async def admin_training_hub(
                 "total_items": total_items,
                 "review_pending": review_pending,
                 "open_gaps": open_gaps,
+                "source_documents": source_documents,
+                "failed_documents": failed_documents,
                 "coverage_pct": round(
                     coverage.get("summary", {}).get("overall_pct", 0), 1
                 ),
@@ -12795,7 +12883,9 @@ async def admin_training_dashboard(request: Request, db: Session = Depends(get_d
 @app.get("/admin/knowledge/coverage", response_class=HTMLResponse)
 @admin_required
 async def admin_knowledge_coverage(request: Request, db: Session = Depends(get_db), notice: str = ""):
-    coverage = coverage_svc.compute_knowledge_coverage(db, max_chunks=ADMIN_COVERAGE_MAX_CHUNKS)
+    started = time.perf_counter()
+    coverage = _cached_knowledge_coverage(db)
+    _admin_stage_log(request, "coverage_summary", started)
     return templates.TemplateResponse(
         request=request,
         name="admin/knowledge_coverage.html",
@@ -12813,7 +12903,11 @@ async def admin_knowledge_coverage(request: Request, db: Session = Depends(get_d
 @admin_required
 async def admin_knowledge_coverage_rebuild(request: Request, db: Session = Depends(get_db), csrf_token: str = Form(default="")):
     await validate_csrf_token(request, csrf_token)
-    coverage_svc.compute_knowledge_coverage(db, max_chunks=ADMIN_COVERAGE_MAX_CHUNKS)
+    started = time.perf_counter()
+    coverage = coverage_svc.compute_knowledge_coverage(db, max_chunks=ADMIN_COVERAGE_MAX_CHUNKS)
+    _admin_stage_log(request, "coverage_rebuild", started)
+    _store_knowledge_coverage_cache(db, coverage)
+    db.commit()
     return RedirectResponse(url="/admin/knowledge/coverage?notice=coverage_refreshed", status_code=303)
 
 
@@ -13075,7 +13169,8 @@ async def admin_knowledge_library(
             )
         )
     items = query.order_by(db_mod.KnowledgeItem.updated_at.desc()).offset(offset).limit(limit).all()
-    documents = db.query(db_mod.SourceDocument).order_by(db_mod.SourceDocument.updated_at.desc()).limit(50).all()
+    _attach_knowledge_chunk_counts(db, items)
+    documents = db.query(db_mod.SourceDocument).order_by(db_mod.SourceDocument.updated_at.desc()).limit(min(limit, 50)).all()
     return templates.TemplateResponse(
         request=request,
         name="admin/knowledge_library.html",
@@ -13101,10 +13196,21 @@ async def admin_documents(
 ):
     page, limit, offset = _admin_page_params(page, page_size)
     documents = db.query(db_mod.SourceDocument).order_by(db_mod.SourceDocument.updated_at.desc()).offset(offset).limit(limit).all()
+    document_ids = [document.id for document in documents]
+    chunk_counts = {}
+    if document_ids:
+        chunk_count_rows = (
+            db.query(db_mod.KnowledgeItem.source_document_id, func.count(db_mod.KnowledgeChunk.id))
+            .join(db_mod.KnowledgeChunk, db_mod.KnowledgeChunk.knowledge_item_id == db_mod.KnowledgeItem.id)
+            .filter(db_mod.KnowledgeItem.source_document_id.in_(document_ids))
+            .group_by(db_mod.KnowledgeItem.source_document_id)
+            .all()
+        )
+        chunk_counts = {int(document_id): int(count or 0) for document_id, count in chunk_count_rows}
     rows = []
     for document in documents:
         metadata = _json_loads_safe(document.metadata_json, {}) or {}
-        chunk_count = _document_chunk_count(document)
+        chunk_count = chunk_counts.get(int(document.id), 0)
         status = str(
             getattr(document, "processing_status", None)
             or metadata.get("processing_status")
@@ -13130,7 +13236,7 @@ async def admin_documents(
                 "file_exists": metadata.get("file_exists"),
                 "file_size": metadata.get("file_size"),
                 "has_more_pages": bool(page_count and cursor_page and cursor_page < int(page_count)),
-                "preview": diagnostics.get("preview") or "",
+                "preview": str(diagnostics.get("preview") or "")[:300],
                 "error_type": error_type,
                 "error_message": error_message,
                 "warning_message": warning_message,

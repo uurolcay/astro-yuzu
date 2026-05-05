@@ -158,6 +158,7 @@ class PersistenceDiagnosticsTests(unittest.TestCase):
         joined = "\n".join(captured.output)
         self.assertIn("ADMIN_REQUEST_START", joined)
         self.assertIn("ADMIN_REQUEST_END", joined)
+        self.assertIn("duration_ms=", joined)
         self.assertIn("GET /admin/debug/storage", joined)
 
     def test_storage_debug_route_blocks_non_admin(self):

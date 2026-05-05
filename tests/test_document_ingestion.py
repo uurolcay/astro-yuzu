@@ -613,6 +613,23 @@ class DocumentIngestionTests(unittest.TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertLessEqual(page.text.count("Paged Document"), 2)
 
+    def test_document_preview_is_snippet_limited(self):
+        document_id = self._uploaded_document(title="Long Preview")
+        document = self.db.query(db_mod.SourceDocument).filter_by(id=document_id).first()
+        document.metadata_json = json.dumps(
+            {
+                "processing_status": "failed",
+                "parser_diagnostics": {"preview": "A" * 500, "parser_used": "pypdf"},
+            },
+            ensure_ascii=False,
+        )
+        self.db.commit()
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            page = self.client.get("/admin/documents")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("A" * 200, page.text)
+        self.assertNotIn("A" * 301, page.text)
+
     def test_non_admin_access_is_blocked(self):
         response = self.client.get("/admin/documents", follow_redirects=False)
         self.assertIn(response.status_code, {302, 303, 307, 401, 403})

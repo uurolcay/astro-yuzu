@@ -55,7 +55,7 @@
 {% for item in items %}
   {% if item.status == "active" %}{% set active_count.value = active_count.value + 1 %}{% endif %}
   {% if item.status == "review_required" %}{% set review_count.value = review_count.value + 1 %}{% endif %}
-  {% if item.chunks and item.chunks|length > 0 %}{% set with_chunks_count.value = with_chunks_count.value + 1 %}{% endif %}
+  {% if item.admin_chunk_count and item.admin_chunk_count > 0 %}{% set with_chunks_count.value = with_chunks_count.value + 1 %}{% endif %}
 {% endfor %}
 
 <section class="admin-stats">
@@ -120,7 +120,7 @@
           <span class="admin-muted">-</span>
           {% endfor %}
         </td>
-        <td>{{ item.chunks|length }}</td>
+        <td>{{ item.admin_chunk_count or 0 }}</td>
         <td>
           {% if item.status == "active" %}
           <span class="badge badge-success">aktif</span>
