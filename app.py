@@ -13267,6 +13267,43 @@ def _clear_document_knowledge(db, document):
     db.flush()
 
 
+def _delete_source_document(db, document):
+    document_id = document.id
+    file_path = Path(str(document.file_path or ""))
+    file_name = file_path.name
+    logger.info("DOCUMENT_DELETE_START document_id=%s", document_id)
+
+    items = list(document.knowledge_items or [])
+    chunks_deleted = sum(len(item.chunks or []) for item in items)
+    items_deleted = len(items)
+    for item in items:
+        db.delete(item)
+    db.delete(document)
+    db.commit()
+
+    file_deleted = False
+    if file_path and file_path.exists():
+        try:
+            file_path.unlink()
+            file_deleted = True
+        except OSError as exc:
+            logger.warning(
+                "DOCUMENT_DELETE_FILE_WARNING document_id=%s file_name=%s exception_type=%s short_message=%s",
+                document_id,
+                file_name,
+                type(exc).__name__,
+                _short_exception_message(exc),
+            )
+    logger.info(
+        "DOCUMENT_DELETE_END document_id=%s chunks_deleted=%s items_deleted=%s file_deleted=%s",
+        document_id,
+        chunks_deleted,
+        items_deleted,
+        file_deleted,
+    )
+    return {"chunks_deleted": chunks_deleted, "items_deleted": items_deleted, "file_deleted": file_deleted}
+
+
 def _create_document_chunk_item(db, document, chunk, *, index, admin_user):
     chunk_title = str(chunk.get("title") or f"{document.title} {index}").strip()
     coverage_entities = chunk.get("coverage_entities") or []
@@ -13727,6 +13764,43 @@ async def admin_document_process(
             _rollback_quietly(db)
         return RedirectResponse(url="/admin/documents?notice=processing_failed", status_code=303)
     return RedirectResponse(url=f"/admin/documents?notice={result.get('notice') or 'processing_completed'}", status_code=303)
+
+
+@app.post("/admin/documents/{document_id}/delete")
+@admin_required
+async def admin_document_delete(
+    request: Request,
+    document_id: int,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(default=""),
+):
+    await validate_csrf_token(request, csrf_token)
+    document = db.query(db_mod.SourceDocument).filter(db_mod.SourceDocument.id == document_id).first()
+    if not document:
+        return RedirectResponse(url="/admin/documents?notice=document_not_found", status_code=303)
+    try:
+        _delete_source_document(db, document)
+    except (OperationalError, IntegrityError) as exc:
+        _rollback_quietly(db)
+        if isinstance(exc, OperationalError):
+            _dispose_engine_for_disconnect(exc)
+        logger.warning(
+            "DOCUMENT_DELETE_ERROR document_id=%s exception_type=%s short_message=%s",
+            document_id,
+            type(exc).__name__,
+            _short_exception_message(exc),
+        )
+        return RedirectResponse(url="/admin/documents?notice=document_delete_failed", status_code=303)
+    except Exception as exc:
+        _rollback_quietly(db)
+        logger.warning(
+            "DOCUMENT_DELETE_ERROR document_id=%s exception_type=%s short_message=%s",
+            document_id,
+            type(exc).__name__,
+            _short_exception_message(exc),
+        )
+        return RedirectResponse(url="/admin/documents?notice=document_delete_failed", status_code=303)
+    return RedirectResponse(url="/admin/documents?notice=document_deleted", status_code=303)
 
 
 @app.post("/admin/documents/{document_id}/extract-nakshatra")

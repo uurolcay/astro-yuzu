@@ -73,6 +73,32 @@ class DocumentIngestionTests(unittest.TestCase):
         self.db.commit()
         return document.id
 
+    def _document_with_related_knowledge(self, *, title="Related PDF", file_path=None, status="failed"):
+        document_id = self._uploaded_document(title=title, file_path=file_path)
+        document = self.db.query(db_mod.SourceDocument).filter_by(id=document_id).first()
+        document.processing_status = status
+        item = db_mod.KnowledgeItem(
+            source_document=document,
+            title=f"{title} item",
+            item_type="reference",
+            language="tr",
+            summary_text="Generated summary",
+            body_text="Generated knowledge body.",
+            status="published",
+        )
+        self.db.add(item)
+        self.db.flush()
+        self.db.add(
+            db_mod.KnowledgeChunk(
+                knowledge_item_id=item.id,
+                chunk_index=0,
+                chunk_text="Generated knowledge chunk.",
+                token_count=3,
+            )
+        )
+        self.db.commit()
+        return document_id
+
     def test_parse_pdf_missing_file_returns_empty_list(self):
         self.assertEqual(document_parser.parse_pdf("missing-file.pdf"), [])
 
@@ -462,7 +488,91 @@ class DocumentIngestionTests(unittest.TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertIn("uploaded", page.text)
         self.assertIn("Process", page.text)
+        self.assertIn("Sil / Delete", page.text)
+        self.assertIn("/delete", page.text)
         self.assertIn("/process", page.text)
+
+    def test_failed_document_can_be_deleted_from_admin_route(self):
+        csrf = self._csrf()
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as handle:
+            handle.write(b"%PDF-1.4 temporary")
+            file_path = handle.name
+        document_id = self._document_with_related_knowledge(title="Delete Me", file_path=file_path, status="failed")
+        self.assertTrue(app.Path(file_path).exists())
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            response = self.client.post(
+                f"/admin/documents/{document_id}/delete",
+                data={"csrf_token": csrf},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("document_deleted", response.headers.get("location", ""))
+        self.db.expire_all()
+        self.assertIsNone(self.db.query(db_mod.SourceDocument).filter_by(id=document_id).first())
+        self.assertEqual(self.db.query(db_mod.KnowledgeItem).count(), 0)
+        self.assertEqual(self.db.query(db_mod.KnowledgeChunk).count(), 0)
+        self.assertFalse(app.Path(file_path).exists())
+
+    def test_delete_file_missing_does_not_fail_db_deletion(self):
+        csrf = self._csrf()
+        document_id = self._document_with_related_knowledge(
+            title="Missing File Delete",
+            file_path="already-missing-delete.pdf",
+            status="failed",
+        )
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            response = self.client.post(
+                f"/admin/documents/{document_id}/delete",
+                data={"csrf_token": csrf},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("document_deleted", response.headers.get("location", ""))
+        self.db.expire_all()
+        self.assertIsNone(self.db.query(db_mod.SourceDocument).filter_by(id=document_id).first())
+        self.assertEqual(self.db.query(db_mod.KnowledgeItem).count(), 0)
+        self.assertEqual(self.db.query(db_mod.KnowledgeChunk).count(), 0)
+
+    def test_delete_missing_document_redirects_with_notice(self):
+        csrf = self._csrf()
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            response = self.client.post(
+                "/admin/documents/999999/delete",
+                data={"csrf_token": csrf},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("document_not_found", response.headers.get("location", ""))
+
+    def test_delete_route_requires_admin(self):
+        document_id = self._uploaded_document(title="Protected Delete")
+        response = self.client.post(
+            f"/admin/documents/{document_id}/delete",
+            data={"csrf_token": "invalid"},
+            follow_redirects=False,
+        )
+        self.assertIn(response.status_code, {302, 303, 307, 401, 403})
+        self.db.expire_all()
+        self.assertIsNotNone(self.db.query(db_mod.SourceDocument).filter_by(id=document_id).first())
+
+    def test_delete_handles_db_error_without_blank_500(self):
+        csrf = self._csrf()
+        document_id = self._uploaded_document(title="Delete DB Error")
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair), patch.object(
+            app,
+            "_delete_source_document",
+            side_effect=OperationalError("DELETE", {}, Exception("SSL error: decryption failed or bad record mac")),
+        ), patch.object(db_mod.engine, "dispose") as dispose:
+            response = self.client.post(
+                f"/admin/documents/{document_id}/delete",
+                data={"csrf_token": csrf},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("document_delete_failed", response.headers.get("location", ""))
+        self.assertTrue(dispose.called)
+        self.db.expire_all()
+        self.assertIsNotNone(self.db.query(db_mod.SourceDocument).filter_by(id=document_id).first())
 
     def test_documents_page_renders_error_type_and_friendly_message(self):
         document_id = self._uploaded_document(title="Failed Diagnostics", file_path="missing-temporary-upload.pdf")

@@ -25,6 +25,9 @@
 {% set parser_error = notice == 'parser_error' %}
 {% set no_chunks_generated = notice == 'no_chunks_generated' %}
 {% set processing_failed = notice == 'processing_failed' %}
+{% set document_deleted = notice == 'document_deleted' %}
+{% set document_not_found = notice == 'document_not_found' %}
+{% set document_delete_failed = notice == 'document_delete_failed' %}
 {% set extraction_notice = notice.startswith('nakshatra_extracted:') if notice else false %}
 {% set sections_empty = notice == 'nakshatra_sections_empty' %}
 
@@ -55,6 +58,12 @@
   <div class="admin-alert admin-alert-warning">PDF’den metin alındı ancak anlamlı bilgi parçası üretilemedi.</div>
 {% elif processing_failed %}
   <div class="admin-alert admin-alert-danger">Doküman işlenirken beklenmeyen bir hata oluştu. Satırdaki error/warning mesajını kontrol edin.</div>
+{% elif document_deleted %}
+  <div class="admin-alert admin-alert-success">Doküman ve bağlı kayıtlar silindi.</div>
+{% elif document_not_found %}
+  <div class="admin-alert admin-alert-danger">Doküman bulunamadı.</div>
+{% elif document_delete_failed %}
+  <div class="admin-alert admin-alert-danger">Doküman silinirken hata oluştu.</div>
 {% elif sections_empty %}
   <div class="admin-alert admin-alert-warning">PDF metni okundu ama nakshatra basliklari bulunamadi. Baslik varyasyonlari veya OCR bozuk olabilir.</div>
 {% elif extraction_notice %}
@@ -192,6 +201,15 @@
             <button class="btn-admin btn-admin-secondary" type="submit">Reprocess</button>
           </form>
           {% endif %}
+          <form
+            method="post"
+            action="/admin/documents/{{ row.document.id }}/delete"
+            style="display:inline;"
+            onsubmit="return confirm(document.documentElement.lang === 'en' ? 'Are you sure you want to delete this document and its generated knowledge chunks?' : 'Bu dokümanı ve ona bağlı oluşturulan bilgi parçalarını silmek istediğinize emin misiniz?');"
+          >
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="btn-admin btn-admin-danger" type="submit">Sil / Delete</button>
+          </form>
           <a href="/admin/knowledge/review" style="margin-left:.6rem;">Review Queue -></a>
           <a href="/admin/knowledge/coverage" style="margin-left:.6rem;">Coverage -></a>
         </td>
