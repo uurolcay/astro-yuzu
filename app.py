@@ -148,6 +148,21 @@ ADMIN_COVERAGE_MAX_CHUNKS = get_int_env("ADMIN_COVERAGE_MAX_CHUNKS", 1000)
 ENABLE_ADMIN_REQUEST_TRACING = get_bool_env("ENABLE_ADMIN_REQUEST_TRACING", True)
 COVERAGE_REBUILD_SYNC_ENABLED = get_bool_env("COVERAGE_REBUILD_SYNC_ENABLED", False)
 PORT = int(os.getenv("PORT", 8000))
+FAST_REQUEST_BYPASS_PATHS = {"/health", "/debug/version", "/favicon.ico"}
+PUBLIC_REQUEST_TRACE_PATHS = {"/health", "/debug/version", "/"}
+
+
+def _is_fast_request_bypass_path(path):
+    path = str(path or "")
+    return path in FAST_REQUEST_BYPASS_PATHS or path.startswith("/static")
+
+
+def _apply_security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+    return response
 
 
 def _env_flag_value(name, default=False):
@@ -5426,11 +5441,18 @@ def process_billing_notification_event(db, event_payload):
 
 @app.middleware("http")
 async def maintenance_mode_middleware(request: Request, call_next):
+    if _is_fast_request_bypass_path(request.url.path):
+        return await call_next(request)
     return await call_next(request)
 
 
 @app.middleware("http")
 async def load_user_context(request: Request, call_next):
+    path = str(request.url.path or "")
+    if _is_fast_request_bypass_path(path):
+        response = await call_next(request)
+        return _apply_security_headers(response)
+
     db = db_mod.SessionLocal()
     try:
         user = get_request_user(request, db)
@@ -5439,7 +5461,6 @@ async def load_user_context(request: Request, call_next):
         request.state.plan_code = get_user_plan(user)
         request.state.plan_features = get_plan_features(user)
         request.state.lang = get_preferred_language(request, user)
-        path = request.url.path
         exempt = path.startswith("/admin") or path.startswith("/static") or path in {"/login", "/logout", "/signup"}
         maintenance_user = user or _request_user_from_signed_cookie(request, db)
         if not exempt and get_setting(db, "site_maintenance_mode", "false") == "true" and not (maintenance_user and getattr(maintenance_user, "is_admin", False)):
@@ -5460,11 +5481,7 @@ async def load_user_context(request: Request, call_next):
             if not verify_csrf_token(request, _csrf_token_from_body(request, body)):
                 return Response("Invalid CSRF token", status_code=403, media_type="text/plain")
         response = await call_next(request)
-        response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("X-Frame-Options", "DENY")
-        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-        response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
-        return response
+        return _apply_security_headers(response)
     except OperationalError as exc:
         _rollback_quietly(db)
         _dispose_engine_for_disconnect(exc)
@@ -5481,13 +5498,29 @@ async def load_user_context(request: Request, call_next):
         request.state.plan_features = get_plan_features("free")
         request.state.lang = get_preferred_language(request, None)
         response = await call_next(request)
-        response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("X-Frame-Options", "DENY")
-        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-        response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
-        return response
+        return _apply_security_headers(response)
     finally:
         db.close()
+
+
+@app.middleware("http")
+async def public_request_tracing_middleware(request: Request, call_next):
+    path = str(request.url.path or "")
+    should_trace = path in PUBLIC_REQUEST_TRACE_PATHS
+    if not should_trace:
+        return await call_next(request)
+
+    started = time.perf_counter()
+    logger.info("PUBLIC_REQUEST_START %s %s", request.method, path)
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        duration_ms = int((time.perf_counter() - started) * 1000)
+        logger.exception("PUBLIC_REQUEST_ERROR %s %s %s %s", request.method, path, type(exc).__name__, duration_ms)
+        raise
+    duration_ms = int((time.perf_counter() - started) * 1000)
+    logger.info("PUBLIC_REQUEST_END %s %s %s %s", request.method, path, response.status_code, duration_ms)
+    return response
 
 
 def _extract_transit_planet(event_name):
