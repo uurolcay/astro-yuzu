@@ -21,6 +21,9 @@
 {% set missing_file = notice == 'missing_file' %}
 {% set file_missing = notice == 'file_missing' %}
 {% set db_temp_failed = notice == 'db_temp_failed' %}
+{% set db_error = notice == 'db_error' %}
+{% set parser_error = notice == 'parser_error' %}
+{% set no_chunks_generated = notice == 'no_chunks_generated' %}
 {% set processing_failed = notice == 'processing_failed' %}
 {% set extraction_notice = notice.startswith('nakshatra_extracted:') if notice else false %}
 {% set sections_empty = notice == 'nakshatra_sections_empty' %}
@@ -37,17 +40,21 @@
   {% set parts = notice.split(':') %}
   <div class="admin-alert admin-alert-success">Upload basarili. {{ parts[1] }} chunk uretildi.</div>
 {% elif parse_empty %}
-  <div class="admin-alert admin-alert-warning">PDF metni okunamadi veya parse sonucu bos dondu. Parser/preview alanini kontrol edin.</div>
+  <div class="admin-alert admin-alert-warning">Bu PDF metin katmanı içermiyor olabilir. Taranmış/görsel PDF ise OCR gerekir.</div>
 {% elif invalid_pdf %}
   <div class="admin-alert admin-alert-danger">Sadece PDF yuklenebilir.</div>
 {% elif missing_file %}
   <div class="admin-alert admin-alert-danger">PDF secilmedi.</div>
 {% elif file_missing %}
-  <div class="admin-alert admin-alert-danger">Kaydedilmis PDF dosyasi bulunamadi. Upload dizinini ve kalici disk ayarini kontrol edin.</div>
-{% elif db_temp_failed %}
-  <div class="admin-alert admin-alert-danger">Database connection temporarily failed. Please try again.</div>
+  <div class="admin-alert admin-alert-danger">Yüklenen PDF dosyası geçici depolamada bulunamadı. Lütfen tekrar yükleyin.</div>
+{% elif db_temp_failed or db_error %}
+  <div class="admin-alert admin-alert-danger">Veritabanı bağlantısı geçici olarak başarısız oldu. Lütfen tekrar deneyin.</div>
+{% elif parser_error %}
+  <div class="admin-alert admin-alert-danger">PDF okunurken hata oluştu. Dosya bozuk, şifreli veya uyumsuz olabilir.</div>
+{% elif no_chunks_generated %}
+  <div class="admin-alert admin-alert-warning">PDF’den metin alındı ancak anlamlı bilgi parçası üretilemedi.</div>
 {% elif processing_failed %}
-  <div class="admin-alert admin-alert-danger">Document processing failed. Satirdaki error/warning mesajini ve storage debug ekranini kontrol edin.</div>
+  <div class="admin-alert admin-alert-danger">Doküman işlenirken beklenmeyen bir hata oluştu. Satırdaki error/warning mesajını kontrol edin.</div>
 {% elif sections_empty %}
   <div class="admin-alert admin-alert-warning">PDF metni okundu ama nakshatra basliklari bulunamadi. Baslik varyasyonlari veya OCR bozuk olabilir.</div>
 {% elif extraction_notice %}
@@ -140,12 +147,20 @@
           <div class="admin-muted">Chunks: {{ row.chunk_count }}</div>
           <div class="admin-muted">Pages: {{ row.page_count or "-" }}</div>
           <div class="admin-muted">Cursor: {{ row.cursor_page or 0 }}</div>
+          <div class="admin-muted">Last page: {{ row.last_processed_page or 0 }}</div>
           <div class="admin-muted">Blocks: {{ row.block_count or 0 }}</div>
         </td>
         <td style="min-width:240px;">
           <div class="admin-muted">Parser: {{ row.parser_used }}</div>
-          {% if row.parse_error %}
-          <div class="admin-alert admin-alert-warning" style="margin-top:6px;">Error: {{ row.parse_error }}</div>
+          <div class="admin-muted">File: {% if row.file_exists is sameas true %}found{% elif row.file_exists is sameas false %}missing{% else %}-{% endif %}{% if row.file_size %} · {{ row.file_size }} bytes{% endif %}</div>
+          {% if row.error_type %}
+          <div class="admin-muted" style="margin-top:6px;">Error type: <strong>{{ row.error_type }}</strong></div>
+          {% endif %}
+          {% if row.error_message %}
+          <div class="admin-alert admin-alert-warning" style="margin-top:6px;">{{ row.error_message }}</div>
+          {% endif %}
+          {% if row.warning_message %}
+          <div class="admin-muted" style="margin-top:6px;">Warning: {{ row.warning_message }}</div>
           {% endif %}
           {% if row.preview %}
           <details style="margin-top:6px;">

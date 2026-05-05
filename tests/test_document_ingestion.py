@@ -1,4 +1,5 @@
 import io
+import json
 import re
 import sys
 import tempfile
@@ -181,8 +182,32 @@ class DocumentIngestionTests(unittest.TestCase):
         document = self.db.query(db_mod.SourceDocument).filter_by(id=document_id).first()
         self.assertEqual(document.processing_status, "completed")
         self.assertEqual(document.processing_cursor_page, 2)
+        metadata = json.loads(document.metadata_json or "{}")
+        self.assertNotIn("last_processing_error_type", metadata)
+        self.assertEqual(metadata["parser_used"], "pypdf")
+        self.assertEqual(metadata["page_count"], 2)
+        self.assertEqual(metadata["block_count"], 2)
         self.assertGreaterEqual(self.db.query(db_mod.KnowledgeItem).count(), 1)
         self.assertGreaterEqual(self.db.query(db_mod.KnowledgeChunk).count(), 1)
+
+    def test_process_missing_file_sets_file_missing_diagnostics_without_500(self):
+        csrf = self._csrf()
+        document_id = self._uploaded_document(title="Missing PDF", file_path="missing-temporary-upload.pdf")
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            response = self.client.post(
+                f"/admin/documents/{document_id}/process",
+                data={"csrf_token": csrf},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("file_missing", response.headers.get("location", ""))
+        self.db.expire_all()
+        document = self.db.query(db_mod.SourceDocument).filter_by(id=document_id).first()
+        metadata = json.loads(document.metadata_json or "{}")
+        self.assertEqual(document.processing_status, "failed")
+        self.assertEqual(metadata["last_processing_error_type"], "file_missing")
+        self.assertFalse(metadata["file_exists"])
+        self.assertIn("geçici depolamada bulunamadı", metadata["last_processing_error"])
 
     def test_process_parse_empty_notice_is_shown_and_document_metadata_keeps_diagnostics(self):
         csrf = self._csrf()
@@ -209,10 +234,19 @@ class DocumentIngestionTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 303)
         self.assertIn("parse_empty", response.headers.get("location", ""))
+        self.db.expire_all()
+        document = self.db.query(db_mod.SourceDocument).filter_by(id=document_id).first()
+        metadata = json.loads(document.metadata_json or "{}")
+        self.assertEqual(document.processing_status, "parse_empty")
+        self.assertEqual(metadata["last_processing_error_type"], "parse_empty")
+        self.assertEqual(metadata["page_count"], 3)
+        self.assertEqual(metadata["block_count"], 0)
+        self.assertIn("metin katmanı", metadata["last_processing_error"])
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
             page = self.client.get("/admin/documents?notice=parse_empty")
         self.assertEqual(page.status_code, 200)
-        self.assertIn("parse sonucu bos dondu", page.text)
+        self.assertIn("Bu PDF metin katmanı içermiyor olabilir", page.text)
+        self.assertIn("parse_empty", page.text)
         self.assertIn("Parser", page.text)
         self.assertIn("Diagnostics", page.text)
 
@@ -230,9 +264,46 @@ class DocumentIngestionTests(unittest.TestCase):
                 follow_redirects=False,
             )
         self.assertEqual(response.status_code, 303)
-        self.assertIn("processing_failed", response.headers.get("location", ""))
+        self.assertIn("parser_error", response.headers.get("location", ""))
         self.db.expire_all()
-        self.assertEqual(self.db.query(db_mod.SourceDocument).filter_by(id=document_id).first().processing_status, "failed")
+        document = self.db.query(db_mod.SourceDocument).filter_by(id=document_id).first()
+        metadata = json.loads(document.metadata_json or "{}")
+        self.assertEqual(document.processing_status, "failed")
+        self.assertEqual(metadata["last_processing_error_type"], "parser_error")
+        self.assertIn("PDF okunurken hata oluştu", metadata["last_processing_error"])
+        self.assertIn("pypdf exploded", metadata["last_processing_warning"])
+
+    def test_process_route_handles_zero_chunks_without_500(self):
+        csrf = self._csrf()
+        document_id = self._uploaded_document(title="No Chunks")
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair), patch.object(
+            app.document_parser,
+            "parse_pdf_with_diagnostics",
+            return_value={
+                "blocks": ["INDEX\n\n1 2 3 4 5"],
+                "page_blocks": [{"page": 1, "text": "INDEX\n\n1 2 3 4 5"}],
+                "page_count": 1,
+                "block_count": 1,
+                "range_end_page": 1,
+                "has_more_pages": False,
+                "preview": "INDEX",
+                "parser_used": "pypdf",
+                "error": None,
+            },
+        ), patch.object(app.document_chunker, "chunk_text_blocks", return_value=[]):
+            response = self.client.post(
+                f"/admin/documents/{document_id}/process",
+                data={"csrf_token": csrf},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("no_chunks_generated", response.headers.get("location", ""))
+        self.db.expire_all()
+        document = self.db.query(db_mod.SourceDocument).filter_by(id=document_id).first()
+        metadata = json.loads(document.metadata_json or "{}")
+        self.assertEqual(document.processing_status, "failed")
+        self.assertEqual(metadata["last_processing_error_type"], "no_chunks_generated")
+        self.assertIn("anlamlı bilgi parçası üretilemedi", metadata["last_processing_error"])
 
     def test_process_route_handles_db_operational_error_without_blank_500(self):
         csrf = self._csrf()
@@ -262,8 +333,14 @@ class DocumentIngestionTests(unittest.TestCase):
                 follow_redirects=False,
             )
         self.assertEqual(response.status_code, 303)
-        self.assertIn("db_temp_failed", response.headers.get("location", ""))
+        self.assertIn("db_error", response.headers.get("location", ""))
         self.assertTrue(dispose.called)
+        self.db.expire_all()
+        document = self.db.query(db_mod.SourceDocument).filter_by(id=document_id).first()
+        metadata = json.loads(document.metadata_json or "{}")
+        self.assertEqual(document.processing_status, "failed")
+        self.assertEqual(metadata["last_processing_error_type"], "db_error")
+        self.assertIn("Veritabanı bağlantısı", metadata["last_processing_error"])
 
     def test_large_document_processes_in_batches(self):
         csrf = self._csrf()
@@ -376,7 +453,7 @@ class DocumentIngestionTests(unittest.TestCase):
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
             page = self.client.get("/admin/documents?notice=db_temp_failed")
         self.assertEqual(page.status_code, 200)
-        self.assertIn("Database connection temporarily failed. Please try again.", page.text)
+        self.assertIn("Veritabanı bağlantısı geçici olarak başarısız oldu. Lütfen tekrar deneyin.", page.text)
 
     def test_documents_page_shows_process_button_and_status(self):
         self._uploaded_document(title="Needs Processing")
@@ -386,6 +463,37 @@ class DocumentIngestionTests(unittest.TestCase):
         self.assertIn("uploaded", page.text)
         self.assertIn("Process", page.text)
         self.assertIn("/process", page.text)
+
+    def test_documents_page_renders_error_type_and_friendly_message(self):
+        document_id = self._uploaded_document(title="Failed Diagnostics", file_path="missing-temporary-upload.pdf")
+        document = self.db.query(db_mod.SourceDocument).filter_by(id=document_id).first()
+        document.processing_status = "failed"
+        document.processing_error = "Yüklenen PDF dosyası geçici depolamada bulunamadı. Lütfen tekrar yükleyin."
+        document.metadata_json = json.dumps(
+            {
+                "processing_status": "failed",
+                "last_processing_error_type": "file_missing",
+                "last_processing_error": "Yüklenen PDF dosyası geçici depolamada bulunamadı. Lütfen tekrar yükleyin.",
+                "last_processing_warning": "missing-temporary-upload.pdf",
+                "file_exists": False,
+                "file_size": 0,
+                "parser_used": "none",
+                "page_count": 0,
+                "block_count": 0,
+                "chunk_count": 0,
+                "processing_cursor_page": 0,
+                "last_processed_page": 0,
+            },
+            ensure_ascii=False,
+        )
+        self.db.commit()
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            page = self.client.get("/admin/documents")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("Error type", page.text)
+        self.assertIn("file_missing", page.text)
+        self.assertIn("geçici depolamada bulunamadı", page.text)
+        self.assertIn("File: missing", page.text)
 
     def test_documents_page_is_paginated_for_large_document_lists(self):
         for index in range(3):

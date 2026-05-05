@@ -13104,7 +13104,7 @@ async def admin_documents(
     rows = []
     for document in documents:
         metadata = _json_loads_safe(document.metadata_json, {}) or {}
-        chunk_count = sum(len(item.chunks or []) for item in (document.knowledge_items or []))
+        chunk_count = _document_chunk_count(document)
         status = str(
             getattr(document, "processing_status", None)
             or metadata.get("processing_status")
@@ -13113,6 +13113,9 @@ async def admin_documents(
         diagnostics = metadata.get("parser_diagnostics") or {}
         page_count = getattr(document, "page_count", None) or diagnostics.get("page_count") or 0
         cursor_page = int(getattr(document, "processing_cursor_page", 0) or metadata.get("processing_cursor_page") or 0)
+        error_type = metadata.get("last_processing_error_type") or ""
+        error_message = metadata.get("last_processing_error") or getattr(document, "processing_error", None) or ""
+        warning_message = metadata.get("last_processing_warning") or diagnostics.get("error") or ""
         rows.append(
             {
                 "document": document,
@@ -13123,9 +13126,15 @@ async def admin_documents(
                 "page_count": page_count,
                 "block_count": getattr(document, "block_count", None) or diagnostics.get("block_count") or 0,
                 "cursor_page": cursor_page,
+                "last_processed_page": metadata.get("last_processed_page") or cursor_page,
+                "file_exists": metadata.get("file_exists"),
+                "file_size": metadata.get("file_size"),
                 "has_more_pages": bool(page_count and cursor_page and cursor_page < int(page_count)),
                 "preview": diagnostics.get("preview") or "",
-                "parse_error": getattr(document, "processing_error", None) or diagnostics.get("error"),
+                "error_type": error_type,
+                "error_message": error_message,
+                "warning_message": warning_message,
+                "parse_error": error_message or warning_message,
             }
         )
     return templates.TemplateResponse(
@@ -13148,11 +13157,99 @@ def _document_processing_config():
     }
 
 
-def _set_document_status(document, status, *, metadata=None, diagnostics=None, error=None):
+DOCUMENT_PROCESSING_MESSAGES = {
+    "file_missing": {
+        "tr": "Yüklenen PDF dosyası geçici depolamada bulunamadı. Lütfen tekrar yükleyin.",
+        "en": "The uploaded PDF file could not be found in temporary storage. Please upload it again.",
+    },
+    "parse_empty": {
+        "tr": "Bu PDF metin katmanı içermiyor olabilir. Taranmış/görsel PDF ise OCR gerekir.",
+        "en": "This PDF may not contain an extractable text layer. If it is scanned/image-based, OCR is required.",
+    },
+    "parser_error": {
+        "tr": "PDF okunurken hata oluştu. Dosya bozuk, şifreli veya uyumsuz olabilir.",
+        "en": "An error occurred while reading the PDF. The file may be corrupted, password-protected, or incompatible.",
+    },
+    "no_chunks_generated": {
+        "tr": "PDF’den metin alındı ancak anlamlı bilgi parçası üretilemedi.",
+        "en": "Text was extracted, but no usable knowledge chunks were generated. The content may be table-of-contents, index, or noise-heavy.",
+    },
+    "db_error": {
+        "tr": "Veritabanı bağlantısı geçici olarak başarısız oldu. Lütfen tekrar deneyin.",
+        "en": "The database connection temporarily failed. Please try again.",
+    },
+    "processing_failed": {
+        "tr": "Doküman işlenirken beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.",
+        "en": "An unexpected error occurred while processing the document. Please try again.",
+    },
+}
+
+
+def _document_processing_message(error_type, lang="tr"):
+    messages = DOCUMENT_PROCESSING_MESSAGES.get(str(error_type or "processing_failed")) or DOCUMENT_PROCESSING_MESSAGES["processing_failed"]
+    return messages.get("en" if str(lang or "").lower().startswith("en") else "tr") or messages["tr"]
+
+
+def _document_file_state(file_path):
+    path = Path(str(file_path or ""))
+    try:
+        exists = bool(path.exists())
+        size = int(path.stat().st_size) if exists else 0
+    except OSError:
+        exists = False
+        size = 0
+    return {"file_exists": exists, "file_size": size, "file_name": path.name}
+
+
+def _document_chunk_count(document):
+    return sum(len(item.chunks or []) for item in (document.knowledge_items or []))
+
+
+def _set_document_status(
+    document,
+    status,
+    *,
+    metadata=None,
+    diagnostics=None,
+    error=None,
+    error_type=None,
+    warning=None,
+    file_state=None,
+    process_attempted_at=None,
+):
     metadata = dict(metadata or _json_loads_safe(document.metadata_json, {}) or {})
     metadata["processing_status"] = status
+    metadata["process_attempted_at"] = (process_attempted_at or datetime.utcnow()).isoformat()
     if diagnostics is not None:
         metadata["parser_diagnostics"] = diagnostics
+        metadata["parser_used"] = diagnostics.get("parser_used") or metadata.get("parser_used")
+        metadata["page_count"] = int(diagnostics.get("page_count") or metadata.get("page_count") or 0)
+        metadata["block_count"] = int(diagnostics.get("block_count") or metadata.get("block_count") or 0)
+        metadata["last_processed_page"] = int(diagnostics.get("range_end_page") or metadata.get("last_processed_page") or 0)
+    if file_state:
+        metadata["file_exists"] = bool(file_state.get("file_exists"))
+        metadata["file_size"] = int(file_state.get("file_size") or 0)
+    metadata["parser_used"] = getattr(document, "parser_used", None) or metadata.get("parser_used")
+    metadata["page_count"] = int(getattr(document, "page_count", 0) or metadata.get("page_count") or 0)
+    metadata["block_count"] = int(getattr(document, "block_count", 0) or metadata.get("block_count") or 0)
+    metadata["chunk_count"] = int(_document_chunk_count(document) or metadata.get("chunk_count") or 0)
+    metadata["processing_cursor_page"] = int(
+        getattr(document, "processing_cursor_page", 0) or metadata.get("processing_cursor_page") or 0
+    )
+    metadata["last_processed_page"] = int(metadata.get("last_processed_page") or metadata["processing_cursor_page"] or 0)
+    if warning:
+        metadata["last_processing_warning"] = str(warning)
+    elif status == "completed":
+        metadata.pop("last_processing_warning", None)
+    if error_type:
+        metadata["last_processing_error_type"] = str(error_type)
+        metadata["last_processing_error"] = str(error or _document_processing_message(error_type, "tr"))
+    elif error:
+        metadata["last_processing_error_type"] = str(metadata.get("last_processing_error_type") or "processing_failed")
+        metadata["last_processing_error"] = str(error)
+    elif status == "completed":
+        metadata.pop("last_processing_error_type", None)
+        metadata.pop("last_processing_error", None)
     if error:
         metadata["processing_error"] = str(error)
     elif "processing_error" in metadata:
@@ -13202,6 +13299,8 @@ def _create_document_chunk_item(db, document, chunk, *, index, admin_user):
 def _process_source_document(db, document, *, admin_user=None, reprocess=False):
     config = _document_processing_config()
     metadata = _json_loads_safe(document.metadata_json, {}) or {}
+    attempted_at = datetime.utcnow()
+    document_id = document.id
     if reprocess:
         _clear_document_knowledge(db, document)
         document.content_text = None
@@ -13212,24 +13311,106 @@ def _process_source_document(db, document, *, admin_user=None, reprocess=False):
         metadata = {"processing_status": "uploaded"}
 
     file_path = Path(str(document.file_path or ""))
+    file_state = _document_file_state(file_path)
+    cursor_page = int(getattr(document, "processing_cursor_page", 0) or metadata.get("processing_cursor_page") or 0)
+    logger.info(
+        "DOCUMENT_PROCESS_START document_id=%s file_exists=%s file_size=%s cursor=%s max_pages=%s",
+        document.id,
+        file_state["file_exists"],
+        file_state["file_size"],
+        cursor_page,
+        config["max_pdf_pages_per_request"],
+    )
     if not file_path.exists():
-        _set_document_status(document, "failed", metadata=metadata, error="file_missing")
+        message = _document_processing_message("file_missing", getattr(document, "language", "tr"))
+        _set_document_status(
+            document,
+            "failed",
+            metadata=metadata,
+            error=message,
+            error_type="file_missing",
+            file_state=file_state,
+            process_attempted_at=attempted_at,
+        )
         db.commit()
+        logger.warning(
+            "DOCUMENT_PROCESS_ERROR document_id=%s error_type=%s exception_type=%s short_message=%s",
+            document.id,
+            "file_missing",
+            "FileNotFoundError",
+            message,
+        )
+        logger.info(
+            "DOCUMENT_PROCESS_END document_id=%s status=%s chunk_count=%s cursor=%s",
+            document.id,
+            "failed",
+            0,
+            cursor_page,
+        )
         return {"status": "failed", "notice": "file_missing", "created_chunks": 0}
 
-    _set_document_status(document, "processing", metadata=metadata)
+    _set_document_status(
+        document,
+        "processing",
+        metadata=metadata,
+        file_state=file_state,
+        process_attempted_at=attempted_at,
+    )
     db.commit()
 
-    start_page = int(getattr(document, "processing_cursor_page", 0) or metadata.get("processing_cursor_page") or 0) + 1
-    diagnostics = document_parser.parse_pdf_with_diagnostics(
-        file_path,
-        start_page=start_page,
-        max_pages=config["max_pdf_pages_per_request"],
-    )
+    start_page = cursor_page + 1
+    try:
+        diagnostics = document_parser.parse_pdf_with_diagnostics(
+            file_path,
+            start_page=start_page,
+            max_pages=config["max_pdf_pages_per_request"],
+        )
+    except Exception as exc:
+        _rollback_quietly(db)
+        short_message = _short_exception_message(exc)
+        message = _document_processing_message("parser_error", getattr(document, "language", "tr"))
+        metadata = _json_loads_safe(document.metadata_json, {}) or metadata
+        _set_document_status(
+            document,
+            "failed",
+            metadata=metadata,
+            error=message,
+            error_type="parser_error",
+            warning=short_message,
+            file_state=file_state,
+            process_attempted_at=attempted_at,
+        )
+        db.commit()
+        logger.warning(
+            "DOCUMENT_PROCESS_ERROR document_id=%s error_type=%s exception_type=%s short_message=%s",
+            document.id,
+            "parser_error",
+            type(exc).__name__,
+            short_message,
+        )
+        logger.info(
+            "DOCUMENT_PROCESS_END document_id=%s status=%s chunk_count=%s cursor=%s",
+            document.id,
+            "failed",
+            _document_chunk_count(document),
+            cursor_page,
+        )
+        return {"status": "failed", "notice": "parser_error", "created_chunks": 0}
+
     text_blocks = list(diagnostics.get("blocks") or [])
     page_blocks = list(diagnostics.get("page_blocks") or [])
     chunk_input = page_blocks or text_blocks
-    meaningful_chunks = document_chunker.chunk_text_blocks(chunk_input)[: config["max_chunks_per_request"]]
+    parser_error = diagnostics.get("error")
+    parser_error_type = "parse_empty" if not text_blocks else None
+    logger.info(
+        "DOCUMENT_PROCESS_PARSE document_id=%s parser_used=%s page_count=%s block_count=%s error_type=%s",
+        document.id,
+        diagnostics.get("parser_used") or "none",
+        int(diagnostics.get("page_count") or 0),
+        len(text_blocks),
+        parser_error_type or "none",
+    )
+
     existing_text = str(document.content_text or "").strip()
     parsed_text = "\n\n".join(
         (block.get("text") if isinstance(block, dict) else str(block)) for block in chunk_input
@@ -13245,33 +13426,179 @@ def _process_source_document(db, document, *, admin_user=None, reprocess=False):
     metadata["processing_cursor_page"] = document.processing_cursor_page
     metadata["page_count"] = document.page_count
     metadata["block_count"] = document.block_count
-    metadata["chunk_count"] = sum(len(item.chunks or []) for item in (document.knowledge_items or []))
+    metadata["chunk_count"] = _document_chunk_count(document)
+
+    if not text_blocks:
+        message = _document_processing_message("parse_empty", getattr(document, "language", "tr"))
+        _set_document_status(
+            document,
+            "parse_empty",
+            metadata=metadata,
+            diagnostics=diagnostics,
+            error=message,
+            error_type="parse_empty",
+            warning=parser_error,
+            file_state=file_state,
+            process_attempted_at=attempted_at,
+        )
+        db.commit()
+        logger.info(
+            "DOCUMENT_PROCESS_CHUNKS document_id=%s chunks_created=%s chunks_skipped=%s",
+            document.id,
+            0,
+            0,
+        )
+        logger.info(
+            "DOCUMENT_PROCESS_END document_id=%s status=%s chunk_count=%s cursor=%s",
+            document.id,
+            "parse_empty",
+            _document_chunk_count(document),
+            document.processing_cursor_page,
+        )
+        return {"status": "parse_empty", "notice": "parse_empty", "created_chunks": 0}
+
+    try:
+        meaningful_chunks = document_chunker.chunk_text_blocks(chunk_input)[: config["max_chunks_per_request"]]
+    except Exception as exc:
+        _rollback_quietly(db)
+        short_message = _short_exception_message(exc)
+        message = _document_processing_message("processing_failed", getattr(document, "language", "tr"))
+        metadata = _json_loads_safe(document.metadata_json, {}) or metadata
+        _set_document_status(
+            document,
+            "failed",
+            metadata=metadata,
+            diagnostics=diagnostics,
+            error=message,
+            error_type="processing_failed",
+            warning=short_message,
+            file_state=file_state,
+            process_attempted_at=attempted_at,
+        )
+        db.commit()
+        logger.warning(
+            "DOCUMENT_PROCESS_ERROR document_id=%s error_type=%s exception_type=%s short_message=%s",
+            document.id,
+            "processing_failed",
+            type(exc).__name__,
+            short_message,
+        )
+        return {"status": "failed", "notice": "processing_failed", "created_chunks": 0}
+
+    if not meaningful_chunks:
+        message = _document_processing_message("no_chunks_generated", getattr(document, "language", "tr"))
+        _set_document_status(
+            document,
+            "failed",
+            metadata=metadata,
+            diagnostics=diagnostics,
+            error=message,
+            error_type="no_chunks_generated",
+            file_state=file_state,
+            process_attempted_at=attempted_at,
+        )
+        db.commit()
+        logger.info(
+            "DOCUMENT_PROCESS_CHUNKS document_id=%s chunks_created=%s chunks_skipped=%s",
+            document.id,
+            0,
+            len(chunk_input),
+        )
+        logger.warning(
+            "DOCUMENT_PROCESS_ERROR document_id=%s error_type=%s exception_type=%s short_message=%s",
+            document.id,
+            "no_chunks_generated",
+            "NoChunksGenerated",
+            message,
+        )
+        logger.info(
+            "DOCUMENT_PROCESS_END document_id=%s status=%s chunk_count=%s cursor=%s",
+            document.id,
+            "failed",
+            _document_chunk_count(document),
+            document.processing_cursor_page,
+        )
+        return {"status": "failed", "notice": "no_chunks_generated", "created_chunks": 0}
 
     created_count = 0
-    for index, chunk in enumerate(meaningful_chunks, start=1):
-        _create_document_chunk_item(db, document, chunk, index=index, admin_user=admin_user)
-        created_count += 1
-        if created_count % 20 == 0:
-            db.commit()
+    try:
+        for index, chunk in enumerate(meaningful_chunks, start=1):
+            _create_document_chunk_item(db, document, chunk, index=index, admin_user=admin_user)
+            created_count += 1
+            if created_count % 20 == 0:
+                db.commit()
+    except (OperationalError, IntegrityError) as exc:
+        _rollback_quietly(db)
+        if isinstance(exc, OperationalError):
+            _dispose_engine_for_disconnect(exc)
+        short_message = _short_exception_message(exc)
+        document = db.query(db_mod.SourceDocument).filter(db_mod.SourceDocument.id == document_id).first() or document
+        metadata = _json_loads_safe(document.metadata_json, {}) or metadata
+        message = _document_processing_message("db_error", getattr(document, "language", "tr"))
+        _set_document_status(
+            document,
+            "failed",
+            metadata=metadata,
+            diagnostics=diagnostics,
+            error=message,
+            error_type="db_error",
+            warning=short_message,
+            file_state=file_state,
+            process_attempted_at=attempted_at,
+        )
+        db.commit()
+        logger.warning(
+            "DOCUMENT_PROCESS_ERROR document_id=%s error_type=%s exception_type=%s short_message=%s",
+            document.id,
+            "db_error",
+            type(exc).__name__,
+            short_message,
+        )
+        logger.info(
+            "DOCUMENT_PROCESS_END document_id=%s status=%s chunk_count=%s cursor=%s",
+            document.id,
+            "failed",
+            _document_chunk_count(document),
+            document.processing_cursor_page,
+        )
+        return {"status": "failed", "notice": "db_error", "created_chunks": created_count}
 
-    total_chunk_count = sum(len(item.chunks or []) for item in (document.knowledge_items or []))
+    total_chunk_count = _document_chunk_count(document)
     metadata["chunk_count"] = total_chunk_count
     has_more_pages = bool(diagnostics.get("has_more_pages"))
-    parser_error = diagnostics.get("error")
     if has_more_pages:
         final_status = "processing"
         notice = f"processing_started:{created_count}"
     elif total_chunk_count or created_count:
         final_status = "completed"
         notice = f"processing_completed:{created_count}"
-    elif parser_error:
-        final_status = "parse_empty"
-        notice = "parse_empty"
     else:
-        final_status = "parse_empty"
-        notice = "parse_empty"
-    _set_document_status(document, final_status, metadata=metadata, diagnostics=diagnostics, error=parser_error if final_status == "failed" else None)
+        final_status = "failed"
+        notice = "no_chunks_generated"
+    logger.info(
+        "DOCUMENT_PROCESS_CHUNKS document_id=%s chunks_created=%s chunks_skipped=%s",
+        document.id,
+        created_count,
+        max(0, len(meaningful_chunks) - created_count),
+    )
+    _set_document_status(
+        document,
+        final_status,
+        metadata=metadata,
+        diagnostics=diagnostics,
+        error=None if final_status != "failed" else _document_processing_message("no_chunks_generated", getattr(document, "language", "tr")),
+        error_type=None if final_status != "failed" else "no_chunks_generated",
+        file_state=file_state,
+        process_attempted_at=attempted_at,
+    )
     db.commit()
+    logger.info(
+        "DOCUMENT_PROCESS_END document_id=%s status=%s chunk_count=%s cursor=%s",
+        document.id,
+        final_status,
+        total_chunk_count,
+        document.processing_cursor_page,
+    )
     return {
         "status": final_status,
         "notice": notice,
@@ -13369,18 +13696,32 @@ async def admin_document_process(
         try:
             document = db.query(db_mod.SourceDocument).filter(db_mod.SourceDocument.id == document_id).first()
             if document:
-                _set_document_status(document, "failed", error="db_temp_failed")
+                _set_document_status(
+                    document,
+                    "failed",
+                    error=_document_processing_message("db_error", getattr(document, "language", "tr")),
+                    error_type="db_error",
+                    warning=_short_exception_message(exc),
+                    file_state=_document_file_state(getattr(document, "file_path", "")),
+                )
                 db.commit()
         except Exception:
             _rollback_quietly(db)
-        return RedirectResponse(url="/admin/documents?notice=db_temp_failed", status_code=303)
+        return RedirectResponse(url="/admin/documents?notice=db_error", status_code=303)
     except Exception as exc:
         _rollback_quietly(db)
         logger.exception("Admin document process failed document_id=%s", document_id)
         try:
             document = db.query(db_mod.SourceDocument).filter(db_mod.SourceDocument.id == document_id).first()
             if document:
-                _set_document_status(document, "failed", error=_short_exception_message(exc))
+                _set_document_status(
+                    document,
+                    "failed",
+                    error=_document_processing_message("processing_failed", getattr(document, "language", "tr")),
+                    error_type="processing_failed",
+                    warning=_short_exception_message(exc),
+                    file_state=_document_file_state(getattr(document, "file_path", "")),
+                )
                 db.commit()
         except Exception:
             _rollback_quietly(db)
