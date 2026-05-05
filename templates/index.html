@@ -577,7 +577,7 @@
 {% if enable_consultation_booking %}
 <a class="btn btn-secondary" href="/personal-consultation">{{ t("common.consultation_full_name") }}</a>
 {% else %}
-<a class="btn btn-secondary" href="mailto:info@focusastrology.com">{{ "Launch Notice" if home_lang == "en" else "Lansman Bildirimi Al" }}</a>
+<button class="btn btn-secondary waitlist-inline-trigger" type="button" data-waitlist-open aria-expanded="false" aria-controls="waitlist-drawer">{{ t("common.waitlist_cta") }}</button>
 {% endif %}
                         </div>
                     </div>
@@ -717,7 +717,7 @@
 <a class="btn btn-secondary" href="/personal-consultation#consultation-pricing">{{ t("consultation.anchor_view_details") }}</a>
 {% else %}
 <span class="btn btn-primary disabled-launch">{{ "Consultation Coming Soon" if home_lang == "en" else "Danışmanlık Yakında" }}</span>
-<a class="btn btn-secondary" href="mailto:info@focusastrology.com">{{ "Get Information" if home_lang == "en" else "Bilgi Al" }}</a>
+<button class="btn btn-secondary waitlist-inline-trigger" type="button" data-waitlist-open aria-expanded="false" aria-controls="waitlist-drawer">{{ t("common.waitlist_cta") }}</button>
 {% endif %}
                     </div>
                 </div>

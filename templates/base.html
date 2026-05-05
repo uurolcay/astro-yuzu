@@ -359,6 +359,198 @@
             transform: rotate(180deg);
         }
 
+        .waitlist-header-cta,
+        .waitlist-inline-trigger {
+            min-height: 44px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            border: 1px solid rgba(223, 192, 112, 0.26);
+            background: linear-gradient(135deg, var(--gold), var(--gold-light));
+            color: var(--btn-primary-text);
+            font-family: "Cinzel", serif;
+            font-size: 0.66rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            cursor: pointer;
+            box-shadow: 0 12px 26px rgba(0, 0, 0, 0.18);
+            transition: transform 0.22s ease, box-shadow 0.22s ease;
+        }
+
+        .waitlist-header-cta {
+            padding: 0 16px;
+            white-space: nowrap;
+        }
+
+        .waitlist-inline-trigger {
+            padding: 0 18px;
+        }
+
+        .waitlist-header-cta:hover,
+        .waitlist-header-cta:focus-visible,
+        .waitlist-inline-trigger:hover,
+        .waitlist-inline-trigger:focus-visible {
+            transform: translateY(-1px);
+            box-shadow: 0 16px 32px rgba(0, 0, 0, 0.22);
+            outline: none;
+        }
+
+        .waitlist-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 80;
+            display: flex;
+            justify-content: flex-end;
+            background: rgba(4, 8, 16, 0.58);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.22s ease;
+        }
+
+        .waitlist-overlay.is-open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .waitlist-drawer {
+            width: min(420px, 100vw);
+            min-height: 100dvh;
+            padding: clamp(22px, 5vw, 34px);
+            display: grid;
+            gap: 22px;
+            align-content: start;
+            background: var(--header-bg);
+            border-left: 1px solid var(--border);
+            box-shadow: -24px 0 70px rgba(0, 0, 0, 0.32);
+            transform: translateX(100%);
+            transition: transform 0.24s ease;
+        }
+
+        .waitlist-overlay.is-open .waitlist-drawer {
+            transform: translateX(0);
+        }
+
+        .waitlist-drawer-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 18px;
+        }
+
+        .waitlist-drawer-title {
+            margin: 0;
+            font-family: "Cormorant Garamond", serif;
+            font-size: clamp(2rem, 8vw, 2.8rem);
+            font-weight: 400;
+            line-height: 1;
+            color: var(--text);
+        }
+
+        .waitlist-drawer-description,
+        .waitlist-privacy-note {
+            margin: 0;
+            color: var(--text-soft);
+            font-size: 1.08rem;
+            line-height: 1.65;
+        }
+
+        .waitlist-close {
+            width: 44px;
+            height: 44px;
+            flex: 0 0 44px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: var(--language-toggle-bg);
+            color: var(--text);
+            cursor: pointer;
+            font-size: 1.4rem;
+            line-height: 1;
+        }
+
+        .waitlist-form {
+            display: grid;
+            gap: 18px;
+        }
+
+        .waitlist-field {
+            display: grid;
+            gap: 8px;
+        }
+
+        .waitlist-field label,
+        .waitlist-interest-label {
+            font-family: "Cinzel", serif;
+            font-size: 0.72rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: var(--gold);
+        }
+
+        .waitlist-field input {
+            min-height: 48px;
+            width: 100%;
+            padding: 0 14px;
+            border-radius: 14px;
+            border: 1px solid var(--input-border);
+            background: var(--input-bg);
+            color: var(--text);
+            font-size: 16px;
+        }
+
+        .waitlist-interest-group {
+            display: grid;
+            gap: 10px;
+            padding: 0;
+            margin: 0;
+            border: 0;
+        }
+
+        .waitlist-choice {
+            min-height: 48px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 14px;
+            border: 1px solid var(--border);
+            background: var(--surface-muted);
+            color: var(--text);
+            cursor: pointer;
+        }
+
+        .waitlist-choice input {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--gold);
+        }
+
+        .waitlist-submit {
+            min-height: 48px;
+            border: none;
+        }
+
+        .waitlist-message {
+            min-height: 22px;
+            color: var(--text-soft);
+            font-size: 1rem;
+            line-height: 1.5;
+        }
+
+        .waitlist-message.is-success {
+            color: var(--success);
+        }
+
+        .waitlist-message.is-error {
+            color: var(--danger);
+        }
+
+        body.waitlist-lock {
+            overflow: hidden;
+            touch-action: none;
+        }
+
         .account-dropdown {
             position: absolute;
             top: calc(100% + 12px);
@@ -1042,7 +1234,7 @@
             }
 
             .brand-logo {
-                width: clamp(150px, 44vw, 220px);
+                width: clamp(118px, 34vw, 180px);
                 height: 52px;
             }
 
@@ -1098,6 +1290,13 @@
                 padding: 0 10px;
             }
 
+            .waitlist-header-cta {
+                min-height: 44px;
+                padding: 0 12px;
+                font-size: 0.58rem;
+                letter-spacing: 0.08em;
+            }
+
             .theme-toggle {
                 right: 14px;
                 bottom: 14px;
@@ -1114,6 +1313,11 @@
 
             .account-trigger {
                 padding-right: 12px;
+                display: none;
+            }
+
+            .nav-utilities .instagram-link {
+                display: none !important;
             }
 
             .account-dropdown {
@@ -1387,7 +1591,7 @@
                     {% endif %}
                 </nav>
                 <div class="nav-utilities">
-                    <a href="https://www.instagram.com/feruze.olcay/" target="_blank" rel="noopener noreferrer" aria-label="Instagram" style="display:inline-flex; align-items:center; color:rgba(240,220,149,.52); transition:color .22s ease; padding:4px;">
+                    <a class="instagram-link" href="https://www.instagram.com/feruze.olcay/" target="_blank" rel="noopener noreferrer" aria-label="Instagram" style="display:inline-flex; align-items:center; color:rgba(240,220,149,.52); transition:color .22s ease; padding:4px;">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
                             <circle cx="12" cy="12" r="4"/>
@@ -1398,6 +1602,7 @@
                         <button class="language-btn{% if ui_lang == 'tr' %} active{% endif %}" type="button" data-language-btn="tr"{% if ui_lang == 'tr' %} aria-current="true" aria-disabled="true" disabled{% endif %}>TR</button>
                         <button class="language-btn{% if ui_lang == 'en' %} active{% endif %}" type="button" data-language-btn="en"{% if ui_lang == 'en' %} aria-current="true" aria-disabled="true" disabled{% endif %}>EN</button>
                     </div>
+                    <button class="waitlist-header-cta" type="button" data-waitlist-open aria-expanded="false" aria-controls="waitlist-drawer">{{ t("common.waitlist_cta") }}</button>
                     <div class="account-menu" data-account-menu>
                         <button class="account-trigger" type="button" aria-expanded="false" aria-haspopup="menu" aria-label="{{ t('common.account_trigger_user') if request.state.current_user else t('common.account_trigger_guest') }}" data-account-trigger>
                             <span class="account-trigger-icon" aria-hidden="true">
@@ -1427,6 +1632,42 @@
             </div>
         </div>
     </header>
+
+    {% set waitlist_source_page = request.url.path if request is defined and request.url is defined and request.url.path is defined else "/" %}
+    <div class="waitlist-overlay" data-waitlist-overlay hidden>
+        <aside class="waitlist-drawer" id="waitlist-drawer" role="dialog" aria-modal="true" aria-labelledby="waitlist-title" aria-describedby="waitlist-description" tabindex="-1">
+            <div class="waitlist-drawer-header">
+                <div>
+                    <h2 class="waitlist-drawer-title" id="waitlist-title">{{ t("common.waitlist_title") }}</h2>
+                    <p class="waitlist-drawer-description" id="waitlist-description">{{ t("common.waitlist_description") }}</p>
+                </div>
+                <button class="waitlist-close" type="button" data-waitlist-close aria-label="{{ t('common.waitlist_close') }}">×</button>
+            </div>
+            <form class="waitlist-form" data-waitlist-form action="/waitlist" method="post" novalidate>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token_for(request) }}">
+                <input type="hidden" name="language" value="{{ ui_lang }}">
+                <input type="hidden" name="source_page" value="{{ waitlist_source_page }}">
+                <div class="waitlist-field">
+                    <label for="waitlist-email">{{ t("common.waitlist_email_label") }}</label>
+                    <input id="waitlist-email" name="email" type="email" autocomplete="email" inputmode="email" required>
+                </div>
+                <fieldset class="waitlist-interest-group">
+                    <legend class="waitlist-interest-label">{{ t("common.waitlist_interest_label") }}</legend>
+                    <label class="waitlist-choice">
+                        <input type="checkbox" name="interests" value="reports" checked>
+                        <span>{{ t("common.waitlist_interest_reports") }}</span>
+                    </label>
+                    <label class="waitlist-choice">
+                        <input type="checkbox" name="interests" value="consultation">
+                        <span>{{ t("common.waitlist_interest_consultation") }}</span>
+                    </label>
+                </fieldset>
+                <button class="btn btn-primary waitlist-submit" type="submit" data-waitlist-submit>{{ t("common.waitlist_submit") }}</button>
+                <p class="waitlist-message" data-waitlist-message aria-live="polite"></p>
+                <p class="waitlist-privacy-note">{{ t("common.waitlist_privacy_note") }}</p>
+            </form>
+        </aside>
+    </div>
 
     <main>
         {% block content %}{% endblock %}
@@ -1703,6 +1944,102 @@
                     menuControllers.forEach((controller) => controller.close());
                 }
             });
+
+            const waitlistOverlay = document.querySelector("[data-waitlist-overlay]");
+            const waitlistDrawer = document.querySelector("#waitlist-drawer");
+            const waitlistOpenButtons = Array.from(document.querySelectorAll("[data-waitlist-open]"));
+            const waitlistCloseButtons = Array.from(document.querySelectorAll("[data-waitlist-close]"));
+            const waitlistForm = document.querySelector("[data-waitlist-form]");
+            const waitlistMessage = document.querySelector("[data-waitlist-message]");
+            const waitlistSubmit = document.querySelector("[data-waitlist-submit]");
+            let waitlistLastFocus = null;
+            const waitlistFocusableSelector = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
+
+            const setWaitlistButtons = (expanded) => {
+                waitlistOpenButtons.forEach((button) => button.setAttribute("aria-expanded", expanded ? "true" : "false"));
+            };
+            const openWaitlist = () => {
+                if (!waitlistOverlay || !waitlistDrawer) return;
+                waitlistLastFocus = document.activeElement;
+                waitlistOverlay.hidden = false;
+                window.requestAnimationFrame(() => {
+                    waitlistOverlay.classList.add("is-open");
+                    document.body.classList.add("waitlist-lock");
+                    setWaitlistButtons(true);
+                    const emailInput = waitlistDrawer.querySelector("input[name='email']");
+                    (emailInput || waitlistDrawer).focus();
+                });
+            };
+            const closeWaitlist = () => {
+                if (!waitlistOverlay) return;
+                waitlistOverlay.classList.remove("is-open");
+                document.body.classList.remove("waitlist-lock");
+                setWaitlistButtons(false);
+                window.setTimeout(() => {
+                    waitlistOverlay.hidden = true;
+                }, 240);
+                if (waitlistLastFocus && typeof waitlistLastFocus.focus === "function") {
+                    waitlistLastFocus.focus();
+                }
+            };
+
+            waitlistOpenButtons.forEach((button) => button.addEventListener("click", openWaitlist));
+            waitlistCloseButtons.forEach((button) => button.addEventListener("click", closeWaitlist));
+            if (waitlistOverlay) {
+                waitlistOverlay.addEventListener("click", (event) => {
+                    if (event.target === waitlistOverlay) {
+                        closeWaitlist();
+                    }
+                });
+            }
+            document.addEventListener("keydown", (event) => {
+                if (!waitlistOverlay || waitlistOverlay.hidden) return;
+                if (event.key === "Escape") {
+                    event.preventDefault();
+                    closeWaitlist();
+                    return;
+                }
+                if (event.key !== "Tab" || !waitlistDrawer) return;
+                const focusables = Array.from(waitlistDrawer.querySelectorAll(waitlistFocusableSelector)).filter((element) => element.offsetParent !== null || element === document.activeElement);
+                if (!focusables.length) return;
+                const first = focusables[0];
+                const last = focusables[focusables.length - 1];
+                if (event.shiftKey && document.activeElement === first) {
+                    event.preventDefault();
+                    last.focus();
+                } else if (!event.shiftKey && document.activeElement === last) {
+                    event.preventDefault();
+                    first.focus();
+                }
+            });
+            if (waitlistForm) {
+                waitlistForm.addEventListener("submit", async (event) => {
+                    event.preventDefault();
+                    if (!waitlistMessage || !waitlistSubmit) return;
+                    waitlistMessage.textContent = "";
+                    waitlistMessage.classList.remove("is-success", "is-error");
+                    waitlistSubmit.disabled = true;
+                    try {
+                        const response = await fetch(waitlistForm.action, {
+                            method: "POST",
+                            body: new FormData(waitlistForm),
+                            headers: { "Accept": "application/json" },
+                        });
+                        const payload = await response.json().catch(() => ({}));
+                        waitlistMessage.textContent = payload.message || (response.ok ? "{{ t('common.waitlist_success') }}" : "{{ t('common.waitlist_error') }}");
+                        waitlistMessage.classList.add(payload.ok ? "is-success" : "is-error");
+                        if (payload.ok && !payload.duplicate) {
+                            waitlistForm.reset();
+                            waitlistForm.querySelector("input[value='reports']").checked = true;
+                        }
+                    } catch (error) {
+                        waitlistMessage.textContent = "{{ t('common.waitlist_error') }}";
+                        waitlistMessage.classList.add("is-error");
+                    } finally {
+                        waitlistSubmit.disabled = false;
+                    }
+                });
+            }
 
             const serverLanguage = "{{ ui_lang }}";
             const preferredLanguage = window.APP_LANGUAGE.persist(window.APP_LANGUAGE.get() || serverLanguage);

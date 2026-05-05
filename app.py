@@ -664,6 +664,7 @@ def _storage_diagnostics(db: Session):
     source_documents_count = db.query(db_mod.SourceDocument).count()
     knowledge_items_count = db.query(db_mod.KnowledgeItem).count()
     knowledge_chunks_count = db.query(db_mod.KnowledgeChunk).count()
+    waitlist_count = db.query(db_mod.WaitlistEntry).count()
     review_required_count = db.query(db_mod.KnowledgeItem).filter(db_mod.KnowledgeItem.status == "review_required").count()
     published_count = db.query(db_mod.KnowledgeItem).filter(db_mod.KnowledgeItem.status.in_(["published", "active"])).count()
     return {
@@ -672,6 +673,7 @@ def _storage_diagnostics(db: Session):
         "source_documents_count": source_documents_count,
         "knowledge_items_count": knowledge_items_count,
         "knowledge_chunks_count": knowledge_chunks_count,
+        "waitlist_count": waitlist_count,
         "review_required_count": review_required_count,
         "published_count": published_count,
         "uploads_dir_path": str(uploads_dir),
@@ -1653,6 +1655,45 @@ def capture_email_lead(db, *, email, report_id=None, source="result_page"):
     db.add(capture)
     db.flush()
     return capture, True
+
+
+WAITLIST_INTERESTS = {"reports", "consultation"}
+
+
+def _normalize_waitlist_interests(raw_value):
+    if raw_value is None:
+        return []
+    if isinstance(raw_value, str):
+        candidates = [raw_value]
+        if "," in raw_value:
+            candidates = raw_value.split(",")
+    elif isinstance(raw_value, (list, tuple, set)):
+        candidates = list(raw_value)
+    else:
+        candidates = [raw_value]
+    interests = []
+    for value in candidates:
+        normalized = str(value or "").strip().lower()
+        if normalized in {"report", "rapor", "raporlama"}:
+            normalized = "reports"
+        if normalized in {"danismanlik", "danışmanlık", "consultations"}:
+            normalized = "consultation"
+        if normalized in WAITLIST_INTERESTS and normalized not in interests:
+            interests.append(normalized)
+    return interests
+
+
+def _waitlist_message(key, language):
+    return translate_text(f"common.{key}", language)
+
+
+def _sanitize_source_page(value):
+    source = str(value or "").strip()[:240]
+    if not source:
+        return "/"
+    if not source.startswith("/"):
+        return "/"
+    return source
 
 
 def mark_email_capture_converted(db, *, report=None, email=None):
@@ -7384,6 +7425,96 @@ async def contact_submit(request: Request, db: Session = Depends(get_db)):
     )
 
 
+@app.post("/waitlist")
+async def waitlist_submit(request: Request, db: Session = Depends(get_db)):
+    content_type = str(request.headers.get("content-type", "")).lower()
+    payload = {}
+    if "application/json" in content_type:
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+        submitted_csrf = str(payload.get(CSRF_FORM_FIELD) or payload.get("csrf_token") or "").strip()
+        interests_raw = payload.get("interests", payload.get("interest_type"))
+    else:
+        form = await request.form()
+        payload = dict(form)
+        submitted_csrf = str(form.get(CSRF_FORM_FIELD, "") or "").strip()
+        interests_raw = form.getlist("interests") or form.get("interest_type") or form.get("interests")
+
+    await validate_csrf_token(request, submitted_csrf)
+    enforce_rate_limit(request, "waitlist", limit=10, window_seconds=600)
+
+    language = str(payload.get("language") or _result_language(request, get_request_user(request, db)) or "en").strip().lower()
+    language = "tr" if language.startswith("tr") else "en"
+    email = _normalize_capture_email(payload.get("email"))
+    if not email:
+        return JSONResponse({"ok": False, "message": _waitlist_message("waitlist_email_required", language)}, status_code=400)
+    if not _is_valid_capture_email(email):
+        return JSONResponse({"ok": False, "message": _waitlist_message("waitlist_invalid_email", language)}, status_code=400)
+
+    interests = _normalize_waitlist_interests(interests_raw)
+    if not interests:
+        interests = ["reports", "consultation"]
+    source_page = _sanitize_source_page(payload.get("source_page") or request.headers.get("referer") or "/")
+
+    existing = db.query(db_mod.WaitlistEntry).filter(db_mod.WaitlistEntry.email == email).first()
+    if existing:
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": _waitlist_message("waitlist_duplicate", language),
+                "duplicate": True,
+            }
+        )
+
+    entry = db_mod.WaitlistEntry(
+        email=email,
+        language=language,
+        interest_type=interests[0] if len(interests) == 1 else "multiple",
+        interest_json=json.dumps(interests, ensure_ascii=False),
+        source_page=source_page,
+        status="active",
+        metadata_json=json.dumps(
+            {
+                "ip": _client_ip(request),
+                "user_agent": str(request.headers.get("user-agent", ""))[:300],
+            },
+            ensure_ascii=False,
+        ),
+    )
+    db.add(entry)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": _waitlist_message("waitlist_duplicate", language),
+                "duplicate": True,
+            }
+        )
+    except OperationalError:
+        db.rollback()
+        logger.exception("Waitlist database write failed email=%s", email)
+        return JSONResponse({"ok": False, "message": _waitlist_message("waitlist_error", language)}, status_code=503)
+    except Exception:
+        db.rollback()
+        logger.exception("Waitlist submit failed email=%s", email)
+        return JSONResponse({"ok": False, "message": _waitlist_message("waitlist_error", language)}, status_code=500)
+
+    return JSONResponse(
+        {
+            "ok": True,
+            "message": _waitlist_message("waitlist_success", language),
+            "duplicate": False,
+        }
+    )
+
+
 @app.get("/privacy", response_class=HTMLResponse)
 async def privacy(request: Request):
     return templates.TemplateResponse(
@@ -8869,6 +9000,49 @@ async def admin_debug_whoami(request: Request, db: Session = Depends(get_db)):
 @admin_required
 async def admin_debug_storage(request: Request, db: Session = Depends(get_db)):
     return JSONResponse(_storage_diagnostics(db))
+
+
+def _waitlist_entry_admin_view(entry):
+    interests = _json_loads_safe(getattr(entry, "interest_json", None), [])
+    if not isinstance(interests, list):
+        interests = []
+    return {
+        "id": entry.id,
+        "email": entry.email,
+        "language": entry.language,
+        "interest": ", ".join(str(item) for item in interests) or getattr(entry, "interest_type", None) or "-",
+        "source_page": entry.source_page or "-",
+        "status": entry.status or "-",
+        "created_at": entry.created_at,
+    }
+
+
+@app.get("/admin/waitlist", response_class=HTMLResponse)
+@admin_required
+async def admin_waitlist(request: Request, db: Session = Depends(get_db), page: int = 1, page_size: int | None = None):
+    page, limit, offset = _admin_page_params(page, page_size)
+    query = db.query(db_mod.WaitlistEntry)
+    total = query.count()
+    entries = (
+        query.order_by(db_mod.WaitlistEntry.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    return templates.TemplateResponse(
+        request=request,
+        name="admin/waitlist.html",
+        context=_auth_template_context(
+            request,
+            dashboard_user=request.state.admin_user,
+            active_page="waitlist",
+            entries=[_waitlist_entry_admin_view(entry) for entry in entries],
+            total=total,
+            page=page,
+            page_size=limit,
+            has_next=offset + len(entries) < total,
+        ),
+    )
 
 
 def _admin_order_view(order):

@@ -194,7 +194,7 @@
                     </div>
                 </form>
                 {% if not enable_payments %}
-                <p class="launch-inline-note">{{ "The order and payment flow is temporarily paused until launch preparation is complete. For details, you can contact us at " if lang == "en" else "Sipariş ve ödeme akışı lansman hazırlığı tamamlanana kadar geçici olarak kapalıdır. Detaylı bilgi için " }}<a href="mailto:info@focusastrology.com">info@focusastrology.com</a>{{ "." if lang == "en" else " üzerinden bize ulaşabilirsiniz." }}</p>
+                <p class="launch-inline-note">{{ "The order and payment flow is temporarily paused while we prepare this feature. For details, you can contact us at " if lang == "en" else "Sipariş ve ödeme akışı bu özellik hazırlanırken geçici olarak kapalıdır. Detaylı bilgi için " }}<a href="mailto:info@focusastrology.com">info@focusastrology.com</a>{{ "." if lang == "en" else " üzerinden bize ulaşabilirsiniz." }}</p>
                 {% endif %}
             </section>
 
@@ -227,5 +227,4 @@ if (launchLockedOrderForm) {
 }
 </script>
 {% endblock %}
-
 

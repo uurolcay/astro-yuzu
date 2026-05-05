@@ -162,7 +162,7 @@
                         <a class="btn btn-secondary" href="{% if service_kind == 'consultation' %}/personal-consultation{% else %}/reports{% endif %}">Geri Dön</a>
                     </form>
                     {% if not enable_payments or (service_kind == "consultation" and not enable_consultation_booking) %}
-                    <p class="launch-inline-note">{{ "Launch preparation is still in progress for this transaction flow." if lang == "en" else "Bu işlem akışı lansman hazırlığı tamamlanana kadar beklemede tutuluyor." }}</p>
+                    <p class="launch-inline-note">{{ "This transaction flow is still being prepared." if lang == "en" else "Bu işlem akışı hazırlık tamamlanana kadar beklemede tutuluyor." }}</p>
                     {% endif %}
                 </div>
                 <aside class="checkout-summary">

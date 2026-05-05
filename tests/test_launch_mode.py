@@ -30,6 +30,7 @@ def test_calculate_is_blocked_before_chart_pipeline_runs():
     assert response.status_code == 200
     assert "Yakında Yayında" in response.text
     assert "Focus Astrology şu anda kişisel raporlar, danışmanlık hizmetleri ve ödeme altyapısı için son hazırlık sürecindedir." in response.text
+    assert "lansman" not in response.text.lower()
     build_birth_context.assert_not_called()
 
 
@@ -83,6 +84,7 @@ def test_personal_consultation_booking_route_renders_coming_soon_panel():
     assert response.status_code == 200
     assert "Yakında Yayında" in response.text
     assert "Focus Astrology şu anda kişisel raporlar, danışmanlık hizmetleri ve ödeme altyapısı için son hazırlık sürecindedir." in response.text
+    assert "lansman" not in response.text.lower()
 
 def test_english_launch_mode_panel_is_fully_english():
     client = TestClient(app.app)
@@ -91,7 +93,7 @@ def test_english_launch_mode_panel_is_fully_english():
     assert response.status_code == 200
     assert "Coming Soon" in response.text
     assert "Back to Home" in response.text
-    assert "Get Information" in response.text
+    assert "Get Notified" in response.text
     assert "Yakında Yayında" not in response.text
 
 

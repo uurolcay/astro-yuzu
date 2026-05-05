@@ -777,6 +777,24 @@ class EmailCapture(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
 
+class WaitlistEntry(Base):
+    __tablename__ = "waitlist_entries"
+    __table_args__ = (
+        UniqueConstraint("email", name="uq_waitlist_entries_email"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, nullable=False, index=True)
+    language = Column(String, nullable=False, default="en", index=True)
+    interest_type = Column(String, nullable=True, index=True)
+    interest_json = Column(Text, nullable=True)
+    source_page = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="active", index=True)
+    metadata_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
 class FeedbackEntry(Base):
     __tablename__ = "feedback_entries"
 
@@ -1010,6 +1028,14 @@ def _add_missing_columns():
         add_col("source_documents", "block_count", "INTEGER")
         add_col("source_documents", "parser_used", "VARCHAR")
         add_col("source_documents", "processing_error", "TEXT")
+        add_col("waitlist_entries", "language", "VARCHAR DEFAULT 'en' NOT NULL")
+        add_col("waitlist_entries", "interest_type", "VARCHAR")
+        add_col("waitlist_entries", "interest_json", "TEXT")
+        add_col("waitlist_entries", "source_page", "VARCHAR")
+        add_col("waitlist_entries", "status", "VARCHAR DEFAULT 'active' NOT NULL")
+        add_col("waitlist_entries", "metadata_json", "TEXT")
+        add_col("waitlist_entries", "created_at", "DATETIME")
+        add_col("waitlist_entries", "updated_at", "DATETIME")
         add_col("accounting_invoices", "pdf_status", "VARCHAR DEFAULT 'not_generated'")
         add_col("accounting_invoices", "pdf_generated_at", "DATETIME")
         add_col("accounting_invoices", "pdf_error_message", "TEXT")

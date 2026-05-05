@@ -105,9 +105,9 @@
             </div>
             <div class="section-kicker">
                 {% if coming_soon_variant == "notice" %}
-                    {{ "Official Launch Preparation" if coming_soon_lang == "en" else "Resmi Lansman Hazırlığı" }}
+                    {{ "Service Preparation" if coming_soon_lang == "en" else "Hizmet Hazırlığı" }}
                 {% else %}
-                    {{ "Launch Mode" if coming_soon_lang == "en" else "Lansman Modu" }}
+                    {{ "Temporarily Paused" if coming_soon_lang == "en" else "Geçici Olarak Kapalı" }}
                 {% endif %}
             </div>
             <h1 class="hero-title">{{ coming_soon_copy.title or ("Coming Soon" if coming_soon_lang == "en" else "Yakında Yayında") }}</h1>
@@ -116,15 +116,15 @@
             </p>
             <p class="coming-soon-note">
                 {% if coming_soon_lang == "en" %}
-                The site remains live so you can explore the brand and service scope while launch-only features stay safely paused.
+                The site remains live so you can explore the brand and service scope while report and consultation actions stay safely paused.
                 {% else %}
-                Marka ve hizmet kapsamını incelemeye devam edebilirsiniz; yalnızca lansman sonrasında açılacak işlem alanları güvenli biçimde beklemede tutulmaktadır.
+                Marka ve hizmet kapsamını incelemeye devam edebilirsiniz; raporlama ve danışmanlık işlem alanları güvenli biçimde beklemede tutulmaktadır.
                 {% endif %}
             </p>
         </div>
         <div class="coming-soon-actions">
             <a class="btn btn-primary" href="/">{{ coming_soon_copy.home_label or ("Back to Home" if coming_soon_lang == "en" else "Ana Sayfaya Dön") }}</a>
-            <a class="btn btn-secondary" href="mailto:info@focusastrology.com">{{ coming_soon_copy.info_label or ("Get Information" if coming_soon_lang == "en" else "Bilgi Al") }}</a>
+            <button class="btn btn-secondary waitlist-inline-trigger" type="button" data-waitlist-open aria-expanded="false" aria-controls="waitlist-drawer">{{ t("common.waitlist_cta") }}</button>
         </div>
     </section>
 </div>

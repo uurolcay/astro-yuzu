@@ -20,6 +20,7 @@ class PersistenceDiagnosticsTests(unittest.TestCase):
     def setUp(self):
         db_mod.init_db()
         self.db = db_mod.SessionLocal()
+        self.db.query(db_mod.WaitlistEntry).delete()
         self.db.query(db_mod.KnowledgeChunk).delete()
         self.db.query(db_mod.KnowledgeItem).delete()
         self.db.query(db_mod.SourceDocument).delete()
@@ -48,6 +49,7 @@ class PersistenceDiagnosticsTests(unittest.TestCase):
 
     def tearDown(self):
         self.db.rollback()
+        self.db.query(db_mod.WaitlistEntry).delete()
         self.db.query(db_mod.KnowledgeChunk).delete()
         self.db.query(db_mod.KnowledgeItem).delete()
         self.db.query(db_mod.SourceDocument).delete()
@@ -126,6 +128,7 @@ class PersistenceDiagnosticsTests(unittest.TestCase):
             "admin_page_size_max",
             "request_tracing_enabled",
             "coverage_rebuild_sync_enabled",
+            "waitlist_count",
             "approved_chunks_count",
         ):
             self.assertIn(key, payload)

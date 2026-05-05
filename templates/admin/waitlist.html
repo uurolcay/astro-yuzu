@@ -1,0 +1,73 @@
+{% extends "admin/base_admin.html" %}
+{% block admin_title %}Ön Kayıtlar{% endblock %}
+
+{% block admin_content %}
+<div class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Ön Kayıtlar</h1>
+    <p class="admin-page-sub">Raporlama ve danışmanlık bildirim listesine bırakılan e-posta adresleri.</p>
+  </div>
+  <div class="admin-page-actions">
+    <span class="badge badge-info">{{ total }} total</span>
+    <span class="badge badge-muted">{{ entries|length }} shown</span>
+  </div>
+</div>
+
+<section class="admin-table-wrap">
+  <div class="admin-table-header">
+    <div class="admin-table-title">Waitlist entries</div>
+  </div>
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>Email</th>
+        <th>Interest</th>
+        <th>Language</th>
+        <th>Source</th>
+        <th>Status</th>
+        <th>Created</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in entries %}
+      <tr>
+        <td>{{ entry.email }}</td>
+        <td>{{ entry.interest }}</td>
+        <td>{{ entry.language|upper }}</td>
+        <td>{{ entry.source_page }}</td>
+        <td><span class="badge badge-success">{{ entry.status }}</span></td>
+        <td>{{ entry.created_at.strftime("%Y-%m-%d %H:%M") if entry.created_at else "-" }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="6">
+          <div class="admin-empty-state">
+            <div class="admin-empty-title">Henüz ön kayıt yok</div>
+            <div class="admin-empty-text">Public sitedeki bildirim drawer'ından kayıt geldiğinde burada listelenecek.</div>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<div class="admin-page-actions">
+  {% if page > 1 %}
+  <a class="btn-admin" href="/admin/waitlist?page={{ page - 1 }}&page_size={{ page_size }}">Previous</a>
+  {% endif %}
+  {% if has_next %}
+  <a class="btn-admin" href="/admin/waitlist?page={{ page + 1 }}&page_size={{ page_size }}">Next</a>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block admin_context %}
+<section class="admin-context-card">
+  <div class="admin-context-title">List</div>
+  <div class="admin-context-list">
+    <div class="admin-context-link"><span>Total</span><strong>{{ total }}</strong></div>
+    <div class="admin-context-link"><span>Page size</span><strong>{{ page_size }}</strong></div>
+  </div>
+</section>
+{% endblock %}
