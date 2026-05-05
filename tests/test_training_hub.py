@@ -95,7 +95,7 @@ class TrainingHubTests(unittest.TestCase):
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
             response = self.client.get("/admin/training")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("AI Astrologer Training", response.text)
+        self.assertIn("AI Astroloji Eğitimi", response.text)
 
     def test_training_hub_does_not_rebuild_coverage_on_get(self):
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair), patch.object(
@@ -105,7 +105,7 @@ class TrainingHubTests(unittest.TestCase):
         ):
             response = self.client.get("/admin/training")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Coverage not calculated yet", response.text)
+        self.assertIn("Kapsam henüz hesaplanmadı", response.text)
 
     def test_shared_admin_context_does_not_query_unread_contact_count(self):
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair), patch.object(
@@ -139,7 +139,7 @@ class TrainingHubTests(unittest.TestCase):
             response = self.client.get("/admin/knowledge")
         self.assertEqual(response.status_code, 200)
         self.assertIn("Knowledge K", response.text)
-        self.assertIn("Training Hub", response.text)
+        self.assertIn("Eğitim Merkezi", response.text)
 
     def test_knowledge_library_route_is_paginated(self):
         for index in range(3):

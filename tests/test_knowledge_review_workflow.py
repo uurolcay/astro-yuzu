@@ -47,33 +47,36 @@ class KnowledgeReviewWorkflowTests(unittest.TestCase):
     def _request_admin_pair(self, request, db):
         return self._request_admin_user(request, db), None
 
-    def _review_item(self, *, title="Ashwini Review Chunk", entities=None, metadata=None):
+    def _review_item(self, *, title="Ashwini Review Chunk", entities=None, metadata=None, status="review_required", body_text=None):
         source_document = db_mod.SourceDocument(title="Nakshatra PDF", document_type="book")
         self.db.add(source_document)
         self.db.flush()
+        default_metadata = {
+            "review_required": status == "review_required",
+            "status": status,
+            "category": "nakshatra",
+            "primary_entity": "ashwini",
+            "source_title": "Nakshatra PDF",
+            "confidence_level": "medium",
+            "sensitivity_level": "low",
+            "classical_view": "Ashwini supports initiative.",
+            "premium_synthesis_sentence": "Ashwini can express as poised initiative when supported by the full chart.",
+            "coverage_entities": ["ashwini", "career"],
+        }
+        if metadata:
+            default_metadata.update(metadata)
         item = knowledge_service.create_knowledge_item(
             self.db,
             title=title,
-            body_text="Classical View: Ashwini brings initiative and quick response.",
+            body_text=body_text or "Classical View: Ashwini brings initiative and quick response.",
             language="tr",
             item_type="nakshatra",
             summary_text="A calm synthesis sentence.",
             entities=entities or ["ashwini", "career"],
             source_document=source_document,
-            metadata=metadata or {
-                "review_required": True,
-                "status": "review_required",
-                "category": "nakshatra",
-                "primary_entity": "ashwini",
-                "source_title": "Nakshatra PDF",
-                "confidence_level": "medium",
-                "sensitivity_level": "low",
-                "classical_view": "Ashwini supports initiative.",
-                "premium_synthesis_sentence": "Ashwini can express as poised initiative when supported by the full chart.",
-                "coverage_entities": ["ashwini", "career"],
-            },
+            metadata=default_metadata,
             created_by_user_id=self.admin.id,
-            status="review_required",
+            status=status,
         )
         self.db.commit()
         return item
@@ -102,13 +105,74 @@ class KnowledgeReviewWorkflowTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertLessEqual(response.text.count("Paged Review"), 2)
 
+    def test_review_sorting_by_title_status_sensitivity_and_date_works(self):
+        alpha = self._review_item(title="Alpha Review", metadata={"sensitivity_level": "low"})
+        zulu = self._review_item(title="Zulu Review", metadata={"sensitivity_level": "high"})
+        active = self._review_item(title="Active Review", status="active")
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            by_title = self.client.get("/admin/knowledge/review?sort=title&direction=asc&status=all")
+            by_status = self.client.get("/admin/knowledge/review?sort=status&direction=asc&status=all")
+            by_sensitivity = self.client.get("/admin/knowledge/review?sort=sensitivity&direction=desc&status=all")
+            by_date = self.client.get("/admin/knowledge/review?sort=created_at&direction=desc&status=all")
+        self.assertEqual(by_title.status_code, 200)
+        self.assertEqual(by_status.status_code, 200)
+        self.assertEqual(by_sensitivity.status_code, 200)
+        self.assertEqual(by_date.status_code, 200)
+        self.assertLess(by_title.text.index("Active Review"), by_title.text.index("Alpha Review"))
+        self.assertLess(by_sensitivity.text.index("Zulu Review"), by_sensitivity.text.index("Alpha Review"))
+        self.assertIn(str(active.id), by_status.text)
+        self.assertIn(str(zulu.id), by_date.text)
+
+    def test_review_filtering_by_query_category_sensitivity_status_and_source(self):
+        target = self._review_item(
+            title="Filter Target Dhanishta",
+            metadata={"category": "dasha", "sensitivity_level": "high", "primary_entity": "dhanishta"},
+            body_text="Specific searchable dasha body for Dhanishta review.",
+        )
+        self._review_item(title="Filter Other", metadata={"category": "nakshatra", "sensitivity_level": "low"})
+        source_id = target.source_document_id
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            response = self.client.get(
+                f"/admin/knowledge/review?q=searchable+dasha&category=dasha&sensitivity=high&status=review_required&source_document_id={source_id}"
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Filter Target Dhanishta", response.text)
+        self.assertNotIn("Filter Other", response.text)
+
+    def test_unknown_title_repair_creates_meaningful_fallback_title(self):
+        item = self._review_item(
+            title="Dhanishta - Unknown",
+            metadata={
+                "category": "nakshatra",
+                "primary_entity": "dhanishta",
+                "source_page_start": 42,
+                "confidence_level": "medium",
+                "sensitivity_level": "low",
+            },
+        )
+        csrf = self._csrf("/admin/knowledge/review")
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            response = self.client.post("/admin/knowledge/repair-titles", data={"csrf_token": csrf}, follow_redirects=False)
+        self.assertEqual(response.status_code, 303)
+        self.db.expire_all()
+        repaired = self.db.query(db_mod.KnowledgeItem).filter_by(id=item.id).first()
+        self.assertEqual(repaired.title, "Dhanishta — Nakshatra Knowledge — p.42")
+
+    def test_review_ui_renders_localized_status_and_sensitivity_labels(self):
+        self._review_item(title="Localized Labels", metadata={"sensitivity_level": "medium"})
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            response = self.client.get("/admin/knowledge/review")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("İnceleme Bekliyor", response.text)
+        self.assertIn("Orta", response.text)
+
     def test_detail_page_opens(self):
         item = self._review_item()
         item_id = item.id
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
             response = self.client.get(f"/admin/knowledge/review/{item_id}")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Knowledge Review", response.text)
+        self.assertIn("İçerik İnceleme", response.text)
 
     def test_edit_form_saves(self):
         item = self._review_item()

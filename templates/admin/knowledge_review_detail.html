@@ -1,9 +1,9 @@
 {% extends "admin/base_admin.html" %}
-{% block admin_title %}Knowledge Review Detail{% endblock %}
+{% block admin_title %}İçerik İnceleme Detayı{% endblock %}
 {% block admin_content %}
 <section class="admin-page-header">
   <div>
-    <h1 class="admin-page-title">Knowledge Review — #{{ item.id }}</h1>
+    <h1 class="admin-page-title">İçerik İnceleme Detayı — #{{ item.id }}</h1>
     <p class="admin-page-sub">{{ metadata.category or item.item_type or "reference" }} inceleme ekranı.</p>
   </div>
 </section>
@@ -12,16 +12,16 @@
 {% if error %}<div class="admin-alert admin-alert-danger">{{ error }}</div>{% endif %}
 
 <div class="admin-page-actions" style="margin-bottom:1rem;">
-  <a href="/admin/knowledge/review">← Review listesi</a>
+  <a href="/admin/knowledge/review">← İnceleme listesi</a>
 </div>
 
 <details class="admin-card" open>
-  <summary class="admin-card-title" style="cursor:pointer;">Current Body</summary>
+  <summary class="admin-card-title" style="cursor:pointer;">Mevcut İçerik</summary>
   <div style="max-height:320px; overflow:auto; white-space:pre-wrap; line-height:1.7;">{{ item.body_text }}</div>
 </details>
 
 <section class="admin-card">
-  <div class="admin-card-title">Source Pages</div>
+  <div class="admin-card-title">Kaynak Sayfalar</div>
   <div class="admin-muted">
     {% if metadata.source_page_start or metadata.source_page_end %}
       {{ metadata.source_page_start or "?" }} - {{ metadata.source_page_end or metadata.source_page_start or "?" }}
@@ -32,31 +32,31 @@
 </section>
 
 <section class="admin-card">
-  <div class="admin-card-title">Edit Knowledge Item</div>
+  <div class="admin-card-title">İçeriği Düzenle</div>
   <form class="admin-form" method="post" action="/admin/knowledge/review/{{ item.id }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="admin-grid-2">
-      <div class="admin-field"><label>Title</label><input type="text" name="title" value="{{ (form_data.title if form_data else metadata.title) or item.title }}"></div>
-      <div class="admin-field"><label>Coverage Entities</label><input type="text" name="coverage_entities" value="{{ (form_data.coverage_entities if form_data else (metadata.coverage_entities|join(', '))) if metadata.coverage_entities else '' }}"></div>
+      <div class="admin-field"><label>Başlık</label><input type="text" name="title" value="{{ (form_data.title if form_data else metadata.title) or item.title }}"></div>
+      <div class="admin-field"><label>Kapsam Varlıkları</label><input type="text" name="coverage_entities" value="{{ (form_data.coverage_entities if form_data else (metadata.coverage_entities|join(', '))) if metadata.coverage_entities else '' }}"></div>
     </div>
     <div class="admin-grid-2">
-      <div class="admin-field"><label>Confidence Level</label><input type="text" name="confidence_level" value="{{ (form_data.confidence_level if form_data else metadata.confidence_level) or '' }}"></div>
-      <div class="admin-field"><label>Sensitivity Level</label><input type="text" name="sensitivity_level" value="{{ (form_data.sensitivity_level if form_data else metadata.sensitivity_level) or '' }}"></div>
+      <div class="admin-field"><label>Güven Düzeyi</label><input type="text" name="confidence_level" value="{{ (form_data.confidence_level if form_data else metadata.confidence_level) or '' }}"></div>
+      <div class="admin-field"><label>Hassasiyet Düzeyi</label><input type="text" name="sensitivity_level" value="{{ (form_data.sensitivity_level if form_data else metadata.sensitivity_level) or '' }}"></div>
     </div>
-    <div class="admin-field"><label>Tags</label><input type="text" name="tags" value="{{ (form_data.tags if form_data else (metadata.tags|join(', '))) if metadata.tags else '' }}"></div>
+    <div class="admin-field"><label>Etiketler</label><input type="text" name="tags" value="{{ (form_data.tags if form_data else (metadata.tags|join(', '))) if metadata.tags else '' }}"></div>
     {% for field, label in [
-      ("classical_view", "Classical View"),
-      ("modern_synthesis", "Modern Synthesis"),
-      ("interpretation_logic", "Interpretation Logic"),
-      ("strong_condition", "Strong Condition"),
-      ("weak_condition", "Weak Condition"),
-      ("risk_pattern", "Risk Pattern"),
-      ("opportunity_pattern", "Opportunity Pattern"),
-      ("dasha_activation", "Dasha Activation"),
-      ("transit_activation", "Transit Activation"),
-      ("safe_language_notes", "Safe Language Notes"),
-      ("what_not_to_say", "What Not To Say"),
-      ("premium_synthesis_sentence", "Premium Synthesis Sentence")
+      ("classical_view", "Klasik Yorum"),
+      ("modern_synthesis", "Modern Sentez"),
+      ("interpretation_logic", "Yorum Mantığı"),
+      ("strong_condition", "Güçlü Koşul"),
+      ("weak_condition", "Zayıf Koşul"),
+      ("risk_pattern", "Risk Örüntüsü"),
+      ("opportunity_pattern", "Fırsat Örüntüsü"),
+      ("dasha_activation", "Dasha Aktivasyonu"),
+      ("transit_activation", "Transit Aktivasyonu"),
+      ("safe_language_notes", "Güvenli Dil Notları"),
+      ("what_not_to_say", "Söylenmemesi Gerekenler"),
+      ("premium_synthesis_sentence", "Premium Sentez Cümlesi")
     ] %}
     <div class="admin-field">
       <label>{{ label }}</label>
@@ -70,15 +70,15 @@
 </section>
 
 <section class="admin-card">
-  <div class="admin-card-title">Publish / Reject</div>
+  <div class="admin-card-title">Yayınla / Reddet</div>
   <div class="admin-page-actions">
     <form method="post" action="/admin/knowledge/review/{{ item.id }}/publish" style="display:inline;">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button class="btn-admin btn-admin-primary" type="submit">Publish</button>
+      <button class="btn-admin btn-admin-primary" type="submit">Yayınla</button>
     </form>
     <form method="post" action="/admin/knowledge/review/{{ item.id }}/reject" style="display:inline;">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button class="btn-admin btn-admin-secondary" type="submit">Reject</button>
+      <button class="btn-admin btn-admin-secondary" type="submit">Reddet</button>
     </form>
   </div>
 </section>

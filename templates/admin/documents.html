@@ -7,8 +7,8 @@
     <p class="admin-page-sub">PDF yukle, batch process et, nakshatra extraction calistir</p>
   </div>
   <div class="admin-page-actions">
-    <a class="btn-admin btn-admin-secondary" href="/admin/training">Training Hub -></a>
-    <a class="btn-admin btn-admin-primary" href="/admin/knowledge/review">Review Queue -></a>
+    <a class="btn-admin btn-admin-secondary" href="/admin/training">Eğitim Merkezi -></a>
+    <a class="btn-admin btn-admin-primary" href="/admin/knowledge/review">İnceleme Kuyruğu -></a>
   </div>
 </section>
 
@@ -111,8 +111,8 @@
       Upload request'i PDF parse etmez. Process butonu varsayilan olarak request basina sinirli sayfa ve chunk isler; buyuk kitaplarda Continue Processing ile kaldigi sayfadan devam eder.
     </div>
     <div class="admin-page-actions" style="margin-top:16px;">
-      <a class="btn-admin btn-admin-secondary" href="/admin/knowledge/review">Review Queue -></a>
-      <a class="btn-admin btn-admin-secondary" href="/admin/knowledge/coverage">Coverage -></a>
+      <a class="btn-admin btn-admin-secondary" href="/admin/knowledge/review">İnceleme Kuyruğu -></a>
+      <a class="btn-admin btn-admin-secondary" href="/admin/knowledge/coverage">Kapsam -></a>
     </div>
   </article>
 </section>
@@ -124,14 +124,14 @@
   <table class="admin-table">
     <thead>
       <tr>
-        <th>Title</th>
+        <th>Başlık</th>
         <th>Type</th>
         <th>File</th>
         <th>Uploaded At</th>
-        <th>Status</th>
+        <th>Durum</th>
         <th>Counts</th>
         <th>Diagnostics / Parser / Preview</th>
-        <th>Actions</th>
+        <th>İşlemler</th>
       </tr>
     </thead>
     <tbody>
@@ -143,18 +143,18 @@
         <td>{{ row.document.uploaded_at.strftime("%Y-%m-%d %H:%M") if row.document.uploaded_at else "-" }}</td>
         <td>
           {% if row.processing_status in ["completed", "processed"] %}
-          <span class="badge badge-success">{{ row.processing_status }}</span>
+          <span class="badge badge-success">{{ admin_label(row.processing_status) }}</span>
           {% elif row.processing_status == "failed" %}
-          <span class="badge badge-danger">failed</span>
+          <span class="badge badge-danger">{{ admin_label(row.processing_status) }}</span>
           {% elif row.processing_status in ["processing", "parse_empty"] %}
-          <span class="badge badge-warning">{{ row.processing_status }}</span>
+          <span class="badge badge-warning">{{ admin_label(row.processing_status) }}</span>
           {% else %}
-          <span class="badge badge-warning">{{ row.processing_status }}</span>
+          <span class="badge badge-warning">{{ admin_label(row.processing_status) }}</span>
           {% endif %}
         </td>
         <td>
-          <div class="admin-muted">Chunks: {{ row.chunk_count }}</div>
-          <div class="admin-muted">Pages: {{ row.page_count or "-" }}</div>
+          <div class="admin-muted">Bilgi Parçaları: {{ row.chunk_count }}</div>
+          <div class="admin-muted">Sayfalar: {{ row.page_count or "-" }}</div>
           <div class="admin-muted">Cursor: {{ row.cursor_page or 0 }}</div>
           <div class="admin-muted">Last page: {{ row.last_processed_page or 0 }}</div>
           <div class="admin-muted">Blocks: {{ row.block_count or 0 }}</div>
@@ -182,7 +182,7 @@
           {% if row.processing_status in ["uploaded", "pending_processing", "failed", "parse_empty"] %}
           <form method="post" action="/admin/documents/{{ row.document.id }}/process" style="display:inline;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button class="btn-admin btn-admin-primary" type="submit">Process</button>
+            <button class="btn-admin btn-admin-primary" type="submit">İşle</button>
           </form>
           {% elif row.processing_status == "processing" or row.has_more_pages %}
           <form method="post" action="/admin/documents/{{ row.document.id }}/process" style="display:inline;">
@@ -193,12 +193,12 @@
           {% if row.chunk_count > 0 %}
           <form method="post" action="/admin/documents/{{ row.document.id }}/extract-nakshatra" style="display:inline;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button class="btn-admin btn-admin-secondary" type="submit">Extract Nakshatra</button>
+            <button class="btn-admin btn-admin-secondary" type="submit" title="PDF’den yapılandırılmış içerik çıkarır.">İçerik Çıkar</button>
           </form>
           <form method="post" action="/admin/documents/{{ row.document.id }}/process" style="display:inline;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="reprocess" value="1">
-            <button class="btn-admin btn-admin-secondary" type="submit">Reprocess</button>
+            <button class="btn-admin btn-admin-secondary" type="submit">Yeniden İşle</button>
           </form>
           {% endif %}
           <form
@@ -208,10 +208,10 @@
             onsubmit="return confirm(document.documentElement.lang === 'en' ? 'Are you sure you want to delete this document and its generated knowledge chunks?' : 'Bu dokümanı ve ona bağlı oluşturulan bilgi parçalarını silmek istediğinize emin misiniz?');"
           >
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button class="btn-admin btn-admin-danger" type="submit">Sil / Delete</button>
+            <button class="btn-admin btn-admin-danger" type="submit">Sil</button>
           </form>
-          <a href="/admin/knowledge/review" style="margin-left:.6rem;">Review Queue -></a>
-          <a href="/admin/knowledge/coverage" style="margin-left:.6rem;">Coverage -></a>
+          <a href="/admin/knowledge/review" style="margin-left:.6rem;">İnceleme Kuyruğu -></a>
+          <a href="/admin/knowledge/coverage" style="margin-left:.6rem;">Kapsam -></a>
         </td>
       </tr>
       {% else %}

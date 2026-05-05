@@ -62,30 +62,33 @@ class BulkReviewWorkflowTests(unittest.TestCase):
         user = db.query(db_mod.AppUser).filter(db_mod.AppUser.email == "bulk-review-member@example.com").first()
         return user, HTMLResponse("Admin access denied.", status_code=403)
 
-    def _review_item(self, *, title, confidence_level="medium", sensitivity_level="low"):
+    def _review_item(self, *, title, confidence_level="medium", sensitivity_level="low", metadata=None, body_text=None):
         source_document = db_mod.SourceDocument(title="Bulk Review PDF", document_type="book")
         self.db.add(source_document)
         self.db.flush()
+        default_metadata = {
+            "review_required": True,
+            "status": "review_required",
+            "category": "nakshatra",
+            "primary_entity": "ashwini",
+            "source_title": "Bulk Review PDF",
+            "confidence_level": confidence_level,
+            "sensitivity_level": sensitivity_level,
+            "coverage_entities": ["ashwini", "career"],
+            "premium_synthesis_sentence": "A measured synthesis sentence.",
+        }
+        if metadata:
+            default_metadata.update(metadata)
         item = knowledge_service.create_knowledge_item(
             self.db,
             title=title,
-            body_text="Review body text for deterministic testing.",
+            body_text=body_text or "Review body text for deterministic testing.",
             language="tr",
             item_type="nakshatra",
             summary_text="Summary",
             entities=["ashwini", "career"],
             source_document=source_document,
-            metadata={
-                "review_required": True,
-                "status": "review_required",
-                "category": "nakshatra",
-                "primary_entity": "ashwini",
-                "source_title": "Bulk Review PDF",
-                "confidence_level": confidence_level,
-                "sensitivity_level": sensitivity_level,
-                "coverage_entities": ["ashwini", "career"],
-                "premium_synthesis_sentence": "A measured synthesis sentence.",
-            },
+            metadata=default_metadata,
             created_by_user_id=self.admin_id,
             status="review_required",
         )
@@ -202,6 +205,36 @@ class BulkReviewWorkflowTests(unittest.TestCase):
         finally:
             lookup_db.close()
         self.assertEqual(refreshed.status, "review_required")
+
+    def test_auto_approve_safe_filtered_items_skips_sensitive_noisy_toc_and_index(self):
+        safe_id = self._review_item(title="Safe Medium", confidence_level="medium", sensitivity_level="low")
+        toc_id = self._review_item(title="Contents", confidence_level="high", metadata={"is_toc": True})
+        index_id = self._review_item(title="Index", confidence_level="high", metadata={"is_index": True})
+        noisy_id = self._review_item(title="Noisy", confidence_level="high", metadata={"noise_score": 0.9})
+        unknown_short_id = self._review_item(title="Ashwini - Unknown", confidence_level="high", body_text="short body")
+        sensitive_id = self._review_item(title="Sensitive", confidence_level="high", sensitivity_level="sensitive")
+        csrf = self._csrf()
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            response = self.client.post(
+                "/admin/knowledge/review/auto-approve",
+                data={"csrf_token": csrf, "status": "review_required", "page_size": "100"},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
+        lookup_db = db_mod.SessionLocal()
+        try:
+            statuses = {
+                item_id: lookup_db.query(db_mod.KnowledgeItem).filter_by(id=item_id).first().status
+                for item_id in [safe_id, toc_id, index_id, noisy_id, unknown_short_id, sensitive_id]
+            }
+        finally:
+            lookup_db.close()
+        self.assertEqual(statuses[safe_id], "published")
+        self.assertEqual(statuses[toc_id], "review_required")
+        self.assertEqual(statuses[index_id], "review_required")
+        self.assertEqual(statuses[noisy_id], "review_required")
+        self.assertEqual(statuses[unknown_short_id], "review_required")
+        self.assertEqual(statuses[sensitive_id], "review_required")
 
     def test_non_admin_access_blocked(self):
         item_id = self._review_item(title="Blocked Item")

@@ -7035,6 +7035,35 @@ def _json_loads_safe(value, default):
 templates.env.globals["json_loads_safe"] = _json_loads_safe
 
 
+ADMIN_LABELS_TR = {
+    "uploaded": "Yüklendi",
+    "processing": "İşleniyor",
+    "completed": "Tamamlandı",
+    "processed": "Tamamlandı",
+    "failed": "Başarısız",
+    "parse_empty": "Metin Bulunamadı",
+    "published": "Yayında",
+    "active": "Aktif",
+    "pending": "Bekliyor",
+    "inactive": "Pasif",
+    "rejected": "Reddedildi",
+    "review_required": "İnceleme Bekliyor",
+    "low": "Düşük",
+    "medium": "Orta",
+    "high": "Yüksek",
+    "sensitive": "Hassas",
+    "critical": "Kritik",
+}
+
+
+def _admin_label(value):
+    cleaned = str(value or "").strip()
+    return ADMIN_LABELS_TR.get(cleaned.lower(), cleaned or "-")
+
+
+templates.env.globals["admin_label"] = _admin_label
+
+
 def _ai_quality_context(request, **extra):
     active_page = extra.pop("active_page", "training_dashboard")
     return _auth_template_context(
@@ -7114,29 +7143,232 @@ def _knowledge_review_rows(items):
                 "source_title": metadata.get("source_title") or (item.source_document.title if item.source_document else "-"),
                 "confidence_level": metadata.get("confidence_level") or "-",
                 "sensitivity_level": metadata.get("sensitivity_level") or "-",
+                "status": item.status or metadata.get("status") or "-",
                 "created_at": item.created_at,
             }
         )
     return rows
 
 
-def _review_required_items(db, *, limit=None, offset=0):
-    query = (
-        db.query(db_mod.KnowledgeItem)
-        .filter(db_mod.KnowledgeItem.status == "review_required")
-        .order_by(db_mod.KnowledgeItem.created_at.desc())
+def _sensitivity_sort_key(value: str) -> int:
+    return {"low": 0, "medium": 1, "high": 2, "critical": 3}.get(
+        str(value or "").lower(), -1
     )
+
+
+def _confidence_sort_key(value: str) -> int:
+    return {"low": 0, "medium": 1, "high": 2}.get(
+        str(value or "").lower(), -1
+    )
+
+
+TITLE_NOISE_VALUES = {"unknown", "untitled", "", "-", "none", "null"}
+TITLE_SUBTOPIC_KEYWORDS = [
+    ("pada", "Pada Notes"),
+    ("career", "Career Pattern"),
+    ("relationship", "Relationship Pattern"),
+    ("psychology", "Psychology Pattern"),
+    ("spiritual", "Spiritual Pattern"),
+    ("risk", "Risk Pattern"),
+    ("symbolism", "Symbolism"),
+    ("deity", "Deity Notes"),
+    ("ruler", "Ruler Notes"),
+    ("guna", "Guna Notes"),
+    ("motivation", "Motivation Notes"),
+    ("behavior", "Behavioral Pattern"),
+    ("behaviour", "Behavioral Pattern"),
+]
+
+
+def _title_text_is_noise(value: str) -> bool:
+    cleaned = str(value or "").strip().lower()
+    return cleaned in TITLE_NOISE_VALUES
+
+
+def _title_contains_unknown(value: str) -> bool:
+    return "unknown" in str(value or "").strip().lower()
+
+
+def _title_display_part(value: str) -> str:
+    cleaned = str(value or "").replace("_", " ").strip()
+    if not cleaned:
+        return ""
+    return " ".join(part[:1].upper() + part[1:] for part in cleaned.split())
+
+
+def _coerce_page_number(value):
+    if value in (None, ""):
+        return None
+    try:
+        page = int(value)
+    except (TypeError, ValueError):
+        return None
+    return page if page > 0 else None
+
+
+def _title_subtopic_from_context(metadata=None, body_text: str = "", category: str = "") -> str:
+    metadata = metadata or {}
+    for key in ("subtopic", "topic", "section_type", "heading_type", "label"):
+        value = str(metadata.get(key) or "").strip()
+        if value and not _title_text_is_noise(value):
+            return _title_display_part(value)
+    haystack = " ".join(
+        [
+            str(metadata.get("title") or ""),
+            str(metadata.get("topic") or ""),
+            str(metadata.get("category") or category or ""),
+            str(body_text or "")[:500],
+        ]
+    ).lower()
+    for keyword, label in TITLE_SUBTOPIC_KEYWORDS:
+        if keyword in haystack:
+            return label
+    normalized_category = str(metadata.get("category") or category or "").strip().lower()
+    if normalized_category == "nakshatra":
+        return "Nakshatra Knowledge"
+    if normalized_category:
+        return f"{_title_display_part(normalized_category)} Knowledge"
+    return ""
+
+
+def _clean_extracted_title(
+    raw_title: str,
+    entity_name: str = "",
+    source_title: str = "",
+    page_number: int | None = None,
+    metadata: dict | None = None,
+    body_text: str = "",
+    category: str = "",
+) -> str:
+    """
+    Return a meaningful title for extracted knowledge chunks.
+    If raw_title is empty or noisy, build a fallback from available context.
+    """
+    metadata = metadata or {}
+    cleaned = str(raw_title or "").strip()
+    unknown_suffix = bool(re.search(r"\s*[-–—]\s*[Uu]nknown\s*$", cleaned))
+    if unknown_suffix:
+        cleaned = re.sub(r"\s*[-–—]\s*[Uu]nknown\s*$", "", cleaned).strip()
+
+    if cleaned and not _title_text_is_noise(cleaned) and not unknown_suffix:
+        return cleaned
+
+    parts = []
+    if cleaned and not _title_text_is_noise(cleaned):
+        parts.append(_title_display_part(cleaned))
+    else:
+        metadata_title = str(metadata.get("title") or metadata.get("section_heading") or "").strip()
+        if metadata_title and not _title_text_is_noise(metadata_title) and not _title_contains_unknown(metadata_title):
+            parts.append(_title_display_part(metadata_title))
+        elif entity_name and not _title_text_is_noise(entity_name):
+            parts.append(_title_display_part(entity_name))
+
+    subtopic = _title_subtopic_from_context(metadata, body_text=body_text, category=category)
+    if subtopic and subtopic not in parts:
+        parts.append(subtopic)
+
+    page = _coerce_page_number(page_number or metadata.get("source_page_start") or metadata.get("page"))
+    if page:
+        if not parts and source_title and not _title_text_is_noise(source_title):
+            parts.append(str(source_title).strip())
+        parts.append(f"p.{page}")
+    elif source_title and not _title_text_is_noise(source_title):
+        parts.append(str(source_title).strip())
+
+    return " — ".join(parts) if parts else "Bölüm"
+
+
+def _repair_knowledge_item_title(item):
+    metadata = _knowledge_item_metadata(item)
+    coverage_entities = _knowledge_item_coverage_entities(item, metadata)
+    entities = _json_loads_safe(getattr(item, "entities_json", None), []) or []
+    entity_name = (
+        metadata.get("primary_entity")
+        or (coverage_entities[0] if coverage_entities else "")
+        or (entities[0] if entities else "")
+    )
+    source_title = metadata.get("source_title") or (item.source_document.title if item.source_document else "")
+    page_number = metadata.get("source_page_start") or metadata.get("page") or metadata.get("page_number")
+    repaired = _clean_extracted_title(
+        item.title,
+        entity_name=entity_name,
+        source_title=source_title,
+        page_number=page_number,
+        metadata=metadata,
+        body_text=item.body_text,
+        category=metadata.get("category") or item.item_type,
+    )
+    if repaired == item.title and _title_contains_unknown(item.title):
+        repaired = _clean_extracted_title(
+            "",
+            entity_name=entity_name,
+            source_title=source_title,
+            page_number=page_number,
+            metadata=metadata,
+            body_text=item.body_text,
+            category=metadata.get("category") or item.item_type,
+        )
+    return repaired
+
+
+def _review_status_value(value: str) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"", "pending"}:
+        return "review_required"
+    return normalized
+
+
+def _review_items_query(
+    db,
+    *,
+    status: str = "review_required",
+    sensitivity: str = "",
+    category: str = "",
+    source_document_id=None,
+    q: str = "",
+):
+    query = db.query(db_mod.KnowledgeItem).outerjoin(db_mod.SourceDocument)
+    normalized_status = _review_status_value(status)
+    if normalized_status and normalized_status != "all":
+        query = query.filter(db_mod.KnowledgeItem.status == normalized_status)
+    if source_document_id:
+        try:
+            query = query.filter(db_mod.KnowledgeItem.source_document_id == int(source_document_id))
+        except (TypeError, ValueError):
+            pass
+    if str(q or "").strip():
+        like = f"%{str(q).strip()}%"
+        query = query.filter(
+            or_(
+                db_mod.KnowledgeItem.title.ilike(like),
+                db_mod.KnowledgeItem.body_text.ilike(like),
+                db_mod.KnowledgeItem.summary_text.ilike(like),
+                db_mod.KnowledgeItem.metadata_json.ilike(like),
+                db_mod.SourceDocument.title.ilike(like),
+            )
+        )
+    if str(category or "").strip():
+        category_value = str(category).strip()
+        category_like = f"%{category_value}%"
+        query = query.filter(
+            or_(
+                db_mod.KnowledgeItem.item_type == category_value,
+                db_mod.KnowledgeItem.metadata_json.ilike(category_like),
+            )
+        )
+    if str(sensitivity or "").strip():
+        sensitivity_value = str(sensitivity).strip().lower()
+        query = query.filter(db_mod.KnowledgeItem.metadata_json.ilike(f"%{sensitivity_value}%"))
+    return query
+
+
+def _review_required_items(db, *, limit=None, offset=0):
+    query = _review_items_query(db, status="review_required").order_by(db_mod.KnowledgeItem.created_at.desc())
     if offset:
         query = query.offset(max(0, int(offset)))
     if limit:
         query = query.limit(max(1, int(limit)))
-    items = query.all()
-    results = []
-    for item in items:
-        metadata = _knowledge_item_metadata(item)
-        if str(item.status or "").strip().lower() == "review_required" or bool(metadata.get("review_required")):
-            results.append(item)
-    return results
+    return query.all()
 
 
 def _knowledge_item_coverage_entities(item, metadata):
@@ -7168,11 +7400,26 @@ def _apply_knowledge_review_status(db, item, status):
 def _is_auto_approve_blocked(item, metadata):
     title = str(getattr(item, "title", "") or "").strip().lower()
     noise_score = float(metadata.get("noise_score") or 0)
+    confidence_level = str(metadata.get("confidence_level") or "").strip().lower()
+    sensitivity_level = str(metadata.get("sensitivity_level") or "").strip().lower()
+    status = str(getattr(item, "status", "") or metadata.get("status") or "").strip().lower()
+    review_required = bool(metadata.get("review_required")) or status in {"review_required", "active", "pending"}
+    meaningful_body = len(str(getattr(item, "body_text", "") or "").strip()) >= 180
+    if not review_required:
+        return True
+    if status not in {"review_required", "active", "pending"}:
+        return True
+    if sensitivity_level == "sensitive":
+        return True
+    if confidence_level not in {"high", "medium"}:
+        return True
     if metadata.get("is_toc") is True:
         return True
     if metadata.get("is_index") is True:
         return True
     if noise_score >= 0.7:
+        return True
+    if _title_contains_unknown(title) and not meaningful_body:
         return True
     if any(marker in title for marker in ("contents", "bölümler", "bolumler", "index")):
         return True
@@ -12949,17 +13196,78 @@ async def admin_knowledge_review_list(
     notice: str = "",
     page: int = 1,
     page_size: int | None = None,
+    sort: str = "created_at",
+    direction: str = "",
+    order: str = "desc",
+    status: str = "review_required",
+    sensitivity: str = "",
+    category: str = "",
+    source_document_id: int | None = None,
+    q: str = "",
 ):
     page, limit, offset = _admin_page_params(page, page_size)
-    items = _review_required_items(db, limit=limit, offset=offset)
+    valid_direction = "asc" if str(direction or order or "desc").lower() == "asc" else "desc"
+    query = _review_items_query(
+        db,
+        status=status,
+        sensitivity=sensitivity,
+        category=category,
+        source_document_id=source_document_id,
+        q=q,
+    )
+    normalized_sort = str(sort or "created_at").strip().lower()
+    sort_column_map = {
+        "created_at": db_mod.KnowledgeItem.created_at,
+        "title": db_mod.KnowledgeItem.title,
+        "status": db_mod.KnowledgeItem.status,
+    }
+    if normalized_sort in sort_column_map:
+        column = sort_column_map[normalized_sort]
+        query = query.order_by(column.asc() if valid_direction == "asc" else column.desc())
+    else:
+        query = query.order_by(db_mod.KnowledgeItem.created_at.desc())
+    items = query.offset(offset).limit(limit).all()
+    sort_key_map = {
+        "created_at": lambda row: row["created_at"] or datetime.min,
+        "title": lambda row: str(row["title"] or "").lower(),
+        "category": lambda row: str(row["category"] or "").lower(),
+        "sensitivity": lambda row: _sensitivity_sort_key(row["sensitivity_level"]),
+        "sensitivity_level": lambda row: _sensitivity_sort_key(row["sensitivity_level"]),
+        "confidence": lambda row: _confidence_sort_key(row["confidence_level"]),
+        "confidence_level": lambda row: _confidence_sort_key(row["confidence_level"]),
+        "status": lambda row: str(row["status"] or "").lower(),
+    }
+    valid_sort = normalized_sort if normalized_sort in sort_key_map else "created_at"
+    sorted_rows = sorted(
+        _knowledge_review_rows(items),
+        key=sort_key_map[valid_sort],
+        reverse=(valid_direction == "desc"),
+    )
+    source_documents = (
+        db.query(db_mod.SourceDocument)
+        .order_by(db_mod.SourceDocument.updated_at.desc())
+        .limit(MAX_ADMIN_PAGE_SIZE)
+        .all()
+    )
     return templates.TemplateResponse(
         request=request,
         name="admin/knowledge_review.html",
         context=_ai_quality_context(
             request,
             active_page="knowledge_library",
-            items=_knowledge_review_rows(items),
+            items=sorted_rows,
             notice=notice,
+            sort=valid_sort,
+            direction=valid_direction,
+            order=valid_direction,
+            filters={
+                "q": q,
+                "status": _review_status_value(status),
+                "sensitivity": sensitivity,
+                "category": category,
+                "source_document_id": source_document_id or "",
+            },
+            source_documents=source_documents,
             pagination={"page": page, "page_size": limit},
         ),
     )
@@ -12983,7 +13291,7 @@ async def admin_knowledge_review_bulk_approve(
             _apply_knowledge_review_status(db, item, "published")
             approved_count += 1
     db.commit()
-    return RedirectResponse(url=f"/admin/knowledge/review?notice={approved_count}+items+approved", status_code=303)
+    return RedirectResponse(url=f"/admin/knowledge/review?notice={approved_count}+içerik+onaylandı", status_code=303)
 
 
 @app.post("/admin/knowledge/review/bulk-reject")
@@ -13004,7 +13312,7 @@ async def admin_knowledge_review_bulk_reject(
             _apply_knowledge_review_status(db, item, "rejected")
             rejected_count += 1
     db.commit()
-    return RedirectResponse(url=f"/admin/knowledge/review?notice={rejected_count}+items+rejected", status_code=303)
+    return RedirectResponse(url=f"/admin/knowledge/review?notice={rejected_count}+içerik+reddedildi", status_code=303)
 
 
 @app.post("/admin/knowledge/review/auto-approve")
@@ -13015,21 +13323,25 @@ async def admin_knowledge_review_auto_approve(
     csrf_token: str = Form(default=""),
 ):
     await validate_csrf_token(request, csrf_token)
+    form = await request.form()
+    page, limit, offset = _admin_page_params(form.get("page") or 1, form.get("page_size") or None)
+    query = _review_items_query(
+        db,
+        status=form.get("status") or "review_required",
+        sensitivity=form.get("sensitivity") or "",
+        category=form.get("category") or "",
+        source_document_id=form.get("source_document_id") or None,
+        q=form.get("q") or "",
+    ).order_by(db_mod.KnowledgeItem.created_at.desc())
     approved_count = 0
-    for item in _review_required_items(db, limit=MAX_ADMIN_PAGE_SIZE):
+    for item in query.offset(offset).limit(limit).all():
         metadata = _knowledge_item_metadata(item)
-        confidence_level = str(metadata.get("confidence_level") or "").strip().lower()
-        sensitivity_level = str(metadata.get("sensitivity_level") or "").strip().lower()
-        if confidence_level != "high":
-            continue
-        if sensitivity_level == "sensitive":
-            continue
         if _is_auto_approve_blocked(item, metadata):
             continue
         _apply_knowledge_review_status(db, item, "published")
         approved_count += 1
     db.commit()
-    return RedirectResponse(url=f"/admin/knowledge/review?notice={approved_count}+items+auto-approved", status_code=303)
+    return RedirectResponse(url=f"/admin/knowledge/review?notice={approved_count}+içerik+otomatik+onaylandı", status_code=303)
 
 
 @app.get("/admin/knowledge/review/{knowledge_id}", response_class=HTMLResponse)
@@ -13143,6 +13455,48 @@ async def admin_knowledge_review_reject(
     _apply_knowledge_review_status(db, item, "rejected")
     db.commit()
     return RedirectResponse(url="/admin/knowledge/review?notice=rejected", status_code=303)
+
+
+@app.post("/admin/knowledge/repair-titles")
+@admin_required
+async def admin_knowledge_repair_titles(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(default=""),
+    dry_run: bool = False,
+):
+    await validate_csrf_token(request, csrf_token)
+    query = (
+        db.query(db_mod.KnowledgeItem)
+        .filter(db_mod.KnowledgeItem.title.ilike("%unknown%"))
+        .order_by(db_mod.KnowledgeItem.updated_at.desc())
+        .limit(max(MAX_ADMIN_PAGE_SIZE, 100))
+    )
+    candidates = query.all()
+    repaired = []
+    for item in candidates:
+        new_title = _repair_knowledge_item_title(item)
+        if not new_title or new_title == item.title or _title_contains_unknown(new_title):
+            continue
+        repaired.append({"id": item.id, "old_title": item.title, "new_title": new_title})
+        if not dry_run:
+            metadata = _knowledge_item_metadata(item)
+            metadata["title_repaired_from"] = item.title
+            metadata["title_repaired_at"] = datetime.utcnow().isoformat()
+            knowledge_service.update_knowledge_item(
+                db,
+                item,
+                title=new_title,
+                body_text=item.body_text,
+                summary_text=item.summary_text,
+                entities=_knowledge_item_coverage_entities(item, metadata),
+                metadata=metadata,
+                status=item.status,
+            )
+    if dry_run:
+        return JSONResponse({"ok": True, "repairable_count": len(repaired), "items": repaired})
+    db.commit()
+    return RedirectResponse(url=f"/admin/knowledge/review?notice={len(repaired)}+başlık+düzeltildi", status_code=303)
 
 
 @app.get("/admin/knowledge", response_class=HTMLResponse)
@@ -13411,8 +13765,23 @@ def _delete_source_document(db, document):
 
 
 def _create_document_chunk_item(db, document, chunk, *, index, admin_user):
-    chunk_title = str(chunk.get("title") or f"{document.title} {index}").strip()
     coverage_entities = chunk.get("coverage_entities") or []
+    page_number = chunk.get("source_page_start") or chunk.get("page")
+    entity_name = chunk.get("entity") or chunk.get("primary_entity") or (coverage_entities[0] if coverage_entities else "")
+    title_metadata = {
+        "category": chunk.get("category"),
+        "topic": chunk.get("topic"),
+        "source_page_start": page_number,
+    }
+    chunk_title = _clean_extracted_title(
+        chunk.get("title"),
+        entity_name=entity_name,
+        source_title=document.title,
+        page_number=page_number,
+        metadata=title_metadata,
+        body_text=str(chunk.get("text") or ""),
+        category=chunk.get("category") or "reference",
+    )
     return knowledge_service.create_knowledge_item(
         db,
         title=chunk_title,
@@ -13980,9 +14349,19 @@ async def admin_document_extract_nakshatra(
     for section in extracted.get("sections") or []:
         for chunk in section.get("suggested_chunks") or []:
             coverage_entities = [entity for entity in (chunk.get("coverage_entities") or []) if str(entity or "").strip()]
+            page_number = chunk.get("source_page_start") or chunk.get("page")
+            entity_name = chunk.get("primary_entity") or chunk.get("entity") or (coverage_entities[0] if coverage_entities else "")
             knowledge_service.create_knowledge_item(
                 db,
-                title=chunk.get("title") or "Nakshatra review chunk",
+                title=_clean_extracted_title(
+                    chunk.get("title"),
+                    entity_name=entity_name,
+                    source_title=document.title,
+                    page_number=page_number,
+                    metadata=chunk,
+                    body_text=chunk.get("classical_view") or "",
+                    category="nakshatra",
+                ),
                 body_text=chunk.get("classical_view") or "",
                 language="tr",
                 item_type="nakshatra",

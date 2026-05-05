@@ -1,5 +1,5 @@
 {% extends "admin/base_admin.html" %}
-{% block admin_title %}AI Astrologer Training{% endblock %}
+{% block admin_title %}AI Astroloji Eğitimi{% endblock %}
 {% block admin_content %}
 <style>
   .entity-pill {
@@ -38,12 +38,12 @@
 
 <section class="admin-page-header">
   <div>
-    <h1 class="admin-page-title">AI Astrologer Training</h1>
+    <h1 class="admin-page-title">AI Astroloji Eğitimi</h1>
     <p class="admin-page-sub">AI'ın neyi bildiğini görün, eksikleri kapatın, kaliteyi ölçün.</p>
   </div>
   <div class="admin-page-actions">
     <a class="btn-admin btn-admin-secondary" href="/admin/documents">PDF Yükle</a>
-    <a class="btn-admin btn-admin-primary" href="/admin/knowledge/coverage">Coverage Haritası</a>
+    <a class="btn-admin btn-admin-primary" href="/admin/knowledge/coverage">Kapsam Haritası</a>
   </div>
 </section>
 
@@ -57,7 +57,7 @@
     <div class="admin-stat-value">{{ stats.total_items }}</div>
   </div>
   <div class="admin-stat {% if stats.coverage_pct < 40 %}finance-kpi-danger{% elif stats.coverage_pct < 70 %}finance-kpi-warning{% endif %}">
-    <div class="admin-stat-label">Coverage</div>
+    <div class="admin-stat-label">Kapsam</div>
     <div class="admin-stat-value">{{ stats.coverage_pct }}%</div>
   </div>
   <div class="admin-stat {% if stats.open_gaps > 0 %}finance-kpi-danger{% endif %}">
@@ -65,7 +65,7 @@
     <div class="admin-stat-value">{{ stats.open_gaps }}</div>
   </div>
   <div class="admin-stat {% if stats.review_pending > 0 %}finance-kpi-warning{% endif %}">
-    <div class="admin-stat-label">Review Bekleyen</div>
+    <div class="admin-stat-label">İnceleme Bekleyen</div>
     <div class="admin-stat-value">{{ stats.review_pending }}</div>
   </div>
   <div class="admin-stat {% if stats.failed_documents > 0 %}finance-kpi-warning{% endif %}">
@@ -133,14 +133,14 @@
 <section class="admin-card">
   <div class="admin-page-header" style="padding:0;">
     <div>
-      <h2 class="admin-card-title">Coverage Özeti</h2>
+      <h2 class="admin-card-title">Kapsam Özeti</h2>
     </div>
     <a class="btn-admin btn-admin-secondary" href="/admin/knowledge/coverage">Detaylı harita →</a>
   </div>
   {% if not coverage.is_cached %}
-  <div class="admin-muted">Coverage not calculated yet. Detay sayfasından Refresh Knowledge Coverage ile hesaplayabilirsiniz.</div>
+  <div class="admin-muted">Kapsam henüz hesaplanmadı. Detay sayfasından kapsamı yenileyebilirsiniz.</div>
   {% elif coverage.last_updated %}
-  <div class="admin-muted">Cached summary: {{ coverage.last_updated }}</div>
+  <div class="admin-muted">Önbellek özeti: {{ coverage.last_updated }}</div>
   {% endif %}
   {% for category_name, entities in coverage.by_category.items() %}
   {% set ns = namespace(total=0, count=0) %}

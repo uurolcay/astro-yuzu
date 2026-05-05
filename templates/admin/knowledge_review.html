@@ -1,22 +1,103 @@
 {% extends "admin/base_admin.html" %}
-{% block admin_title %}Knowledge Review{% endblock %}
+{% block admin_title %}İçerik İnceleme{% endblock %}
 {% block admin_content %}
+{% macro sort_link(field, label) %}
+{% set next_direction = "asc" if (sort == field and direction == "desc") else "desc" %}
+<a href="/admin/knowledge/review?sort={{ field }}&direction={{ next_direction }}&page=1&page_size={{ pagination.page_size }}&status={{ filters.status|urlencode }}&sensitivity={{ filters.sensitivity|urlencode }}&category={{ filters.category|urlencode }}&source_document_id={{ filters.source_document_id }}&q={{ filters.q|urlencode }}"
+   style="color:inherit;text-decoration:none;display:flex;align-items:center;gap:4px;">
+  {{ label }}
+  {% if sort == field %}
+    <span>{{ "↓" if direction == "desc" else "↑" }}</span>
+  {% else %}
+    <span style="opacity:0.3">↕</span>
+  {% endif %}
+</a>
+{% endmacro %}
+
 <section class="admin-page-header">
   <div>
-    <h1 class="admin-page-title">Knowledge Review</h1>
-    <p class="admin-page-sub">Review-required bilgi parçalarını düzenleyin, onaylayın veya reddedin.</p>
+    <h1 class="admin-page-title">İçerik İnceleme</h1>
+    <p class="admin-page-sub">Bekleyen bilgi parçalarını filtreleyin, sıralayın, düzenleyin ve güvenli olanları toplu işleyin.</p>
+  </div>
+  <div class="admin-page-actions">
+    <form method="post" action="/admin/knowledge/repair-titles">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn-admin btn-admin-secondary" type="submit">Unknown Başlıkları Düzelt</button>
+    </form>
   </div>
 </section>
 
 {% if notice %}<div class="admin-alert admin-alert-success">{{ notice }}</div>{% endif %}
 
 <section class="admin-card" style="margin-bottom:16px;">
+  <form class="admin-form" method="get" action="/admin/knowledge/review">
+    <input type="hidden" name="sort" value="{{ sort }}">
+    <input type="hidden" name="direction" value="{{ direction }}">
+    <div class="admin-grid-2">
+      <div class="admin-field">
+        <label for="review-q">Arama</label>
+        <input id="review-q" type="search" name="q" value="{{ filters.q }}" placeholder="başlık, içerik veya kaynak ara">
+      </div>
+      <div class="admin-field">
+        <label for="review-status">Durum</label>
+        <select id="review-status" name="status">
+          {% for value, label in [("review_required", "İnceleme Bekliyor"), ("active", "Aktif"), ("published", "Yayında"), ("rejected", "Reddedildi"), ("all", "Tümü")] %}
+          <option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="admin-field">
+        <label for="review-sensitivity">Hassasiyet</label>
+        <select id="review-sensitivity" name="sensitivity">
+          <option value="" {% if not filters.sensitivity %}selected{% endif %}>Tümü</option>
+          {% for value in ["low", "medium", "high", "sensitive"] %}
+          <option value="{{ value }}" {% if filters.sensitivity == value %}selected{% endif %}>{{ admin_label(value) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="admin-field">
+        <label for="review-category">Kategori</label>
+        <input id="review-category" type="text" name="category" value="{{ filters.category }}" placeholder="nakshatra, yoga, dasha...">
+      </div>
+      <div class="admin-field">
+        <label for="review-source">Kaynak</label>
+        <select id="review-source" name="source_document_id">
+          <option value="" {% if not filters.source_document_id %}selected{% endif %}>Tüm kaynaklar</option>
+          {% for document in source_documents %}
+          <option value="{{ document.id }}" {% if filters.source_document_id|string == document.id|string %}selected{% endif %}>{{ document.title }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="admin-field">
+        <label for="review-page-size">Sayfa boyutu</label>
+        <select id="review-page-size" name="page_size">
+          {% for value in [30, 50, 100] %}
+          <option value="{{ value }}" {% if pagination.page_size == value %}selected{% endif %}>{{ value }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="admin-page-actions">
+      <button class="btn-admin btn-admin-primary" type="submit">Filtrele</button>
+      <a class="btn-admin btn-admin-secondary" href="/admin/knowledge/review">Sıfırla</a>
+    </div>
+  </form>
+</section>
+
+<section class="admin-card" style="margin-bottom:16px;">
   <form method="post" action="/admin/knowledge/review/bulk-approve">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="page" value="{{ pagination.page }}">
+    <input type="hidden" name="page_size" value="{{ pagination.page_size }}">
+    <input type="hidden" name="status" value="{{ filters.status }}">
+    <input type="hidden" name="sensitivity" value="{{ filters.sensitivity }}">
+    <input type="hidden" name="category" value="{{ filters.category }}">
+    <input type="hidden" name="source_document_id" value="{{ filters.source_document_id }}">
+    <input type="hidden" name="q" value="{{ filters.q }}">
     <div class="admin-page-actions">
-      <button class="btn-admin btn-admin-primary" type="submit">Bulk Approve Selected</button>
-      <button class="btn-admin btn-admin-secondary" type="submit" formaction="/admin/knowledge/review/bulk-reject">Bulk Reject Selected</button>
-      <button class="btn-admin btn-admin-secondary" type="submit" formaction="/admin/knowledge/review/auto-approve">Auto Approve Safe Items</button>
+      <button class="btn-admin btn-admin-primary" type="submit">Seçilenleri Onayla</button>
+      <button class="btn-admin btn-admin-secondary" type="submit" formaction="/admin/knowledge/review/bulk-reject">Seçilenleri Reddet</button>
+      <button class="btn-admin btn-admin-secondary" type="submit" formaction="/admin/knowledge/review/auto-approve">Güvenli Görünenleri Onayla</button>
     </div>
 
     <section class="admin-table-wrap" style="margin-top:12px;">
@@ -26,36 +107,34 @@
       <table class="admin-table">
         <thead>
           <tr>
-            <th style="width:40px;">
-              <input type="checkbox" id="select-all-knowledge-review">
-            </th>
-            <th>Title</th>
-            <th>Category</th>
-            <th>Primary Entity</th>
-            <th>Source Title</th>
-            <th>Confidence</th>
-            <th>Sensitivity</th>
-            <th>Created</th>
-            <th></th>
+            <th style="width:40px;"><input type="checkbox" id="select-all-knowledge-review"></th>
+            <th>{{ sort_link("title", "Başlık") }}</th>
+            <th>{{ sort_link("category", "Kategori") }}</th>
+            <th>Ana Varlık</th>
+            <th>Kaynak</th>
+            <th>{{ sort_link("confidence", "Güven") }}</th>
+            <th>{{ sort_link("sensitivity", "Hassasiyet") }}</th>
+            <th>{{ sort_link("status", "Durum") }}</th>
+            <th>{{ sort_link("created_at", "Oluşturulma") }}</th>
+            <th>İşlemler</th>
           </tr>
         </thead>
         <tbody>
           {% for row in items %}
           <tr>
-            <td>
-              <input type="checkbox" name="knowledge_ids" value="{{ row.item.id }}" class="knowledge-review-checkbox">
-            </td>
+            <td><input type="checkbox" name="knowledge_ids" value="{{ row.item.id }}" class="knowledge-review-checkbox"></td>
             <td>{{ row.title }}</td>
             <td>{{ row.category }}</td>
             <td>{{ row.primary_entity }}</td>
             <td>{{ row.source_title }}</td>
-            <td>{{ row.confidence_level }}</td>
-            <td>{{ row.sensitivity_level }}</td>
+            <td>{{ admin_label(row.confidence_level) }}</td>
+            <td>{{ admin_label(row.sensitivity_level) }}</td>
+            <td><span class="badge badge-warning">{{ admin_label(row.status) }}</span></td>
             <td>{{ row.created_at.strftime("%Y-%m-%d %H:%M") if row.created_at else "-" }}</td>
             <td><a href="/admin/knowledge/review/{{ row.item.id }}">İncele →</a></td>
           </tr>
           {% else %}
-          <tr><td colspan="9" class="admin-muted">Review bekleyen knowledge item yok.</td></tr>
+          <tr><td colspan="10" class="admin-muted">İnceleme bekleyen bilgi parçası yok.</td></tr>
           {% endfor %}
         </tbody>
       </table>

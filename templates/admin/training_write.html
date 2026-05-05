@@ -7,7 +7,7 @@
     <p class="admin-page-sub">Nakshatra, yoga, dasha veya kavram hakkında içerik ekle</p>
   </div>
   <div class="admin-page-actions">
-    <a class="btn-admin btn-admin-secondary" href="/admin/training">← Training Hub</a>
+    <a class="btn-admin btn-admin-secondary" href="/admin/training">← Eğitim Merkezi</a>
   </div>
 </section>
 
@@ -27,11 +27,11 @@
     <form class="admin-form" method="post" action="/admin/knowledge">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <div class="admin-field">
-        <label for="title">Title</label>
+        <label for="title">Başlık</label>
         <input id="title" type="text" name="title" required placeholder="örn: Saturn in Dhanishta — Disiplin ve Zamanlama">
       </div>
       <div class="admin-field">
-        <label for="item_type">Item Type</label>
+        <label for="item_type">İçerik Türü</label>
         <select id="item_type" name="item_type">
           {% for option in item_type_options %}
           <option value="{{ option }}" {% if option == prefill_item_type %}selected{% endif %}>{{ option }}</option>
@@ -39,23 +39,23 @@
         </select>
       </div>
       <div class="admin-field">
-        <label for="entities">Entities</label>
+        <label for="entities">Entity'ler</label>
         <input id="entities" type="text" name="entities" required value="{{ prefill_entity if prefill_entity else '' }}" placeholder="saturn, dhanishta, nakshatra, discipline">
         <div class="admin-muted">Coverage haritasında bu içerik bu entity'ler altında görünür.</div>
       </div>
       <div class="admin-field">
-        <label for="language">Language</label>
+        <label for="language">Dil</label>
         <select id="language" name="language">
           <option value="tr" selected>TR</option>
           <option value="en">EN</option>
         </select>
       </div>
       <div class="admin-field">
-        <label for="summary_text">Summary</label>
+        <label for="summary_text">Özet</label>
         <input id="summary_text" type="text" name="summary_text" placeholder="1 cümle özet">
       </div>
       <div class="admin-field">
-        <label for="body_text">Body</label>
+        <label for="body_text">İçerik</label>
         <textarea id="body_text" name="body_text" rows="12" required placeholder="Bu nakshatra/yoga/dasha için yorum içeriği..."></textarea>
         <div class="admin-muted">Minimum 100 karakter önerilir. AI bu içeriği retrieval sırasında kullanır.</div>
       </div>

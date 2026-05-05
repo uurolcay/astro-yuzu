@@ -486,11 +486,19 @@ class DocumentIngestionTests(unittest.TestCase):
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
             page = self.client.get("/admin/documents")
         self.assertEqual(page.status_code, 200)
-        self.assertIn("uploaded", page.text)
-        self.assertIn("Process", page.text)
-        self.assertIn("Sil / Delete", page.text)
+        self.assertIn("Yüklendi", page.text)
+        self.assertIn("İşle", page.text)
+        self.assertIn("Sil", page.text)
         self.assertIn("/delete", page.text)
         self.assertIn("/process", page.text)
+
+    def test_documents_page_extract_button_uses_polished_label(self):
+        self._document_with_related_knowledge(title="Extractable PDF", status="completed")
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            page = self.client.get("/admin/documents")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("İçerik Çıkar", page.text)
+        self.assertIn("PDF’den yapılandırılmış içerik çıkarır.", page.text)
 
     def test_failed_document_can_be_deleted_from_admin_route(self):
         csrf = self._csrf()
