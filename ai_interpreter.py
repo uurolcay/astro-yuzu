@@ -8,8 +8,8 @@ from agent_pipeline import (
     AIServiceError,
     AgentResult,
     build_structured_payload,
-    generate_interpretation,
-    run_agent_pipeline,
+    generate_interpretation as _pipeline_generate_interpretation,
+    run_agent_pipeline as _pipeline_run_agent_pipeline,
 )
 
 
@@ -28,7 +28,27 @@ def _augment_payload_with_knowledge(payload, db=None):
         payload["knowledge_context"] = knowledge_context
         chunk_ids = [cid for cid in (knowledge_context.get("chunk_ids") or []) if cid is not None]
         payload["_used_chunk_ids"] = chunk_ids
+        payload["_knowledge_trace"] = {
+            "used_chunk_ids": chunk_ids,
+            "matched_entities": knowledge_context.get("matched_entities") or [],
+            "missing_entities": knowledge_context.get("missing_entities") or [],
+            "retrieval_queries": knowledge_context.get("retrieval_queries") or [],
+            "missing_queries": knowledge_context.get("missing_queries") or [],
+            "source_documents_used": knowledge_context.get("source_documents_used") or [],
+            "source_coverage_score": knowledge_context.get("source_coverage_score"),
+            "no_source_available": knowledge_context.get("no_source_available"),
+        }
     return payload
+
+
+def run_agent_pipeline(data: dict | None = None, **kwargs) -> dict:
+    payload = _augment_payload_with_knowledge(dict(data or {}), db=kwargs.pop("db", None))
+    return _pipeline_run_agent_pipeline(payload, **kwargs)
+
+
+def generate_interpretation(data: dict | None = None, **kwargs) -> str:
+    payload = _augment_payload_with_knowledge(dict(data or {}), db=kwargs.pop("db", None))
+    return _pipeline_generate_interpretation(payload, **kwargs)
 
 
 __all__ = [

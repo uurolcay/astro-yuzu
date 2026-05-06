@@ -494,10 +494,17 @@ def get_knowledge_trace_for_interpretation(db, interpretation) -> dict:
     """
     empty = {
         "used_chunks": [],
+        "used_sources": [],
+        "source_documents_used": [],
         "used_entity_set": [],
+        "matched_entities": [],
         "chart_expected_entities": [],
         "output_entities": [],
         "missing_from_knowledge": [],
+        "missing_knowledge": [],
+        "missing_queries": [],
+        "retrieval_queries": [],
+        "source_coverage_score": 0.0,
         "retrieved_but_weak": [],
         "not_in_output": [],
         "unused_chunks": [],
@@ -510,10 +517,14 @@ def get_knowledge_trace_for_interpretation(db, interpretation) -> dict:
         used_chunk_ids = [int(chunk_id) for chunk_id in used_chunk_ids if str(chunk_id).isdigit()]
         output_text = str(getattr(interpretation, "interpretation_text", "") or "")
         output_entities = extract_entities_from_text(output_text)
+        payload = _loads(getattr(interpretation, "input_payload_json", None), {}) or {}
+        trace_payload = payload.get("_knowledge_trace") or payload.get("knowledge_trace") or {}
+        knowledge_context = payload.get("knowledge_context") or {}
         chart_data = _extract_chart_payload(interpretation)
         chart_expected_entities = extract_entities_from_chart_data(chart_data)
 
         used_chunks = []
+        used_sources = {}
         used_entity_set = set()
         if used_chunk_ids:
             chunks = db.query(db_mod.KnowledgeChunk).filter(db_mod.KnowledgeChunk.id.in_(used_chunk_ids)).all()
@@ -526,6 +537,9 @@ def get_knowledge_trace_for_interpretation(db, interpretation) -> dict:
                 chunk_entities.update(normalize_entity(entity) for entity in _loads(getattr(chunk, "coverage_entities_json", None), []))
                 chunk_entities = {entity for entity in chunk_entities if entity}
                 used_entity_set.update(chunk_entities)
+                source_document = chunk.knowledge_item.source_document if chunk.knowledge_item else None
+                if source_document is not None:
+                    used_sources[source_document.id] = source_document.title or source_document.source_label or f"Source #{source_document.id}"
                 counts = [count_chunks_for_entity(db, entity) for entity in chunk_entities] or [0]
                 level, _pct = _coverage_level(max(counts))
                 used_chunks.append(
@@ -533,6 +547,7 @@ def get_knowledge_trace_for_interpretation(db, interpretation) -> dict:
                         "chunk_id": chunk.id,
                         "chunk_text_preview": str(chunk.chunk_text or "")[:180],
                         "knowledge_item_title": chunk.knowledge_item.title if chunk.knowledge_item else "Knowledge",
+                        "source_title": source_document.title if source_document else None,
                         "entities": sorted(chunk_entities),
                         "coverage_level": level if level else "unknown",
                     }
@@ -559,10 +574,17 @@ def get_knowledge_trace_for_interpretation(db, interpretation) -> dict:
 
         return {
             "used_chunks": used_chunks,
+            "used_sources": [{"source_document_id": source_id, "source_title": title} for source_id, title in sorted(used_sources.items())],
+            "source_documents_used": trace_payload.get("source_documents_used") or knowledge_context.get("source_documents_used") or [],
             "used_entity_set": sorted(used_entity_set),
+            "matched_entities": trace_payload.get("matched_entities") or knowledge_context.get("matched_entities") or sorted(used_entity_set),
             "chart_expected_entities": chart_expected_entities,
             "output_entities": output_entities,
             "missing_from_knowledge": sorted(missing_from_knowledge),
+            "missing_knowledge": trace_payload.get("missing_entities") or knowledge_context.get("missing_entities") or sorted(missing_from_knowledge),
+            "missing_queries": trace_payload.get("missing_queries") or knowledge_context.get("missing_queries") or [],
+            "retrieval_queries": trace_payload.get("retrieval_queries") or knowledge_context.get("retrieval_queries") or [],
+            "source_coverage_score": trace_payload.get("source_coverage_score") or knowledge_context.get("source_coverage_score") or 0.0,
             "retrieved_but_weak": sorted(retrieved_but_weak),
             "not_in_output": sorted(not_in_output),
             "unused_chunks": detect_unused_knowledge(used_chunk_ids, output_text, db),

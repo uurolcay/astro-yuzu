@@ -14,6 +14,11 @@ try:
 except Exception:  # pragma: no cover
     build_report_structure_v3 = None
 
+try:
+    from services.prediction_fusion_engine import build_prediction_fusion
+except Exception:  # pragma: no cover
+    build_prediction_fusion = None
+
 
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
@@ -388,6 +393,25 @@ def build_structured_payload(data: dict | None = None, **kwargs) -> dict:
         narrative_analysis = _localize_nested_payload_strings(narrative_analysis, language)
         timing_data = _localize_nested_payload_strings(timing_data, language)
     debug_signals = bool(payload.get("debug_signals"))
+    prediction_fusion = {}
+    if build_prediction_fusion and astro_signal_context:
+        try:
+            prediction_fusion = build_prediction_fusion(
+                astro_signal_context=astro_signal_context,
+                dasha_signal_bundle=(
+                    astro_signal_context.get("dasha_signal_bundle") or {}
+                ),
+                transit_trigger_bundle=(
+                    astro_signal_context.get("transit_trigger_signals") or {}
+                ),
+                chart_relationships=(
+                    astro_signal_context.get("chart_relationships") or {}
+                ),
+                report_type=report_variant,
+                language=language,
+            )
+        except Exception:
+            prediction_fusion = {}
     report_structure_v3 = {}
     if build_report_structure_v3 and astro_signal_context:
         try:
@@ -395,6 +419,7 @@ def build_structured_payload(data: dict | None = None, **kwargs) -> dict:
                 astro_signal_context,
                 report_variant,
                 language,
+                prediction_fusion=prediction_fusion,
             )
         except Exception:
             report_structure_v3 = {}
@@ -423,10 +448,14 @@ def build_structured_payload(data: dict | None = None, **kwargs) -> dict:
         "timing_intelligence": timing_data,
         "astro_signal_context": astro_signal_context,
         "report_structure_v3": report_structure_v3,
+        "prediction_fusion": prediction_fusion,
         "psychological_themes": psychological_themes,
         "life_area_analysis": life_area_analysis,
         "narrative_analysis": narrative_analysis,
         "interpretation_context": interpretation_context,
+        "knowledge_context": payload.get("knowledge_context") or {},
+        "knowledge_trace": payload.get("_knowledge_trace") or payload.get("knowledge_trace") or {},
+        "_used_chunk_ids": payload.get("_used_chunk_ids") or [],
         "report_type": payload.get("report_type") or interpretation_context.get("report_type") or "premium",
         "report_variant": report_variant,
         "signal_debug_block": _build_signal_debug_block(astro_signal_context) if debug_signals else "",
@@ -503,6 +532,12 @@ SOURCE AND ASTROLOGY DISCIPLINE:
 - Deterministic astrology layers are the source of truth; you interpret them, you do not act as the astrology engine.
 - Use astro_signal_context first whenever it is present. Treat dominant_signals, risk_signals, opportunity_signals, nakshatra_signals, yoga_signals, and chart_relationships as the primary structured reasoning layer before generic astrology description.
 - If report_structure_v3 is present, use it as the section blueprint. Expand its sections; do not invent a different report architecture.
+- If prediction_fusion is present, prediction_windows represent the strongest available timing signal - dasha and transit both confirmed. Use them to deepen and specify timing, but do not treat them as deterministic outcomes.
+- active_themes in prediction_fusion indicate dasha activation without transit confirmation. Describe these as background tendencies or ongoing themes, not event windows.
+- blocked_predictions indicate transit present but no dasha support. Do not present as timing windows. Reference only if directly relevant to the question at hand.
+- unconfirmed_observations are informational only. Do not cite them as timing guidance.
+- Always apply not_fated_note framing when referencing any prediction_fusion item: describe it as an active tendency or window of readiness, not a guaranteed event.
+- prediction_fusion enriches report_structure_v3 timing and action sections. Never contradict report_structure_v3; use fusion data to add specificity to what is already there.
 - Do not invent placements, houses, aspects, dates, dashas, transits, eclipses, lunations, events, or outcomes.
 - Do not invent signals, combinations, or timing certainty that are not in astro_signal_context or other provided structured layers.
 - Explain dominant signal combinations when they are present instead of falling back to generic textbook astrology language.
@@ -517,6 +552,45 @@ SOURCE AND ASTROLOGY DISCIPLINE:
 - Frame astrology as tendency, timing, developmental pressure, and opportunity, never as guaranteed fate.
 - If a field is weak, missing, or ambiguous, say so gently and interpret at a higher level.
 - Do not give definitive medical, legal, or financial advice.
+"""
+
+
+def _knowledge_context_block(structured_payload: dict) -> str:
+    context = structured_payload.get("knowledge_context") if isinstance(structured_payload, dict) else {}
+    if not isinstance(context, dict):
+        return ""
+    chunks = context.get("chunks") or []
+    if not chunks:
+        if context.get("no_source_available") or context.get("missing_queries"):
+            return """
+Published Knowledge Context:
+- No published source chunk was available for at least one chart query.
+- Use chart signals, but do not invent source-backed claims where no source is provided.
+- Internally treat missing source context as lower certainty.
+"""
+        return ""
+    compact_chunks = []
+    for chunk in chunks[:10]:
+        compact_chunks.append(
+            {
+                "chunk_id": chunk.get("chunk_id"),
+                "source_title": chunk.get("source_title"),
+                "category": chunk.get("category"),
+                "primary_entity": chunk.get("primary_entity"),
+                "matched_query": chunk.get("matched_query"),
+                "relevance_score": chunk.get("relevance_score"),
+                "excerpt": str(chunk.get("excerpt") or "")[:650],
+                "safety_notes": chunk.get("safety_notes") or "",
+            }
+        )
+    return f"""
+Published Knowledge Context:
+Use these notes only as supporting context.
+Do not invent source-backed claims if no source is provided.
+If source context is missing, rely on chart signals but mark uncertainty internally.
+Do not cite unpublished or review-pending knowledge.
+Selected published chunks:
+{_safe_json(compact_chunks)}
 """
 
 
@@ -588,6 +662,7 @@ def build_insight_prompt(structured_payload: dict) -> str:
 You are the Insight Agent in a premium Vedic astrology report pipeline.
 {_language_instruction(language)}
 {_source_rules()}
+{_knowledge_context_block(structured_payload)}
 {_editorial_rules()}
 {_report_variant_instruction(structured_payload)}
 
@@ -621,6 +696,7 @@ def build_timing_prompt(structured_payload: dict, insight_output: str | None = N
 You are the Timing Agent in a premium Vedic astrology report pipeline.
 {_language_instruction(language)}
 {_source_rules()}
+{_knowledge_context_block(structured_payload)}
 {_editorial_rules()}
 {_report_variant_instruction(structured_payload)}
 
@@ -654,6 +730,7 @@ def build_guidance_prompt(structured_payload: dict, insight_output: str, timing_
 You are the Guidance Agent in a premium Vedic astrology report pipeline.
 {_language_instruction(language)}
 {_source_rules()}
+{_knowledge_context_block(structured_payload)}
 {_editorial_rules()}
 {_report_variant_instruction(structured_payload)}
 
@@ -732,6 +809,7 @@ def build_composer_prompt(
 You are the Composer Agent for a premium Vedic astrology SaaS report.
 {_language_instruction(language)}
 {_source_rules()}
+{_knowledge_context_block(structured_payload)}
 {_editorial_rules()}
 {_premium_advisory_writing_rules(language)}
 {_report_variant_instruction(structured_payload)}
@@ -830,6 +908,7 @@ def build_safety_prompt(structured_payload: dict, composer_draft: str) -> str:
 You are the Safety Agent for a premium Vedic astrology report.
 {_language_instruction(language)}
 {_source_rules()}
+{_knowledge_context_block(structured_payload)}
 {_report_variant_instruction(structured_payload)}
 
 Final-pass the draft below as a minimal-edit compliance and restraint layer.

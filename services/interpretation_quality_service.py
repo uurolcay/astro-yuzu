@@ -2,6 +2,7 @@ import json
 from collections import Counter, defaultdict
 
 import database as db_mod
+from services.evaluation_service import evaluate_interpretation as evaluate_grounding
 from report_quality_eval import evaluate_report_output
 
 
@@ -162,7 +163,25 @@ def save_review(db, interpretation_id: int, form_data: dict, *, admin_user=None)
 
     language = str(form_data.get("language") or "tr").strip().lower() or "tr"
     quality_eval = evaluate_report_output(interpretation.interpretation_text, language)
-    chart_data = _safe_json_loads(interpretation.input_payload_json, {}).get("natal_data") or {}
+    payload = _safe_json_loads(interpretation.input_payload_json, {})
+    chart_data = payload.get("natal_data") or {}
+    grounding_payload = dict(payload or {})
+    grounding_payload["natal_data"] = chart_data
+    grounding_payload["_knowledge_trace"] = payload.get("_knowledge_trace") or {}
+    grounding_payload["knowledge_context"] = payload.get("knowledge_context") or {}
+    used_chunk_ids = _safe_json_loads(getattr(interpretation, "used_chunk_ids_json", None), [])
+    if used_chunk_ids and not grounding_payload["_knowledge_trace"].get("used_chunk_ids"):
+        grounding_payload["_knowledge_trace"]["used_chunk_ids"] = used_chunk_ids
+    grounding_eval = evaluate_grounding(interpretation.interpretation_text, grounding_payload)
+    for key in (
+        "source_coverage_score",
+        "unsupported_claim_risk",
+        "genericity_score",
+        "chart_signal_alignment_score",
+        "knowledge_trace_available",
+        "knowledge_grounding_summary",
+    ):
+        quality_eval[key] = grounding_eval.get(key)
     missing_entities = detect_missing_entities(chart_data, interpretation.interpretation_text)
     section_coverage = compute_section_coverage(interpretation.interpretation_text)
 

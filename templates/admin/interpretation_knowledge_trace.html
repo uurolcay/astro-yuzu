@@ -15,6 +15,23 @@
 
 {% if notice %}<div class="admin-alert admin-alert-success">{{ notice }}</div>{% endif %}
 
+<section class="admin-stats">
+  <article class="admin-stat"><div class="admin-stat-label">Source Coverage Score</div><div class="admin-stat-value">{{ trace.source_coverage_score if trace.source_coverage_score is not none else "-" }}</div></article>
+  <article class="admin-stat"><div class="admin-stat-label">Used Chunks</div><div class="admin-stat-value">{{ (trace.used_chunks or [])|length }}</div></article>
+  <article class="admin-stat"><div class="admin-stat-label">Missing Knowledge</div><div class="admin-stat-value">{{ (trace.missing_knowledge or trace.missing_from_knowledge or [])|length }}</div></article>
+</section>
+
+<section class="admin-card">
+  <div class="admin-card-title">Used Sources</div>
+  <div class="admin-page-actions">
+    {% for source in trace.source_documents_used or trace.used_sources or [] %}
+    <span class="badge badge-info">{{ source.source_title or source.source_document_id }}</span>
+    {% else %}
+    <span class="admin-muted">Kaynak trace bulunamadı.</span>
+    {% endfor %}
+  </div>
+</section>
+
 <section class="admin-card">
   <div class="admin-card-title">Kullanılan Bilgiler</div>
   <div class="table-wrap">
@@ -45,6 +62,13 @@
 </section>
 
 <section class="admin-card">
+  <div class="admin-card-title">Matched Entities</div>
+  <div class="admin-page-actions">
+    {% for entity in trace.matched_entities or trace.used_entity_set or [] %}<span class="badge badge-success">{{ entity }}</span>{% else %}<span class="admin-muted">Eşleşen varlık yok.</span>{% endfor %}
+  </div>
+</section>
+
+<section class="admin-card">
   <div class="admin-card-title">Yorumda Görünen Varlıklar</div>
   <div class="admin-page-actions">
     {% for entity in trace.output_entities or [] %}<span class="badge badge-info">{{ entity }}</span>{% else %}<span class="admin-muted">Final yorumda eşleşen varlık tespit edilmedi.</span>{% endfor %}
@@ -60,6 +84,29 @@
   </div>
   {% else %}
   <div class="admin-muted">Tespit edilen beklenen varlıklar knowledge base’de mevcut.</div>
+  {% endif %}
+</section>
+
+<section class="admin-card">
+  <div class="admin-card-title">Missing Knowledge Queries</div>
+  {% if trace.missing_queries %}
+  <div class="table-wrap">
+    <table class="admin-table">
+      <thead><tr><th>entity</th><th>domain</th><th>report_type</th><th>query</th></tr></thead>
+      <tbody>
+        {% for query in trace.missing_queries %}
+        <tr>
+          <td>{{ query.entity }}</td>
+          <td>{{ query.domain }}</td>
+          <td>{{ query.report_type }}</td>
+          <td>{{ query.query_text }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="admin-muted">Eksik source query yok.</div>
   {% endif %}
 </section>
 

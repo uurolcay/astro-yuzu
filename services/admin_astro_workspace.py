@@ -333,6 +333,9 @@ def build_workspace_prompt_payload(payload, *, behavior_rules=None, runtime_over
         chunk_ids = prompt_payload.get("_used_chunk_ids")
         if isinstance(chunk_ids, list):
             payload["_used_chunk_ids"] = [cid for cid in chunk_ids if cid is not None]
+        for trace_key in ("knowledge_context", "_knowledge_trace"):
+            if trace_key in prompt_payload:
+                payload[trace_key] = prompt_payload.get(trace_key)
     return prompt_payload
 
 

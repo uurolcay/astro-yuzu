@@ -220,8 +220,9 @@ class AgentPipelineTests(unittest.TestCase):
     def test_ai_interpreter_wrapper_reexports_pipeline_contract(self):
         self.assertIs(ai_interpreter.AIConfigurationError, agent_pipeline.AIConfigurationError)
         self.assertIs(ai_interpreter.AIServiceError, agent_pipeline.AIServiceError)
-        self.assertIs(ai_interpreter.run_agent_pipeline, agent_pipeline.run_agent_pipeline)
-        self.assertIs(ai_interpreter.generate_interpretation, agent_pipeline.generate_interpretation)
+        self.assertTrue(callable(ai_interpreter.run_agent_pipeline))
+        self.assertTrue(callable(ai_interpreter.generate_interpretation))
+        self.assertIs(ai_interpreter.build_structured_payload, agent_pipeline.build_structured_payload)
 
     def test_invalid_language_defaults_to_turkish(self):
         structured = agent_pipeline.build_structured_payload({"language": "de"})

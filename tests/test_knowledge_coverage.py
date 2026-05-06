@@ -168,6 +168,8 @@ class KnowledgeCoverageTests(unittest.TestCase):
         self.assertEqual(set(trace.keys()), {
             "used_chunks", "used_entity_set", "chart_expected_entities", "output_entities",
             "missing_from_knowledge", "retrieved_but_weak", "not_in_output", "unused_chunks", "gap_types",
+            "used_sources", "source_documents_used", "matched_entities", "missing_knowledge",
+            "missing_queries", "retrieval_queries", "source_coverage_score",
         })
 
     def test_get_knowledge_trace_detects_missing_knowledge(self):

@@ -74,7 +74,10 @@
           {% endif %}
         </td>
         <td>{{ row.review.rating_overall if row.review and row.review.rating_overall is not none else "-" }}</td>
-        <td><a class="btn-admin" href="/admin/astro-workspace/quality/{{ row.interpretation.id }}/review">Değerlendir</a></td>
+        <td>
+          <a class="btn-admin" href="/admin/astro-workspace/quality/{{ row.interpretation.id }}/review">Değerlendir</a>
+          <a class="btn-admin btn-admin-secondary" href="/admin/astro-workspace/quality/{{ row.interpretation.id }}/knowledge">Knowledge Trace</a>
+        </td>
       </tr>
       {% else %}
       <tr><td colspan="7" class="admin-muted">Henüz yorum bulunmuyor.</td></tr>
