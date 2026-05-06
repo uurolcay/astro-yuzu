@@ -72,7 +72,7 @@ Birden fazla soru
     .reports-hero-layout { grid-template-columns:minmax(0, 1.08fr) minmax(280px, .92fr); align-items:center; }
     .reports-final-layout { grid-template-columns:repeat(3, minmax(0, 1fr)); align-items:center; }
     .reports-choice-grid { grid-template-columns:repeat(5, minmax(0, 1fr)); }
-    .reports-offer-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    .reports-offer-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); align-items:stretch; }
     .reports-compare-grid,
     .reports-ascension-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
 
@@ -198,6 +198,8 @@ Birden fazla soru
     }
 
     .reports-card {
+        height:100%;
+        grid-template-rows:auto auto auto auto 1fr auto;
         min-height:100%;
         background:
             linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.012)),
@@ -211,7 +213,44 @@ Birden fazla soru
             rgba(18,31,54,.44);
     }
 
-    .reports-card-body { display:grid; gap:14px; }
+    .reports-card-topline {
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:10px;
+        flex-wrap:wrap;
+    }
+
+    .report-delivery-badge {
+        display:inline-flex;
+        align-items:center;
+        align-self:flex-start;
+        width:fit-content;
+        padding:7px 11px;
+        border-radius:999px;
+        border:1px solid rgba(223,192,112,.22);
+        background:rgba(223,192,112,.075);
+        color:var(--gold-light);
+        font-family:"Cinzel", serif;
+        font-size:.62rem;
+        font-weight:700;
+        letter-spacing:.14em;
+        line-height:1;
+        text-transform:uppercase;
+    }
+
+    .report-suitability {
+        margin:0;
+        color:var(--gold-light);
+        line-height:1.5;
+        font-size:1.08rem;
+        display:-webkit-box;
+        -webkit-line-clamp:2;
+        -webkit-box-orient:vertical;
+        overflow:hidden;
+    }
+
+    .reports-card-body { display:grid; gap:14px; align-content:start; }
 
     .reports-mini-heading {
         margin:0;
@@ -389,8 +428,12 @@ Birden fazla soru
                 </div>
                 <div class="reports-offer-grid">
                     <article class="reports-card" id="birth-chart-karma">
-                        <span class="reports-card-label">{{ "Core chart" if page_lang == "en" else "Temel harita" }}</span>
+                        <div class="reports-card-topline">
+                            <span class="reports-card-label">{{ "Core chart" if page_lang == "en" else "Temel harita" }}</span>
+                            <span class="report-delivery-badge">{{ "PDF · 7 days" if page_lang == "en" else "PDF · 7 gün" }}</span>
+                        </div>
                         <h3>{{ "Birth Chart Karma" if page_lang == "en" else "Doğum Haritası Karma’sı" }}</h3>
+                        <p class="report-suitability">{{ "For those who want to understand their life themes more deeply." if page_lang == "en" else "Kendini ve yaşam temasını derinlemesine anlamak isteyenler için." }}</p>
                         <div class="reports-price-row">
                             <strong class="reports-price">{{ format_price(1900, page_lang)|safe }}</strong>
                             <span class="reports-price-note">{{ "Delivered by email within 7 days." if page_lang == "en" else "Raporlar, hazırlık sürecinin ardından en geç 7 gün içinde e-posta ile teslim edilir." }}</span>
@@ -428,8 +471,12 @@ Birden fazla soru
                     </article>
 
                     <article class="reports-card" id="annual-transit">
-                        <span class="reports-card-label">{{ "Timing" if page_lang == "en" else "Zamanlama" }}</span>
+                        <div class="reports-card-topline">
+                            <span class="reports-card-label">{{ "Timing" if page_lang == "en" else "Zamanlama" }}</span>
+                            <span class="report-delivery-badge">{{ "PDF · 7 days" if page_lang == "en" else "PDF · 7 gün" }}</span>
+                        </div>
                         <h3>{{ "Annual Transit" if page_lang == "en" else "Yıllık Transit" }}</h3>
+                        <p class="report-suitability">{{ "For those who want to understand the timing of the year ahead." if page_lang == "en" else "Önümüzdeki dönemin zamanlamasını görmek isteyenler için." }}</p>
                         <div class="reports-price-row">
                             <strong class="reports-price">{{ format_price(1490, page_lang)|safe }}</strong>
                             <span class="reports-price-note">{{ "Delivered by email within 7 days." if page_lang == "en" else "Raporlar, hazırlık sürecinin ardından en geç 7 gün içinde e-posta ile teslim edilir." }}</span>
@@ -467,8 +514,12 @@ Birden fazla soru
                     </article>
 
                     <article class="reports-card" id="career-report">
-                        <span class="reports-card-label">{{ "Career direction" if page_lang == "en" else "Kariyer yönü" }}</span>
+                        <div class="reports-card-topline">
+                            <span class="reports-card-label">{{ "Career direction" if page_lang == "en" else "Kariyer yönü" }}</span>
+                            <span class="report-delivery-badge">{{ "PDF · 7 days" if page_lang == "en" else "PDF · 7 gün" }}</span>
+                        </div>
                         <h3>{{ "Career" if page_lang == "en" else "Kariyer" }}</h3>
+                        <p class="report-suitability">{{ "For career direction, job transitions, or professional decisions." if page_lang == "en" else "Kariyer yönü, iş değişimi veya mesleki karar aşamasında olanlar için." }}</p>
                         <div class="reports-price-row">
                             <strong class="reports-price">{{ format_price(1690, page_lang)|safe }}</strong>
                             <span class="reports-price-note">{{ "Delivered by email within 7 days." if page_lang == "en" else "Raporlar, hazırlık sürecinin ardından en geç 7 gün içinde e-posta ile teslim edilir." }}</span>
@@ -506,8 +557,12 @@ Birden fazla soru
                     </article>
 
                     <article class="reports-card reports-card--child" id="parent-child-report">
-                        <span class="reports-card-label">{{ "Family dynamics" if page_lang == "en" else "Aile dinamiği" }}</span>
+                        <div class="reports-card-topline">
+                            <span class="reports-card-label">{{ "Family dynamics" if page_lang == "en" else "Aile dinamiği" }}</span>
+                            <span class="report-delivery-badge">{{ "PDF · 7 days" if page_lang == "en" else "PDF · 7 gün" }}</span>
+                        </div>
                         <h3>{{ "Parent-Child" if page_lang == "en" else "Ebeveyn-Çocuk" }}</h3>
+                        <p class="report-suitability">{{ "For parents who want to understand their child’s nature more consciously." if page_lang == "en" else "Çocuğunun doğasını daha bilinçli anlamak isteyen ebeveynler için." }}</p>
                         <div class="reports-price-row">
                             <strong class="reports-price">{{ format_price(1790, page_lang)|safe }}</strong>
                             <span class="reports-price-note">{{ "Delivered by email within 7 days." if page_lang == "en" else "Raporlar, hazırlık sürecinin ardından en geç 7 gün içinde e-posta ile teslim edilir." }}</span>

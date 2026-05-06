@@ -14,17 +14,18 @@
     <script>
         (function () {
             const storageKey = "focus-astrology-theme-mode";
-            const normalize = (value) => (["dark", "light", "auto"].includes(value) ? value : "dark");
-            let mode = "dark";
+            const normalize = (value) => (["dark", "light", "auto"].includes(value) ? value : "auto");
+            let mode = "auto";
             try {
-                mode = normalize(window.localStorage.getItem(storageKey) || "dark");
+                mode = normalize(window.localStorage.getItem(storageKey) || "auto");
             } catch (error) {
-                mode = "dark";
+                mode = "auto";
             }
-            const media = window.matchMedia ? window.matchMedia("(prefers-color-scheme: light)") : null;
-            const resolved = mode === "auto" ? ((media && media.matches) ? "light" : "dark") : mode;
+            const media = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+            const resolved = mode === "auto" ? ((media && media.matches) ? "dark" : "light") : mode;
             document.documentElement.dataset.themeMode = mode;
             document.documentElement.dataset.theme = resolved;
+            document.documentElement.dataset.themeReady = "false";
         })();
     </script>
 
@@ -187,6 +188,12 @@
             box-sizing: border-box;
         }
 
+        html:not([data-theme-ready="true"]) *,
+        html:not([data-theme-ready="true"]) *::before,
+        html:not([data-theme-ready="true"]) *::after {
+            transition: none !important;
+        }
+
         html {
             scroll-behavior: smooth;
         }
@@ -202,7 +209,7 @@
             min-height: 100vh;
             position: relative;
             overflow-x: hidden;
-            transition: background 0.35s ease, color 0.35s ease;
+            transition: background 0.2s ease, color 0.2s ease;
         }
 
         body::before {
@@ -1730,21 +1737,21 @@
         window.APP_THEME = {
             storageKey: "focus-astrology-theme-mode",
             normalize(mode) {
-                return ["dark", "light", "auto"].includes(mode) ? mode : "dark";
+                return ["dark", "light", "auto"].includes(mode) ? mode : "auto";
             },
-            media: window.matchMedia ? window.matchMedia("(prefers-color-scheme: light)") : null,
+            media: window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null,
             resolve(mode) {
                 const nextMode = this.normalize(mode);
                 if (nextMode === "auto") {
-                    return this.media && this.media.matches ? "light" : "dark";
+                    return this.media && this.media.matches ? "dark" : "light";
                 }
                 return nextMode;
             },
             get() {
                 try {
-                    return this.normalize(localStorage.getItem(this.storageKey) || document.documentElement.dataset.themeMode || "dark");
+                    return this.normalize(localStorage.getItem(this.storageKey) || document.documentElement.dataset.themeMode || "auto");
                 } catch (error) {
-                    return this.normalize(document.documentElement.dataset.themeMode || "dark");
+                    return this.normalize(document.documentElement.dataset.themeMode || "auto");
                 }
             },
             persist(mode) {
@@ -1809,6 +1816,9 @@
         document.addEventListener("DOMContentLoaded", () => {
             const preferredTheme = window.APP_THEME.persist(window.APP_THEME.get());
             window.APP_THEME.apply(preferredTheme);
+            window.requestAnimationFrame(() => {
+                document.documentElement.dataset.themeReady = "true";
+            });
 
             if (window.APP_THEME.media) {
                 const syncAutoTheme = () => {
