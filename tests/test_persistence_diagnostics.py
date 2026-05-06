@@ -9,7 +9,7 @@ from unittest.mock import patch
 from pathlib import Path
 
 from fastapi.testclient import TestClient
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, TimeoutError as SQLAlchemyTimeoutError
 
 import app
 import database as db_mod
@@ -117,8 +117,14 @@ class PersistenceDiagnosticsTests(unittest.TestCase):
             "is_sqlite",
             "db_pool_pre_ping",
             "db_pool_recycle_seconds",
+            "db_pool_timeout_seconds",
             "db_pool_size",
             "db_max_overflow",
+            "db_pool_status",
+            "db_pool_checked_out",
+            "db_pool_checked_in",
+            "db_pool_current_size",
+            "db_pool_current_overflow",
             "database_url_uses_internal_hint",
             "db_disconnect_patterns_enabled",
             "upload_dir_writable",
@@ -150,6 +156,89 @@ class PersistenceDiagnosticsTests(unittest.TestCase):
         self.assertIn("max_chunks_per_request", payload["document_processing"])
         self.assertIn("admin_page_size_default", payload["admin_performance"])
         self.assertIn("admin_page_size_max", payload["admin_performance"])
+
+    def _legacy_signed_cookie(self, user_id):
+        payload = base64.b64encode(json.dumps({"user_id": user_id}).encode("utf-8")).decode("utf-8")
+        return app.TimestampSigner(str(app.SESSION_SECRET_KEY)).sign(payload.encode("utf-8")).decode("utf-8")
+
+    def test_health_and_debug_version_do_not_open_db_sessions(self):
+        with patch.object(db_mod, "SessionLocal", side_effect=AssertionError("DB session should not open")):
+            health = self.client.get("/health")
+            version = self.client.get("/debug/version")
+        self.assertEqual(health.status_code, 200)
+        self.assertEqual(health.json(), {"status": "ok"})
+        self.assertEqual(version.status_code, 200)
+
+    def test_public_home_without_auth_cookie_does_not_lookup_app_user(self):
+        with patch.object(app, "_lookup_active_user_with_recovery", side_effect=AssertionError("AppUser lookup should not run")):
+            response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+
+    def test_public_request_with_auth_cookie_opens_and_closes_middleware_db(self):
+        class _Query:
+            def filter(self, *args, **kwargs):
+                return self
+
+            def first(self):
+                return self.user
+
+        class _TrackingDb:
+            def __init__(self, user):
+                self.closed = False
+                self.query_obj = _Query()
+                self.query_obj.user = user
+
+            def query(self, *args, **kwargs):
+                return self.query_obj
+
+            def rollback(self):
+                pass
+
+            def close(self):
+                self.closed = True
+
+        fake_db = _TrackingDb(self.admin)
+        self.client.cookies.set("session", self._legacy_signed_cookie(self.admin_id))
+        with patch.object(db_mod, "SessionLocal", return_value=fake_db), patch.object(app, "get_setting", return_value="false"):
+            response = self.client.get("/privacy")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(fake_db.closed)
+
+    def test_signed_cookie_db_timeout_does_not_crash_public_route(self):
+        class _BrokenQuery:
+            def filter(self, *args, **kwargs):
+                return self
+
+            def first(self):
+                raise SQLAlchemyTimeoutError("QueuePool limit reached")
+
+        class _BrokenDb:
+            def __init__(self):
+                self.closed = False
+                self.rolled_back = False
+
+            def query(self, *args, **kwargs):
+                return _BrokenQuery()
+
+            def rollback(self):
+                self.rolled_back = True
+
+            def close(self):
+                self.closed = True
+
+        broken_db = _BrokenDb()
+        self.client.cookies.set("session", self._legacy_signed_cookie(self.admin_id))
+        with patch.object(db_mod, "SessionLocal", return_value=broken_db):
+            response = self.client.get("/privacy")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(broken_db.rolled_back)
+        self.assertTrue(broken_db.closed)
+
+    def test_repeated_public_requests_without_cookie_do_not_open_middleware_db(self):
+        with patch.object(db_mod, "SessionLocal", side_effect=AssertionError("No-cookie public route should not open DB")):
+            for _ in range(5):
+                response = self.client.get("/privacy")
+                self.assertEqual(response.status_code, 200)
 
     def test_admin_request_tracing_logs_start_and_end(self):
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair), self.assertLogs(app.logger, level="INFO") as captured:

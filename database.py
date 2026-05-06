@@ -119,6 +119,37 @@ def get_engine_diagnostics():
     database_value = str(getattr(url_obj, "database", "") or "").strip()
     is_postgresql = dialect == "postgresql"
     pool_settings = get_postgresql_pool_settings()
+    pool = getattr(engine, "pool", None)
+    pool_status = None
+    checked_out = None
+    checked_in = None
+    current_pool_size = None
+    current_overflow = None
+    try:
+        status_fn = getattr(pool, "status", None)
+        pool_status = status_fn() if callable(status_fn) else None
+    except Exception:
+        pool_status = None
+    try:
+        checkedout_fn = getattr(pool, "checkedout", None)
+        checked_out = checkedout_fn() if callable(checkedout_fn) else None
+    except Exception:
+        checked_out = None
+    try:
+        checkedin_fn = getattr(pool, "checkedin", None)
+        checked_in = checkedin_fn() if callable(checkedin_fn) else None
+    except Exception:
+        checked_in = None
+    try:
+        size_fn = getattr(pool, "size", None)
+        current_pool_size = size_fn() if callable(size_fn) else None
+    except Exception:
+        current_pool_size = None
+    try:
+        overflow_fn = getattr(pool, "overflow", None)
+        current_overflow = overflow_fn() if callable(overflow_fn) else None
+    except Exception:
+        current_overflow = None
     sqlite_file_path = ""
     sqlite_file_exists = False
     sqlite_file_size = 0
@@ -139,8 +170,14 @@ def get_engine_diagnostics():
         "is_in_memory": dialect == "sqlite" and database_value == ":memory:",
         "db_pool_pre_ping": bool(pool_settings["pool_pre_ping"]) if is_postgresql else False,
         "db_pool_recycle_seconds": pool_settings["pool_recycle"] if is_postgresql else None,
+        "db_pool_timeout_seconds": pool_settings["pool_timeout"] if is_postgresql else None,
         "db_pool_size": pool_settings["pool_size"] if is_postgresql else None,
         "db_max_overflow": pool_settings["max_overflow"] if is_postgresql else None,
+        "db_pool_status": pool_status,
+        "db_pool_checked_out": checked_out,
+        "db_pool_checked_in": checked_in,
+        "db_pool_current_size": current_pool_size,
+        "db_pool_current_overflow": current_overflow,
         "database_url_uses_internal_hint": _database_url_uses_internal_hint(str(os.getenv("DATABASE_URL", "") or SQLALCHEMY_DATABASE_URL)),
         "db_disconnect_patterns_enabled": True,
     }

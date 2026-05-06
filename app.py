@@ -33,7 +33,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, inspect as sa_inspect, or_, text as sa_text
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError, TimeoutError as SQLAlchemyTimeoutError
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 from itsdangerous import BadSignature, TimestampSigner
@@ -150,6 +150,7 @@ COVERAGE_REBUILD_SYNC_ENABLED = get_bool_env("COVERAGE_REBUILD_SYNC_ENABLED", Fa
 PORT = int(os.getenv("PORT", 8000))
 FAST_REQUEST_BYPASS_PATHS = {"/health", "/debug/version", "/favicon.ico"}
 PUBLIC_REQUEST_TRACE_PATHS = {"/health", "/debug/version", "/"}
+USER_CONTEXT_DB_BYPASS_PREFIXES = ("/static", "/assets")
 ADMIN_HEAD_PROBE_PATHS = (
     "/admin",
     "/admin/dashboard",
@@ -165,7 +166,7 @@ ADMIN_HEAD_PROBE_PATHS = (
 
 def _is_fast_request_bypass_path(path):
     path = str(path or "")
-    return path in FAST_REQUEST_BYPASS_PATHS or path.startswith("/static")
+    return path in FAST_REQUEST_BYPASS_PATHS or path.startswith(USER_CONTEXT_DB_BYPASS_PREFIXES)
 
 
 def _apply_security_headers(response):
@@ -1341,6 +1342,38 @@ def get_request_user(request, db):
     return _lookup_active_user_with_recovery(db, user_id, context="session")
 
 
+def _set_anonymous_request_context(request):
+    request.state.current_user = None
+    request.state.current_user_id = None
+    request.state.plan_code = "free"
+    request.state.plan_features = get_plan_features("free")
+    request.state.lang = get_preferred_language(request, None)
+
+
+def _request_session_user_id(request):
+    try:
+        return request.session.get("user_id") if "session" in request.scope else None
+    except Exception:
+        return None
+
+
+def _signed_cookie_user_id(request):
+    raw_cookie = request.cookies.get("session")
+    if not raw_cookie:
+        return None
+    try:
+        signer = TimestampSigner(str(SESSION_SECRET_KEY))
+        unsigned = signer.unsign(raw_cookie.encode("utf-8"), max_age=int(timedelta(days=30).total_seconds()))
+        payload = json.loads(base64.b64decode(unsigned))
+    except (BadSignature, ValueError, TypeError, json.JSONDecodeError):
+        return None
+    return payload.get("user_id")
+
+
+def _request_has_auth_cookie(request):
+    return bool(_request_session_user_id(request) or _signed_cookie_user_id(request))
+
+
 def _short_exception_message(exc, limit=220):
     text = " ".join(str(exc or "").split())
     return text[:limit]
@@ -1364,6 +1397,15 @@ def _dispose_engine_for_disconnect(exc):
 def _lookup_active_user_with_recovery(db, user_id, *, context):
     try:
         return db.query(db_mod.AppUser).filter(db_mod.AppUser.id == user_id, db_mod.AppUser.is_active.is_(True)).first()
+    except SQLAlchemyTimeoutError as exc:
+        _rollback_quietly(db)
+        logger.warning(
+            "User context DB lookup timed out context=%s exception_type=%s short_message=%s",
+            context,
+            type(exc).__name__,
+            _short_exception_message(exc),
+        )
+        return None
     except OperationalError as exc:
         _rollback_quietly(db)
         _dispose_engine_for_disconnect(exc)
@@ -1393,16 +1435,7 @@ def _lookup_active_user_with_recovery(db, user_id, *, context):
 
 
 def _request_user_from_signed_cookie(request, db):
-    raw_cookie = request.cookies.get("session")
-    if not raw_cookie:
-        return None
-    try:
-        signer = TimestampSigner(str(SESSION_SECRET_KEY))
-        unsigned = signer.unsign(raw_cookie.encode("utf-8"), max_age=int(timedelta(days=30).total_seconds()))
-        payload = json.loads(base64.b64decode(unsigned))
-        user_id = payload.get("user_id")
-    except (BadSignature, ValueError, TypeError, json.JSONDecodeError):
-        return None
+    user_id = _signed_cookie_user_id(request)
     if not user_id:
         return None
     return _lookup_active_user_with_recovery(db, user_id, context="signed_cookie")
@@ -5550,22 +5583,49 @@ async def maintenance_mode_middleware(request: Request, call_next):
 @app.middleware("http")
 async def load_user_context(request: Request, call_next):
     path = str(request.url.path or "")
+    logger.info("USER_CONTEXT_START path=%s", path)
     if _is_fast_request_bypass_path(path):
+        _set_anonymous_request_context(request)
+        logger.info("USER_CONTEXT_SKIP path=%s reason=static_or_health", path)
         response = await call_next(request)
         return _apply_security_headers(response)
 
-    db = db_mod.SessionLocal()
+    _set_anonymous_request_context(request)
+    if not _request_has_auth_cookie(request):
+        try:
+            mock_user = get_request_user(request, None)
+        except Exception:
+            mock_user = None
+        if mock_user:
+            request.state.current_user = _public_user_view(mock_user)
+            request.state.current_user_id = _user_id(mock_user)
+            request.state.plan_code = get_user_plan(mock_user)
+            request.state.plan_features = get_plan_features(mock_user)
+            request.state.lang = get_preferred_language(request, mock_user)
+        logger.info("USER_CONTEXT_SKIP path=%s reason=no_cookie", path)
+        if request.method == "POST" and path.startswith("/admin"):
+            body = await request.body()
+            if not verify_csrf_token(request, _csrf_token_from_body(request, body)):
+                return Response("Invalid CSRF token", status_code=403, media_type="text/plain")
+        response = await call_next(request)
+        return _apply_security_headers(response)
+
+    db = None
+    maintenance_response = None
     try:
+        logger.info("USER_CONTEXT_DB_OPEN path=%s", path)
+        db = db_mod.SessionLocal()
         user = get_request_user(request, db)
+        if not user:
+            user = _request_user_from_signed_cookie(request, db)
         request.state.current_user = _public_user_view(user)
         request.state.current_user_id = _user_id(user) if user else None
         request.state.plan_code = get_user_plan(user)
         request.state.plan_features = get_plan_features(user)
         request.state.lang = get_preferred_language(request, user)
         exempt = path.startswith("/admin") or path.startswith("/static") or path in {"/login", "/logout", "/signup"}
-        maintenance_user = user or _request_user_from_signed_cookie(request, db)
-        if not exempt and get_setting(db, "site_maintenance_mode", "false") == "true" and not (maintenance_user and getattr(maintenance_user, "is_admin", False)):
-            return Response(
+        if not exempt and get_setting(db, "site_maintenance_mode", "false") == "true" and not (user and getattr(user, "is_admin", False)):
+            maintenance_response = Response(
                 content="""<!DOCTYPE html><html><head><title>Bakım</title>
                 <style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#0d1117;color:#f0f0f0;}
                 .box{text-align:center;max-width:420px;padding:48px 32px;}
@@ -5577,31 +5637,31 @@ async def load_user_context(request: Request, call_next):
                 status_code=503,
                 media_type="text/html",
             )
-        if request.method == "POST" and path.startswith("/admin"):
-            body = await request.body()
-            if not verify_csrf_token(request, _csrf_token_from_body(request, body)):
-                return Response("Invalid CSRF token", status_code=403, media_type="text/plain")
-        response = await call_next(request)
-        return _apply_security_headers(response)
-    except OperationalError as exc:
-        _rollback_quietly(db)
+    except (OperationalError, SQLAlchemyTimeoutError) as exc:
+        if db is not None:
+            _rollback_quietly(db)
         _dispose_engine_for_disconnect(exc)
         logger.warning(
-            "User context middleware DB failure path=%s exception_type=%s short_message=%s disconnect=%s",
+            "USER_CONTEXT_DB_ERROR path=%s error_type=%s short_message=%s disconnect=%s",
             request.url.path,
             type(exc).__name__,
             _short_exception_message(exc),
             db_mod.is_db_disconnect_error(exc),
         )
-        request.state.current_user = None
-        request.state.current_user_id = None
-        request.state.plan_code = "free"
-        request.state.plan_features = get_plan_features("free")
-        request.state.lang = get_preferred_language(request, None)
-        response = await call_next(request)
-        return _apply_security_headers(response)
+        _set_anonymous_request_context(request)
     finally:
-        db.close()
+        if db is not None:
+            db.close()
+            logger.info("USER_CONTEXT_DB_CLOSE path=%s", path)
+
+    if maintenance_response is not None:
+        return _apply_security_headers(maintenance_response)
+    if request.method == "POST" and path.startswith("/admin"):
+        body = await request.body()
+        if not verify_csrf_token(request, _csrf_token_from_body(request, body)):
+            return Response("Invalid CSRF token", status_code=403, media_type="text/plain")
+    response = await call_next(request)
+    return _apply_security_headers(response)
 
 
 @app.middleware("http")
