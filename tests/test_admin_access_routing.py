@@ -15,6 +15,7 @@ class AdminAccessRoutingTests(unittest.TestCase):
     SECURITY_SESSION_ERROR = "G\u00fcvenlik oturumu s\u00fcresi doldu. L\u00fctfen sayfay\u0131 yenileyip tekrar deneyin."
 
     def setUp(self):
+        app._RATE_LIMIT_BUCKETS.clear()
         self.db = db_mod.SessionLocal()
         self.db.query(db_mod.ServiceOrder).delete()
         self.db.query(db_mod.GeneratedReport).delete()
@@ -123,6 +124,16 @@ class AdminAccessRoutingTests(unittest.TestCase):
         response = self.client.get("/admin/documents")
         self.assertEqual(response.status_code, 200)
         self.assertIn("Knowledge Documents", response.text)
+
+    def test_public_homepage_never_renders_admin_nav_shortcut(self):
+        self._create_user(email="public-header-admin@example.com", is_admin=True)
+        login_response = self._login(email="public-header-admin@example.com")
+        self.assertEqual(login_response.status_code, 303)
+
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('href="/admin"', response.text)
+        self.assertNotIn(">Admin<", response.text)
 
     def test_admin_documents_post_route_is_not_added_by_head_probe(self):
         methods = set()

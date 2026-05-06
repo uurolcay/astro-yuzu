@@ -1584,9 +1584,6 @@
                     <a href="/sss">{{ t("common.nav_faq") }}</a>
                     <a href="/about" data-i18n="nav_about">{{ t("common.nav_about") }}</a>
                     {% if request.state.current_user %}
-                    {% if request.state.current_user.is_admin %}
-                    <a href="/admin">{{ t("common.nav_admin") }}</a>
-                    {% endif %}
                     <span class="nav-pill">{{ "Full" if request.state.plan_code == "premium" else request.state.plan_code|title }}</span>
                     {% endif %}
                 </nav>
