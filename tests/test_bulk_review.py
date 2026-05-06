@@ -236,6 +236,36 @@ class BulkReviewWorkflowTests(unittest.TestCase):
         self.assertEqual(statuses[unknown_short_id], "review_required")
         self.assertEqual(statuses[sensitive_id], "review_required")
 
+    def test_unfiltered_auto_approve_does_not_publish_entire_db_unexpectedly(self):
+        item_ids = [
+            self._review_item(title=f"Safe Visible Item {index}", confidence_level="medium", sensitivity_level="low")
+            for index in range(55)
+        ]
+        csrf = self._csrf()
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            response = self.client.post(
+                "/admin/knowledge/review/auto-approve",
+                data={"csrf_token": csrf},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
+        lookup_db = db_mod.SessionLocal()
+        try:
+            published_count = (
+                lookup_db.query(db_mod.KnowledgeItem)
+                .filter(db_mod.KnowledgeItem.id.in_(item_ids), db_mod.KnowledgeItem.status == "published")
+                .count()
+            )
+            review_count = (
+                lookup_db.query(db_mod.KnowledgeItem)
+                .filter(db_mod.KnowledgeItem.id.in_(item_ids), db_mod.KnowledgeItem.status == "review_required")
+                .count()
+            )
+        finally:
+            lookup_db.close()
+        self.assertEqual(published_count, app.DEFAULT_ADMIN_PAGE_SIZE)
+        self.assertEqual(review_count, 55 - app.DEFAULT_ADMIN_PAGE_SIZE)
+
     def test_non_admin_access_blocked(self):
         item_id = self._review_item(title="Blocked Item")
         with patch.object(app, "_require_admin_user", side_effect=self._request_member_pair):

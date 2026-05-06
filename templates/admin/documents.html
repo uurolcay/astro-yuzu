@@ -28,6 +28,9 @@
 {% set document_deleted = notice == 'document_deleted' %}
 {% set document_not_found = notice == 'document_not_found' %}
 {% set document_delete_failed = notice == 'document_delete_failed' %}
+{% set document_trust_updated = notice == 'document_trust_updated' %}
+{% set document_safe_published = notice.startswith('document_safe_published:') if notice else false %}
+{% set document_noise_rejected = notice.startswith('document_noise_rejected:') if notice else false %}
 {% set extraction_notice = notice.startswith('nakshatra_extracted:') if notice else false %}
 {% set sections_empty = notice == 'nakshatra_sections_empty' %}
 
@@ -64,6 +67,14 @@
   <div class="admin-alert admin-alert-danger">Doküman bulunamadı.</div>
 {% elif document_delete_failed %}
   <div class="admin-alert admin-alert-danger">Doküman silinirken hata oluştu.</div>
+{% elif document_trust_updated %}
+  <div class="admin-alert admin-alert-success">Kaynak güven politikası güncellendi.</div>
+{% elif document_safe_published %}
+  {% set parts = notice.split(':') %}
+  <div class="admin-alert admin-alert-success">Güvenli içerikler yayınlandı. Yayınlanan: {{ parts[1] }}, review'da kalan: {{ parts[2] }}, atlanan: {{ parts[3] }}.</div>
+{% elif document_noise_rejected %}
+  {% set parts = notice.split(':') %}
+  <div class="admin-alert admin-alert-success">Noise/index içerikleri reddedildi. Reddedilen: {{ parts[1] }}.</div>
 {% elif sections_empty %}
   <div class="admin-alert admin-alert-warning">PDF metni okundu ama nakshatra basliklari bulunamadi. Baslik varyasyonlari veya OCR bozuk olabilir.</div>
 {% elif extraction_notice %}
@@ -158,8 +169,15 @@
           <div class="admin-muted">Cursor: {{ row.cursor_page or 0 }}</div>
           <div class="admin-muted">Last page: {{ row.last_processed_page or 0 }}</div>
           <div class="admin-muted">Blocks: {{ row.block_count or 0 }}</div>
+          <div class="admin-muted">Published: {{ row.source_stats.published or 0 }}</div>
+          <div class="admin-muted">Review required: {{ row.source_stats.review_required or 0 }}</div>
+          <div class="admin-muted">Rejected: {{ row.source_stats.rejected or 0 }}</div>
+          <div class="admin-muted">Auto-published: {{ row.source_stats.auto_published or 0 }}</div>
+          <div class="admin-muted">Sensitive: {{ row.source_stats.sensitive or 0 }}</div>
+          <div class="admin-muted">Noise: {{ row.source_stats.noise or 0 }}</div>
         </td>
         <td style="min-width:240px;">
+          <div class="admin-muted">Trust: {{ row.trust_policy.trust_level }} / {{ row.trust_policy.review_policy }} / {{ row.trust_policy.source_domain }}</div>
           <div class="admin-muted">Parser: {{ row.parser_used }}</div>
           <div class="admin-muted">File: {% if row.file_exists is sameas true %}found{% elif row.file_exists is sameas false %}missing{% else %}-{% endif %}{% if row.file_size %} · {{ row.file_size }} bytes{% endif %}</div>
           {% if row.error_type %}
@@ -179,6 +197,23 @@
           {% endif %}
         </td>
         <td>
+          <form method="post" action="/admin/documents/{{ row.document.id }}/trust" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="trust_level" value="high">
+            <input type="hidden" name="review_policy" value="auto_publish_safe">
+            <input type="hidden" name="source_domain" value="{{ row.trust_policy.source_domain or 'mixed' }}">
+            <input type="hidden" name="auto_publish_safe_chunks" value="1">
+            <button class="btn-admin btn-admin-secondary" type="submit">Güvenilir Kaynak Yap</button>
+          </form>
+          <form method="post" action="/admin/documents/{{ row.document.id }}/publish-safe" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="btn-admin btn-admin-primary" type="submit">Güvenli İçerikleri Yayınla</button>
+          </form>
+          <form method="post" action="/admin/documents/{{ row.document.id }}/reject-noise" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button class="btn-admin btn-admin-secondary" type="submit">Noise İçerikleri Reddet</button>
+          </form>
+          <a class="btn-admin btn-admin-secondary" href="/admin/knowledge/review?source_document_id={{ row.document.id }}&status=review_required">Review Kuyruğunu Aç</a>
           {% if row.processing_status in ["uploaded", "pending_processing", "failed", "parse_empty"] %}
           <form method="post" action="/admin/documents/{{ row.document.id }}/process" style="display:inline;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -210,7 +245,7 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <button class="btn-admin btn-admin-danger" type="submit">Sil</button>
           </form>
-          <a href="/admin/knowledge/review" style="margin-left:.6rem;">İnceleme Kuyruğu -></a>
+          <a href="/admin/knowledge/review?source_document_id={{ row.document.id }}&status=review_required" style="margin-left:.6rem;">İnceleme Kuyruğu -></a>
           <a href="/admin/knowledge/coverage" style="margin-left:.6rem;">Kapsam -></a>
         </td>
       </tr>

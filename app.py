@@ -7444,6 +7444,119 @@ def _is_auto_approve_blocked(item, metadata):
     return False
 
 
+SOURCE_TRUST_DEFAULTS = {
+    "trust_level": "medium",
+    "auto_publish_safe_chunks": False,
+    "review_policy": "manual",
+    "source_domain": "mixed",
+}
+SOURCE_TRUST_LEVELS = {"low", "medium", "high"}
+SOURCE_REVIEW_POLICIES = {"manual", "auto_publish_safe", "review_sensitive_only"}
+SOURCE_DOMAINS = {"nakshatra", "houses", "planets", "yogas", "dasha", "transit", "concepts", "mixed"}
+MIN_SAFE_PUBLISH_BODY_LENGTH = 250
+
+
+def _source_document_metadata(document):
+    metadata = _json_loads_safe(getattr(document, "metadata_json", None), {}) or {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    for key, value in SOURCE_TRUST_DEFAULTS.items():
+        metadata.setdefault(key, value)
+    return metadata
+
+
+def _safe_noise_score(metadata):
+    try:
+        return float(metadata.get("noise_score") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _knowledge_item_entities(item, metadata):
+    return [
+        value
+        for value in (
+            metadata.get("coverage_entities")
+            or _json_loads_safe(getattr(item, "coverage_entities_json", None), [])
+            or _json_loads_safe(getattr(item, "entities_json", None), [])
+            or []
+        )
+        if str(value or "").strip()
+    ]
+
+
+def _is_noise_knowledge_item(item, metadata):
+    title = str(getattr(item, "title", "") or "").strip().lower()
+    body = str(getattr(item, "body_text", "") or "").strip().lower()
+    if metadata.get("is_toc") is True or metadata.get("is_index") is True:
+        return True
+    if _safe_noise_score(metadata) >= 0.7:
+        return True
+    noisy_markers = ("table of contents", "contents", "index", "içindekiler", "icindekiler")
+    if any(marker in title or marker in body[:500] for marker in noisy_markers):
+        return True
+    if len(body) < 120 and not _knowledge_item_entities(item, metadata):
+        return True
+    return False
+
+
+def _has_processing_error_flag(metadata):
+    error_keys = (
+        "error",
+        "error_type",
+        "last_processing_error",
+        "last_processing_error_type",
+        "parser_error",
+        "processing_failed",
+    )
+    return any(bool(metadata.get(key)) for key in error_keys)
+
+
+def _repair_unknown_title_for_publish(item, metadata):
+    if not _title_contains_unknown(getattr(item, "title", "")):
+        return False
+    repaired = _repair_knowledge_item_title(item)
+    if not repaired or _title_contains_unknown(repaired):
+        return False
+    metadata["title_repaired_from"] = item.title
+    metadata["title_repaired_at"] = datetime.utcnow().isoformat()
+    item.title = repaired
+    return True
+
+
+def _is_source_safe_publish_candidate(item, metadata):
+    status = str(getattr(item, "status", "") or metadata.get("status") or "").strip().lower()
+    review_required = bool(metadata.get("review_required")) or status in {"review_required", "pending", "active"}
+    if not review_required:
+        return False, "not_review_candidate"
+    if status not in {"review_required", "pending", "active"}:
+        return False, "status_not_publishable"
+    if str(metadata.get("sensitivity_level") or "").strip().lower() == "sensitive":
+        return False, "sensitive"
+    if str(metadata.get("confidence_level") or "").strip().lower() not in {"high", "medium"}:
+        return False, "low_confidence"
+    if _is_noise_knowledge_item(item, metadata):
+        return False, "noise_or_index"
+    if _has_processing_error_flag(metadata):
+        return False, "metadata_error"
+    if len(str(getattr(item, "body_text", "") or "").strip()) < MIN_SAFE_PUBLISH_BODY_LENGTH:
+        return False, "body_too_short"
+    if _title_contains_unknown(getattr(item, "title", "")):
+        repaired = _repair_unknown_title_for_publish(item, metadata)
+        if not repaired or _title_contains_unknown(getattr(item, "title", "")):
+            return False, "unsafe_unknown_title"
+    return True, "trusted_source_safe_content"
+
+
+def _set_item_review_status(item, metadata, status):
+    normalized = str(status or "").strip().lower()
+    metadata["status"] = normalized
+    metadata["review_required"] = normalized == "review_required"
+    item.status = normalized
+    item.metadata_json = json.dumps(metadata, ensure_ascii=False)
+    item.updated_at = datetime.utcnow()
+
+
 def slugify_article_title(value):
     translated = str(value or "").translate(ARTICLE_SLUG_CHAR_MAP)
     normalized = normalize("NFKD", translated).encode("ascii", "ignore").decode("ascii")
@@ -13559,6 +13672,17 @@ async def admin_documents(
     documents = db.query(db_mod.SourceDocument).order_by(db_mod.SourceDocument.updated_at.desc()).offset(offset).limit(limit).all()
     document_ids = [document.id for document in documents]
     chunk_counts = {}
+    source_item_stats = {
+        int(document_id): {
+            "published": 0,
+            "review_required": 0,
+            "rejected": 0,
+            "auto_published": 0,
+            "sensitive": 0,
+            "noise": 0,
+        }
+        for document_id in document_ids
+    }
     if document_ids:
         chunk_count_rows = (
             db.query(db_mod.KnowledgeItem.source_document_id, func.count(db_mod.KnowledgeChunk.id))
@@ -13568,9 +13692,34 @@ async def admin_documents(
             .all()
         )
         chunk_counts = {int(document_id): int(count or 0) for document_id, count in chunk_count_rows}
+        status_rows = (
+            db.query(db_mod.KnowledgeItem.source_document_id, db_mod.KnowledgeItem.status, func.count(db_mod.KnowledgeItem.id))
+            .filter(db_mod.KnowledgeItem.source_document_id.in_(document_ids))
+            .group_by(db_mod.KnowledgeItem.source_document_id, db_mod.KnowledgeItem.status)
+            .all()
+        )
+        for document_id, status, count in status_rows:
+            key = int(document_id)
+            normalized_status = str(status or "").strip().lower()
+            if normalized_status in source_item_stats.get(key, {}):
+                source_item_stats[key][normalized_status] = int(count or 0)
+        metadata_rows = (
+            db.query(db_mod.KnowledgeItem.source_document_id, db_mod.KnowledgeItem.metadata_json)
+            .filter(db_mod.KnowledgeItem.source_document_id.in_(document_ids))
+            .all()
+        )
+        for document_id, metadata_json in metadata_rows:
+            key = int(document_id)
+            metadata = _json_loads_safe(metadata_json, {}) or {}
+            if str(metadata.get("sensitivity_level") or "").strip().lower() == "sensitive":
+                source_item_stats[key]["sensitive"] += 1
+            if _safe_noise_score(metadata) >= 0.7 or metadata.get("is_toc") is True or metadata.get("is_index") is True:
+                source_item_stats[key]["noise"] += 1
+            if metadata.get("auto_published") is True:
+                source_item_stats[key]["auto_published"] += 1
     rows = []
     for document in documents:
-        metadata = _json_loads_safe(document.metadata_json, {}) or {}
+        metadata = _source_document_metadata(document)
         chunk_count = chunk_counts.get(int(document.id), 0)
         status = str(
             getattr(document, "processing_status", None)
@@ -13602,6 +13751,8 @@ async def admin_documents(
                 "error_message": error_message,
                 "warning_message": warning_message,
                 "parse_error": error_message or warning_message,
+                "trust_policy": metadata,
+                "source_stats": source_item_stats.get(int(document.id), {}),
             }
         )
     return templates.TemplateResponse(
@@ -14246,6 +14397,124 @@ async def admin_document_process(
             _rollback_quietly(db)
         return RedirectResponse(url="/admin/documents?notice=processing_failed", status_code=303)
     return RedirectResponse(url=f"/admin/documents?notice={result.get('notice') or 'processing_completed'}", status_code=303)
+
+
+@app.post("/admin/documents/{document_id}/trust")
+@admin_required
+async def admin_document_trust(
+    request: Request,
+    document_id: int,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(default=""),
+    trust_level: str = Form(default="medium"),
+    review_policy: str = Form(default="manual"),
+    source_domain: str = Form(default="mixed"),
+    auto_publish_safe_chunks: str = Form(default=""),
+):
+    await validate_csrf_token(request, csrf_token)
+    document = db.query(db_mod.SourceDocument).filter(db_mod.SourceDocument.id == document_id).first()
+    if not document:
+        return RedirectResponse(url="/admin/documents?notice=document_not_found", status_code=303)
+    admin_user = get_request_user(request, db)
+    admin_view = getattr(request.state, "admin_user", {}) or {}
+    admin_email = (
+        getattr(admin_user, "email", "")
+        or (admin_view.get("email") if isinstance(admin_view, dict) else getattr(admin_view, "email", ""))
+        or ""
+    )
+    metadata = _source_document_metadata(document)
+    metadata["trust_level"] = trust_level if trust_level in SOURCE_TRUST_LEVELS else "medium"
+    metadata["review_policy"] = review_policy if review_policy in SOURCE_REVIEW_POLICIES else "manual"
+    metadata["source_domain"] = source_domain if source_domain in SOURCE_DOMAINS else "mixed"
+    metadata["auto_publish_safe_chunks"] = str(auto_publish_safe_chunks or "").lower() in {"1", "true", "on", "yes"}
+    metadata["approved_by_admin_at"] = datetime.utcnow().isoformat()
+    metadata["approved_by_admin_email"] = admin_email
+    document.metadata_json = json.dumps(metadata, ensure_ascii=False)
+    db.commit()
+    return RedirectResponse(url="/admin/documents?notice=document_trust_updated", status_code=303)
+
+
+@app.post("/admin/documents/{document_id}/publish-safe")
+@admin_required
+async def admin_document_publish_safe(
+    request: Request,
+    document_id: int,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(default=""),
+):
+    await validate_csrf_token(request, csrf_token)
+    document = db.query(db_mod.SourceDocument).filter(db_mod.SourceDocument.id == document_id).first()
+    if not document:
+        return RedirectResponse(url="/admin/documents?notice=document_not_found", status_code=303)
+    published_count = 0
+    skipped_count = 0
+    review_remaining = 0
+    now = datetime.utcnow().isoformat()
+    items = (
+        db.query(db_mod.KnowledgeItem)
+        .filter(db_mod.KnowledgeItem.source_document_id == document_id)
+        .order_by(db_mod.KnowledgeItem.id.asc())
+        .all()
+    )
+    for item in items:
+        metadata = _knowledge_item_metadata(item)
+        safe, reason = _is_source_safe_publish_candidate(item, metadata)
+        if not safe:
+            skipped_count += 1
+            if str(item.status or "").lower() == "review_required" or bool(metadata.get("review_required")):
+                review_remaining += 1
+            continue
+        metadata["auto_published"] = True
+        metadata["auto_publish_reason"] = reason
+        metadata["auto_published_at"] = now
+        _set_item_review_status(item, metadata, "published")
+        published_count += 1
+    document_metadata = _source_document_metadata(document)
+    document_metadata["auto_publish_last_run_at"] = now
+    document_metadata["auto_publish_stats_json"] = {
+        "published": published_count,
+        "review_remaining": review_remaining,
+        "skipped": skipped_count,
+    }
+    document.metadata_json = json.dumps(document_metadata, ensure_ascii=False)
+    db.commit()
+    return RedirectResponse(
+        url=f"/admin/documents?notice=document_safe_published:{published_count}:{review_remaining}:{skipped_count}",
+        status_code=303,
+    )
+
+
+@app.post("/admin/documents/{document_id}/reject-noise")
+@admin_required
+async def admin_document_reject_noise(
+    request: Request,
+    document_id: int,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(default=""),
+):
+    await validate_csrf_token(request, csrf_token)
+    document = db.query(db_mod.SourceDocument).filter(db_mod.SourceDocument.id == document_id).first()
+    if not document:
+        return RedirectResponse(url="/admin/documents?notice=document_not_found", status_code=303)
+    rejected_count = 0
+    now = datetime.utcnow().isoformat()
+    items = (
+        db.query(db_mod.KnowledgeItem)
+        .filter(db_mod.KnowledgeItem.source_document_id == document_id)
+        .order_by(db_mod.KnowledgeItem.id.asc())
+        .all()
+    )
+    for item in items:
+        metadata = _knowledge_item_metadata(item)
+        if not _is_noise_knowledge_item(item, metadata):
+            continue
+        metadata["auto_rejected"] = True
+        metadata["auto_reject_reason"] = "noise_or_index"
+        metadata["auto_rejected_at"] = now
+        _set_item_review_status(item, metadata, "rejected")
+        rejected_count += 1
+    db.commit()
+    return RedirectResponse(url=f"/admin/documents?notice=document_noise_rejected:{rejected_count}", status_code=303)
 
 
 @app.post("/admin/documents/{document_id}/delete")

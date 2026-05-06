@@ -99,6 +99,54 @@ class DocumentIngestionTests(unittest.TestCase):
         self.db.commit()
         return document_id
 
+    def _knowledge_item_for_document(
+        self,
+        document_id,
+        *,
+        title="Safe Source Item",
+        status="review_required",
+        metadata=None,
+        body_text=None,
+        confidence_level="medium",
+        sensitivity_level="low",
+        entities=None,
+    ):
+        document = self.db.query(db_mod.SourceDocument).filter_by(id=document_id).first()
+        default_metadata = {
+            "review_required": status == "review_required",
+            "status": status,
+            "category": "nakshatra",
+            "primary_entity": "dhanishta",
+            "source_title": document.title if document else "Trusted Source",
+            "source_page_start": 42,
+            "confidence_level": confidence_level,
+            "sensitivity_level": sensitivity_level,
+            "coverage_entities": entities or ["dhanishta", "nakshatra"],
+        }
+        if metadata:
+            default_metadata.update(metadata)
+        body = body_text or (
+            "Dhanishta nakshatra material with practical interpretive context. "
+            "This paragraph is intentionally long enough to pass the safe publish threshold. "
+            "It contains useful structured knowledge for review, synthesis, and retrieval. "
+            "The source is a trusted astrology reference with meaningful explanatory content."
+        )
+        item = db_mod.KnowledgeItem(
+            source_document=document,
+            title=title,
+            item_type="nakshatra",
+            language="tr",
+            summary_text="Structured summary",
+            body_text=body,
+            status=status,
+            metadata_json=json.dumps(default_metadata, ensure_ascii=False),
+            entities_json=json.dumps(entities or ["dhanishta", "nakshatra"], ensure_ascii=False),
+            coverage_entities_json=json.dumps(entities or ["dhanishta", "nakshatra"], ensure_ascii=False),
+        )
+        self.db.add(item)
+        self.db.commit()
+        return item.id
+
     def test_parse_pdf_missing_file_returns_empty_list(self):
         self.assertEqual(document_parser.parse_pdf("missing-file.pdf"), [])
 
@@ -637,6 +685,171 @@ class DocumentIngestionTests(unittest.TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertIn("A" * 200, page.text)
         self.assertNotIn("A" * 301, page.text)
+
+    def test_trusted_source_metadata_update_works(self):
+        csrf = self._csrf()
+        document_id = self._uploaded_document(title="Trusted Source")
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            response = self.client.post(
+                f"/admin/documents/{document_id}/trust",
+                data={
+                    "csrf_token": csrf,
+                    "trust_level": "high",
+                    "review_policy": "auto_publish_safe",
+                    "source_domain": "nakshatra",
+                    "auto_publish_safe_chunks": "1",
+                },
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("document_trust_updated", response.headers.get("location", ""))
+        self.db.expire_all()
+        document = self.db.query(db_mod.SourceDocument).filter_by(id=document_id).first()
+        metadata = json.loads(document.metadata_json or "{}")
+        self.assertEqual(metadata["trust_level"], "high")
+        self.assertEqual(metadata["review_policy"], "auto_publish_safe")
+        self.assertEqual(metadata["source_domain"], "nakshatra")
+        self.assertTrue(metadata["auto_publish_safe_chunks"])
+        self.assertEqual(metadata["approved_by_admin_email"], "documents-admin@example.com")
+
+    def test_publish_safe_publishes_only_safe_items_from_selected_source(self):
+        csrf = self._csrf()
+        document_id = self._uploaded_document(title="Selected Source")
+        other_document_id = self._uploaded_document(title="Other Source")
+        selected_item_id = self._knowledge_item_for_document(document_id, title="Selected Safe")
+        other_item_id = self._knowledge_item_for_document(other_document_id, title="Other Safe")
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            response = self.client.post(
+                f"/admin/documents/{document_id}/publish-safe",
+                data={"csrf_token": csrf},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("document_safe_published:1", response.headers.get("location", ""))
+        lookup_db = db_mod.SessionLocal()
+        try:
+            selected_item = lookup_db.query(db_mod.KnowledgeItem).filter_by(id=selected_item_id).first()
+            other_item = lookup_db.query(db_mod.KnowledgeItem).filter_by(id=other_item_id).first()
+            selected_metadata = json.loads(selected_item.metadata_json or "{}")
+        finally:
+            lookup_db.close()
+        self.assertEqual(selected_item.status, "published")
+        self.assertTrue(selected_metadata["auto_published"])
+        self.assertEqual(selected_metadata["auto_publish_reason"], "trusted_source_safe_content")
+        self.assertEqual(other_item.status, "review_required")
+
+    def test_publish_safe_does_not_publish_sensitive_noisy_toc_or_index_items(self):
+        csrf = self._csrf()
+        document_id = self._uploaded_document(title="Unsafe Source")
+        item_ids = [
+            self._knowledge_item_for_document(document_id, title="Sensitive", sensitivity_level="sensitive"),
+            self._knowledge_item_for_document(document_id, title="Noisy", metadata={"noise_score": 0.9}),
+            self._knowledge_item_for_document(document_id, title="Contents", metadata={"is_toc": True}),
+            self._knowledge_item_for_document(document_id, title="Index", metadata={"is_index": True}),
+        ]
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            response = self.client.post(
+                f"/admin/documents/{document_id}/publish-safe",
+                data={"csrf_token": csrf},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
+        lookup_db = db_mod.SessionLocal()
+        try:
+            statuses = [lookup_db.query(db_mod.KnowledgeItem).filter_by(id=item_id).first().status for item_id in item_ids]
+        finally:
+            lookup_db.close()
+        self.assertEqual(statuses, ["review_required", "review_required", "review_required", "review_required"])
+
+    def test_publish_safe_repairs_unknown_title_when_possible(self):
+        csrf = self._csrf()
+        document_id = self._uploaded_document(title="Nakshatra Kitabı")
+        item_id = self._knowledge_item_for_document(document_id, title="Dhanishta - Unknown")
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            response = self.client.post(
+                f"/admin/documents/{document_id}/publish-safe",
+                data={"csrf_token": csrf},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
+        self.db.expire_all()
+        item = self.db.query(db_mod.KnowledgeItem).filter_by(id=item_id).first()
+        metadata = json.loads(item.metadata_json or "{}")
+        self.assertEqual(item.status, "published")
+        self.assertNotIn("Unknown", item.title)
+        self.assertIn("Dhanishta", item.title)
+        self.assertTrue(metadata["auto_published"])
+
+    def test_publish_safe_leaves_unsafe_unknown_title_in_review(self):
+        csrf = self._csrf()
+        document_id = self._uploaded_document(title="Short Unknown Source")
+        item_id = self._knowledge_item_for_document(document_id, title="Unknown", body_text="short")
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            response = self.client.post(
+                f"/admin/documents/{document_id}/publish-safe",
+                data={"csrf_token": csrf},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
+        self.db.expire_all()
+        item = self.db.query(db_mod.KnowledgeItem).filter_by(id=item_id).first()
+        metadata = json.loads(item.metadata_json or "{}")
+        self.assertEqual(item.status, "review_required")
+        self.assertFalse(metadata.get("auto_published", False))
+
+    def test_reject_noise_rejects_noisy_items_from_selected_source(self):
+        csrf = self._csrf()
+        document_id = self._uploaded_document(title="Noise Source")
+        noisy_id = self._knowledge_item_for_document(document_id, title="Table of Contents", metadata={"is_toc": True})
+        safe_id = self._knowledge_item_for_document(document_id, title="Safe Remaining")
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            response = self.client.post(
+                f"/admin/documents/{document_id}/reject-noise",
+                data={"csrf_token": csrf},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("document_noise_rejected:1", response.headers.get("location", ""))
+        lookup_db = db_mod.SessionLocal()
+        try:
+            noisy = lookup_db.query(db_mod.KnowledgeItem).filter_by(id=noisy_id).first()
+            safe = lookup_db.query(db_mod.KnowledgeItem).filter_by(id=safe_id).first()
+            noisy_metadata = json.loads(noisy.metadata_json or "{}")
+        finally:
+            lookup_db.close()
+        self.assertEqual(noisy.status, "rejected")
+        self.assertEqual(noisy_metadata["auto_reject_reason"], "noise_or_index")
+        self.assertEqual(safe.status, "review_required")
+
+    def test_documents_page_renders_source_level_actions_and_review_queue_link(self):
+        document_id = self._uploaded_document(title="Source Actions")
+        self._knowledge_item_for_document(document_id, title="Reviewable Source Item")
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            page = self.client.get("/admin/documents")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("Güvenilir Kaynak Yap".encode("utf-8"), page.content)
+        self.assertIn("Güvenli İçerikleri Yayınla".encode("utf-8"), page.content)
+        self.assertIn("Noise İçerikleri Reddet".encode("utf-8"), page.content)
+        self.assertIn("Review Kuyruğunu Aç".encode("utf-8"), page.content)
+        self.assertIn(f"source_document_id={document_id}&status=review_required", page.text)
+
+    def test_documents_page_renders_grouped_source_counts(self):
+        document_id = self._uploaded_document(title="Counted Source")
+        self._knowledge_item_for_document(document_id, title="Published", status="published")
+        self._knowledge_item_for_document(document_id, title="Review Required")
+        self._knowledge_item_for_document(document_id, title="Rejected", status="rejected")
+        self._knowledge_item_for_document(document_id, title="Auto Published", status="published", metadata={"auto_published": True})
+        self._knowledge_item_for_document(document_id, title="Sensitive Count", sensitivity_level="sensitive")
+        self._knowledge_item_for_document(document_id, title="Noise Count", metadata={"noise_score": 0.95})
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            page = self.client.get("/admin/documents")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("Published: 2", page.text)
+        self.assertIn("Review required: 3", page.text)
+        self.assertIn("Rejected: 1", page.text)
+        self.assertIn("Auto-published: 1", page.text)
+        self.assertIn("Sensitive: 1", page.text)
+        self.assertIn("Noise: 1", page.text)
 
     def test_non_admin_access_is_blocked(self):
         response = self.client.get("/admin/documents", follow_redirects=False)
