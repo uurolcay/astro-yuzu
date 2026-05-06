@@ -170,7 +170,9 @@ def get_engine_diagnostics():
         "is_in_memory": dialect == "sqlite" and database_value == ":memory:",
         "db_pool_pre_ping": bool(pool_settings["pool_pre_ping"]) if is_postgresql else False,
         "db_pool_recycle_seconds": pool_settings["pool_recycle"] if is_postgresql else None,
+        "db_pool_recycle": pool_settings["pool_recycle"] if is_postgresql else None,
         "db_pool_timeout_seconds": pool_settings["pool_timeout"] if is_postgresql else None,
+        "db_pool_timeout": pool_settings["pool_timeout"] if is_postgresql else None,
         "db_pool_size": pool_settings["pool_size"] if is_postgresql else None,
         "db_max_overflow": pool_settings["max_overflow"] if is_postgresql else None,
         "db_pool_status": pool_status,
@@ -178,6 +180,7 @@ def get_engine_diagnostics():
         "db_pool_checked_in": checked_in,
         "db_pool_current_size": current_pool_size,
         "db_pool_current_overflow": current_overflow,
+        "db_pool_overflow": current_overflow,
         "database_url_uses_internal_hint": _database_url_uses_internal_hint(str(os.getenv("DATABASE_URL", "") or SQLALCHEMY_DATABASE_URL)),
         "db_disconnect_patterns_enabled": True,
     }

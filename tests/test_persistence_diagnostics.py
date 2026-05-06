@@ -117,7 +117,9 @@ class PersistenceDiagnosticsTests(unittest.TestCase):
             "is_sqlite",
             "db_pool_pre_ping",
             "db_pool_recycle_seconds",
+            "db_pool_recycle",
             "db_pool_timeout_seconds",
+            "db_pool_timeout",
             "db_pool_size",
             "db_max_overflow",
             "db_pool_status",
@@ -125,6 +127,7 @@ class PersistenceDiagnosticsTests(unittest.TestCase):
             "db_pool_checked_in",
             "db_pool_current_size",
             "db_pool_current_overflow",
+            "db_pool_overflow",
             "database_url_uses_internal_hint",
             "db_disconnect_patterns_enabled",
             "upload_dir_writable",
@@ -164,9 +167,12 @@ class PersistenceDiagnosticsTests(unittest.TestCase):
     def test_health_and_debug_version_do_not_open_db_sessions(self):
         with patch.object(db_mod, "SessionLocal", side_effect=AssertionError("DB session should not open")):
             health = self.client.get("/health")
+            health_head = self.client.head("/health")
             version = self.client.get("/debug/version")
         self.assertEqual(health.status_code, 200)
         self.assertEqual(health.json(), {"status": "ok"})
+        self.assertEqual(health_head.status_code, 200)
+        self.assertEqual(health_head.content, b"")
         self.assertEqual(version.status_code, 200)
 
     def test_public_home_without_auth_cookie_does_not_lookup_app_user(self):
@@ -239,6 +245,12 @@ class PersistenceDiagnosticsTests(unittest.TestCase):
             for _ in range(5):
                 response = self.client.get("/privacy")
                 self.assertEqual(response.status_code, 200)
+
+    def test_admin_head_probe_without_auth_cookie_does_not_open_db(self):
+        with patch.object(db_mod, "SessionLocal", side_effect=AssertionError("HEAD probe should not open DB")):
+            response = self.client.head("/admin/documents", follow_redirects=False)
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers["location"], "/login")
 
     def test_admin_request_tracing_logs_start_and_end(self):
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair), self.assertLogs(app.logger, level="INFO") as captured:

@@ -2514,13 +2514,39 @@ def _head_response_from_denial(response):
     return Response(status_code=getattr(response, "status_code", 403), headers=headers)
 
 
-async def _admin_head_probe(request: Request, db: Session = Depends(get_db)):
-    admin_user, denied_response = _require_admin_user(request, db)
-    if denied_response:
-        return _head_response_from_denial(denied_response)
-    request.state.admin_user = _public_user_view(admin_user)
-    logger.info("Admin HEAD probe accepted admin_id=%s path=%s", _safe_model_id(admin_user), request.url.path)
-    return Response(status_code=200)
+async def _admin_head_probe(request: Request):
+    if not _request_has_auth_cookie(request):
+        logger.info("USER_CONTEXT_SKIP path=%s reason=head_probe_no_auth_cookie", request.url.path)
+        target = _safe_next_path(getattr(request.url, "path", "/admin"), default="/admin")
+        if target in {"/admin", "/admin/dashboard"}:
+            return Response(status_code=303, headers={"location": f"/login?{urlencode({'next': target})}"})
+        return Response(status_code=303, headers={"location": "/login"})
+    db = None
+    try:
+        logger.info("USER_CONTEXT_DB_OPEN path=%s", request.url.path)
+        db = db_mod.SessionLocal()
+        admin_user, denied_response = _require_admin_user(request, db)
+        if denied_response:
+            return _head_response_from_denial(denied_response)
+        request.state.admin_user = _public_user_view(admin_user)
+        logger.info("Admin HEAD probe accepted admin_id=%s path=%s", _safe_model_id(admin_user), request.url.path)
+        return Response(status_code=200)
+    except (OperationalError, SQLAlchemyTimeoutError) as exc:
+        if db is not None:
+            _rollback_quietly(db)
+        _dispose_engine_for_disconnect(exc)
+        logger.warning(
+            "USER_CONTEXT_DB_ERROR path=%s error_type=%s short_message=%s disconnect=%s",
+            request.url.path,
+            type(exc).__name__,
+            _short_exception_message(exc),
+            db_mod.is_db_disconnect_error(exc),
+        )
+        return Response(status_code=303, headers={"location": "/login"})
+    finally:
+        if db is not None:
+            db.close()
+            logger.info("USER_CONTEXT_DB_CLOSE path=%s", request.url.path)
 
 
 for _admin_head_path in ADMIN_HEAD_PROBE_PATHS:
