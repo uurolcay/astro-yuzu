@@ -150,6 +150,17 @@ COVERAGE_REBUILD_SYNC_ENABLED = get_bool_env("COVERAGE_REBUILD_SYNC_ENABLED", Fa
 PORT = int(os.getenv("PORT", 8000))
 FAST_REQUEST_BYPASS_PATHS = {"/health", "/debug/version", "/favicon.ico"}
 PUBLIC_REQUEST_TRACE_PATHS = {"/health", "/debug/version", "/"}
+ADMIN_HEAD_PROBE_PATHS = (
+    "/admin",
+    "/admin/dashboard",
+    "/admin/documents",
+    "/admin/training",
+    "/admin/knowledge/review",
+    "/admin/knowledge",
+    "/admin/gaps",
+    "/admin/evaluations",
+    "/admin/tasks",
+)
 
 
 def _is_fast_request_bypass_path(path):
@@ -2462,6 +2473,31 @@ def admin_required(func):
         return await func(*args, **kwargs)
 
     return wrapper
+
+
+def _head_response_from_denial(response):
+    headers = dict(getattr(response, "headers", {}) or {})
+    headers.pop("content-length", None)
+    return Response(status_code=getattr(response, "status_code", 403), headers=headers)
+
+
+async def _admin_head_probe(request: Request, db: Session = Depends(get_db)):
+    admin_user, denied_response = _require_admin_user(request, db)
+    if denied_response:
+        return _head_response_from_denial(denied_response)
+    request.state.admin_user = _public_user_view(admin_user)
+    logger.info("Admin HEAD probe accepted admin_id=%s path=%s", _safe_model_id(admin_user), request.url.path)
+    return Response(status_code=200)
+
+
+for _admin_head_path in ADMIN_HEAD_PROBE_PATHS:
+    app.add_api_route(
+        _admin_head_path,
+        _admin_head_probe,
+        methods=["HEAD"],
+        include_in_schema=False,
+        name=f"head_admin_probe_{_admin_head_path.strip('/').replace('/', '_') or 'admin'}",
+    )
 
 
 async def require_admin(request: Request, db: Session = Depends(get_db)):

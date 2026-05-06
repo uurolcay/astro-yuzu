@@ -95,6 +95,44 @@ class AdminAccessRoutingTests(unittest.TestCase):
             {"app_version": "csrf-v4-raw", "login_template_version": "csrf-v4-raw"},
         )
 
+    def test_health_supports_head_without_body(self):
+        response = self.client.head("/health")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"")
+
+    def test_admin_documents_head_redirects_without_auth(self):
+        response = self.client.head("/admin/documents", follow_redirects=False)
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers["location"], "/login")
+        self.assertEqual(response.content, b"")
+
+    def test_admin_documents_head_returns_ok_for_admin_session(self):
+        self._create_user(email="head-admin@example.com", is_admin=True)
+        login_response = self._login(email="head-admin@example.com")
+        self.assertEqual(login_response.status_code, 303)
+
+        response = self.client.head("/admin/documents", follow_redirects=False)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"")
+
+    def test_admin_documents_get_still_renders_for_admin(self):
+        self._create_user(email="documents-get-admin@example.com", is_admin=True)
+        login_response = self._login(email="documents-get-admin@example.com")
+        self.assertEqual(login_response.status_code, 303)
+
+        response = self.client.get("/admin/documents")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Knowledge Documents", response.text)
+
+    def test_admin_documents_post_route_is_not_added_by_head_probe(self):
+        methods = set()
+        for route in app.app.routes:
+            if getattr(route, "path", None) == "/admin/documents":
+                methods.update(getattr(route, "methods", set()) or set())
+        self.assertIn("GET", methods)
+        self.assertIn("HEAD", methods)
+        self.assertNotIn("POST", methods)
+
     def test_login_page_returns_csrf_hidden_input_and_template_version(self):
         response = self.client.get("/login?next=/admin")
         self.assertEqual(response.status_code, 200)
