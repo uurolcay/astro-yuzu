@@ -217,6 +217,10 @@ class DocumentIngestionTests(unittest.TestCase):
         self.assertEqual(self.db.query(db_mod.SourceDocument).count(), 1)
         document = self.db.query(db_mod.SourceDocument).first()
         self.assertEqual(document.processing_status, "uploaded")
+        metadata = json.loads(document.metadata_json or "{}")
+        self.assertEqual(metadata["trust_level"], "trusted")
+        self.assertEqual(metadata["review_policy"], "auto_publish_safe")
+        self.assertTrue(metadata["auto_publish_safe_chunks"])
         self.assertEqual(self.db.query(db_mod.KnowledgeItem).count(), 0)
         self.assertEqual(self.db.query(db_mod.KnowledgeChunk).count(), 0)
         self.assertEqual(self.db.query(db_mod.ServiceOrder).count(), before_orders)
@@ -263,6 +267,116 @@ class DocumentIngestionTests(unittest.TestCase):
         self.assertEqual(metadata["block_count"], 2)
         self.assertGreaterEqual(self.db.query(db_mod.KnowledgeItem).count(), 1)
         self.assertGreaterEqual(self.db.query(db_mod.KnowledgeChunk).count(), 1)
+
+    def test_process_auto_publishes_safe_chunks_and_rejects_noise(self):
+        csrf = self._csrf()
+        document_id = self._uploaded_document(title="Auto Curated Doctrine")
+        safe_body = (
+            "Dhanishta nakshatra gives a disciplined rhythm for work, craft, and social contribution. "
+            "When the source describes this placement in a practical way, the interpretation can connect "
+            "initiative, stamina, group responsibility, and timing without making fatalistic claims. "
+            "This source paragraph is intentionally long enough to be useful for retrieval and synthesis."
+        )
+        low_body = (
+            "Ashwini nakshatra can show quick initiative and rapid response, but this note is still brief "
+            "and should remain for review because confidence is deliberately low."
+        )
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair), patch.object(
+            app.document_parser,
+            "parse_pdf_with_diagnostics",
+            return_value={
+                "blocks": ["DUMMY"],
+                "page_blocks": [{"page": 1, "text": "DUMMY"}],
+                "page_count": 1,
+                "block_count": 1,
+                "range_end_page": 1,
+                "has_more_pages": False,
+                "preview": "DUMMY",
+                "parser_used": "pypdf",
+                "error": None,
+            },
+        ), patch.object(
+            app.document_chunker,
+            "chunk_text_blocks",
+            return_value=[
+                {
+                    "title": "Dhanishta Work Pattern",
+                    "text": safe_body,
+                    "category": "nakshatra",
+                    "entity": "dhanishta",
+                    "topic": "career",
+                    "coverage_entities": ["dhanishta", "career"],
+                    "source_page_start": 10,
+                    "source_page_end": 10,
+                    "is_toc": False,
+                    "is_index": False,
+                    "noise_score": 0.1,
+                    "confidence_level": "medium",
+                    "sensitivity_level": "low",
+                },
+                {
+                    "title": "Table of Contents",
+                    "text": "Contents\n1\n2\n3",
+                    "category": "general",
+                    "entity": "",
+                    "topic": "general",
+                    "coverage_entities": [],
+                    "source_page_start": 1,
+                    "source_page_end": 1,
+                    "is_toc": True,
+                    "is_index": False,
+                    "noise_score": 0.95,
+                    "confidence_level": "high",
+                    "sensitivity_level": "low",
+                },
+                {
+                    "title": "Ashwini Brief Note",
+                    "text": low_body,
+                    "category": "nakshatra",
+                    "entity": "ashwini",
+                    "topic": "general",
+                    "coverage_entities": ["ashwini"],
+                    "source_page_start": 12,
+                    "source_page_end": 12,
+                    "is_toc": False,
+                    "is_index": False,
+                    "noise_score": 0.1,
+                    "confidence_level": "low",
+                    "sensitivity_level": "low",
+                },
+                {
+                    "title": "Sensitive Timing",
+                    "text": safe_body,
+                    "category": "dasha",
+                    "entity": "saturn",
+                    "topic": "timing",
+                    "coverage_entities": ["saturn"],
+                    "source_page_start": 13,
+                    "source_page_end": 13,
+                    "is_toc": False,
+                    "is_index": False,
+                    "noise_score": 0.1,
+                    "confidence_level": "high",
+                    "sensitivity_level": "sensitive",
+                },
+            ],
+        ):
+            response = self.client.post(
+                f"/admin/documents/{document_id}/process",
+                data={"csrf_token": csrf},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
+        self.db.expire_all()
+        items = {item.title: item for item in self.db.query(db_mod.KnowledgeItem).all()}
+        self.assertEqual(items["Dhanishta Work Pattern"].status, "published")
+        self.assertEqual(items["Table of Contents"].status, "rejected")
+        self.assertEqual(items["Ashwini Brief Note"].status, "review_required")
+        self.assertEqual(items["Sensitive Timing"].status, "review_required")
+        safe_metadata = json.loads(items["Dhanishta Work Pattern"].metadata_json or "{}")
+        noise_metadata = json.loads(items["Table of Contents"].metadata_json or "{}")
+        self.assertTrue(safe_metadata["auto_published"])
+        self.assertEqual(noise_metadata["auto_reject_reason"], "noise_or_index")
 
     def test_process_missing_file_sets_file_missing_diagnostics_without_500(self):
         csrf = self._csrf()
@@ -527,7 +641,7 @@ class DocumentIngestionTests(unittest.TestCase):
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
             page = self.client.get("/admin/documents?notice=db_temp_failed")
         self.assertEqual(page.status_code, 200)
-        self.assertIn("Veritabanı bağlantısı geçici olarak başarısız oldu. Lütfen tekrar deneyin.", page.text)
+        self.assertIn("Veritabani baglantisi gecici olarak basarisiz oldu. Lutfen tekrar deneyin.", page.text)
 
     def test_documents_page_shows_process_button_and_status(self):
         self._uploaded_document(title="Needs Processing")
@@ -535,7 +649,7 @@ class DocumentIngestionTests(unittest.TestCase):
             page = self.client.get("/admin/documents")
         self.assertEqual(page.status_code, 200)
         self.assertIn("Yüklendi", page.text)
-        self.assertIn("İşle", page.text)
+        self.assertIn("Icerigi Isle", page.text)
         self.assertIn("Sil", page.text)
         self.assertIn("/delete", page.text)
         self.assertIn("/process", page.text)
@@ -545,8 +659,8 @@ class DocumentIngestionTests(unittest.TestCase):
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
             page = self.client.get("/admin/documents")
         self.assertEqual(page.status_code, 200)
-        self.assertIn("İçerik Çıkar", page.text)
-        self.assertIn("PDF’den yapılandırılmış içerik çıkarır.", page.text)
+        self.assertIn("Icerik Cikar", page.text)
+        self.assertIn("PDF'den yapilandirilmis icerik cikarir.", page.text)
 
     def test_failed_document_can_be_deleted_from_admin_route(self):
         csrf = self._csrf()
@@ -827,10 +941,11 @@ class DocumentIngestionTests(unittest.TestCase):
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
             page = self.client.get("/admin/documents")
         self.assertEqual(page.status_code, 200)
-        self.assertIn("Güvenilir Kaynak Yap".encode("utf-8"), page.content)
-        self.assertIn("Güvenli İçerikleri Yayınla".encode("utf-8"), page.content)
-        self.assertIn("Noise İçerikleri Reddet".encode("utf-8"), page.content)
-        self.assertIn("Review Kuyruğunu Aç".encode("utf-8"), page.content)
+        self.assertIn("Otomatik Duzenle", page.text)
+        self.assertIn("Sorunlu Parcalari Gor", page.text)
+        self.assertIn("Guvenilir Kaynak Yap", page.text)
+        self.assertIn("Guvenli Icerikleri Yayinla", page.text)
+        self.assertIn("Noise Icerikleri Reddet", page.text)
         self.assertIn(f"source_document_id={document_id}&status=review_required", page.text)
 
     def test_documents_page_renders_grouped_source_counts(self):
@@ -844,12 +959,61 @@ class DocumentIngestionTests(unittest.TestCase):
         with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
             page = self.client.get("/admin/documents")
         self.assertEqual(page.status_code, 200)
-        self.assertIn("Published: 2", page.text)
-        self.assertIn("Review required: 3", page.text)
-        self.assertIn("Rejected: 1", page.text)
-        self.assertIn("Auto-published: 1", page.text)
-        self.assertIn("Sensitive: 1", page.text)
+        self.assertIn("Yayinlandi: 2", page.text)
+        self.assertIn("Inceleme Bekliyor: 3", page.text)
+        self.assertIn("Reddedildi: 1", page.text)
+        self.assertIn("Otomatik Yayinlandi: 1", page.text)
+        self.assertIn("Hassas: 1", page.text)
         self.assertIn("Noise: 1", page.text)
+
+    def test_auto_curate_document_route_updates_safe_noise_and_review_items(self):
+        csrf = self._csrf()
+        document_id = self._uploaded_document(title="Curate Source")
+        safe_id = self._knowledge_item_for_document(document_id, title="Safe Curate")
+        noise_id = self._knowledge_item_for_document(document_id, title="Index", metadata={"is_index": True})
+        sensitive_id = self._knowledge_item_for_document(document_id, title="Sensitive Curate", sensitivity_level="sensitive")
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            response = self.client.post(
+                f"/admin/documents/{document_id}/auto-curate",
+                data={"csrf_token": csrf},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("document_auto_curated:1:1:1:3", response.headers.get("location", ""))
+        self.db.expire_all()
+        statuses = {
+            item_id: self.db.query(db_mod.KnowledgeItem).filter_by(id=item_id).first().status
+            for item_id in [safe_id, noise_id, sensitive_id]
+        }
+        self.assertEqual(statuses[safe_id], "published")
+        self.assertEqual(statuses[noise_id], "rejected")
+        self.assertEqual(statuses[sensitive_id], "review_required")
+        document = self.db.query(db_mod.SourceDocument).filter_by(id=document_id).first()
+        metadata = json.loads(document.metadata_json or "{}")
+        self.assertEqual(metadata["trust_level"], "trusted")
+        self.assertEqual(metadata["review_policy"], "auto_publish_safe")
+
+    def test_auto_curate_all_is_limited_and_timeout_safe(self):
+        csrf = self._csrf()
+        first_document_id = self._uploaded_document(title="First Curate")
+        second_document_id = self._uploaded_document(title="Second Curate")
+        first_item_id = self._knowledge_item_for_document(first_document_id, title="First Safe")
+        second_item_id = self._knowledge_item_for_document(second_document_id, title="Second Safe")
+        with patch.object(app, "_require_admin_user", side_effect=self._request_admin_pair):
+            response = self.client.post(
+                "/admin/knowledge/auto-curate-all?limit=1",
+                data={"csrf_token": csrf},
+                follow_redirects=False,
+            )
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("knowledge_auto_curated", response.headers.get("location", ""))
+        self.db.expire_all()
+        statuses = [
+            self.db.query(db_mod.KnowledgeItem).filter_by(id=item_id).first().status
+            for item_id in [first_item_id, second_item_id]
+        ]
+        self.assertEqual(statuses.count("published"), 1)
+        self.assertEqual(statuses.count("review_required"), 1)
 
     def test_non_admin_access_is_blocked(self):
         response = self.client.get("/admin/documents", follow_redirects=False)

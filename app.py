@@ -7567,15 +7567,49 @@ def _is_auto_approve_blocked(item, metadata):
 
 
 SOURCE_TRUST_DEFAULTS = {
-    "trust_level": "medium",
-    "auto_publish_safe_chunks": False,
-    "review_policy": "manual",
+    "trust_level": "trusted",
+    "auto_publish_safe_chunks": True,
+    "review_policy": "auto_publish_safe",
     "source_domain": "mixed",
 }
-SOURCE_TRUST_LEVELS = {"low", "medium", "high"}
+SOURCE_TRUST_LEVELS = {"low", "medium", "high", "trusted"}
 SOURCE_REVIEW_POLICIES = {"manual", "auto_publish_safe", "review_sensitive_only"}
 SOURCE_DOMAINS = {"nakshatra", "houses", "planets", "yogas", "dasha", "transit", "concepts", "mixed"}
 MIN_SAFE_PUBLISH_BODY_LENGTH = 250
+MIN_AUTO_REJECT_BODY_LENGTH = 120
+
+
+def _source_domain_from_document_type(document_type, title=""):
+    haystack = f"{document_type or ''} {title or ''}".strip().lower()
+    if any(value in haystack for value in ("nakshatra", "naksatra")):
+        return "nakshatra"
+    if any(value in haystack for value in ("house", "houses", "bhava")):
+        return "houses"
+    if any(value in haystack for value in ("planet", "graha")):
+        return "planets"
+    if any(value in haystack for value in ("yoga", "yogas")):
+        return "yogas"
+    if any(value in haystack for value in ("dasha", "mahadasa", "mahadasha")):
+        return "dasha"
+    if "transit" in haystack:
+        return "transit"
+    if any(value in haystack for value in ("concept", "classical_text", "sutra")):
+        return "concepts"
+    return "mixed"
+
+
+def _trusted_source_metadata(document, metadata=None):
+    metadata = dict(metadata or _json_loads_safe(getattr(document, "metadata_json", None), {}) or {})
+    metadata.setdefault("processing_status", getattr(document, "processing_status", None) or "uploaded")
+    metadata["trust_level"] = "trusted"
+    metadata["review_policy"] = "auto_publish_safe"
+    metadata["auto_publish_safe_chunks"] = True
+    metadata["source_domain"] = (
+        metadata.get("source_domain")
+        if metadata.get("source_domain") in SOURCE_DOMAINS
+        else _source_domain_from_document_type(getattr(document, "document_type", ""), getattr(document, "title", ""))
+    )
+    return metadata
 
 
 def _source_document_metadata(document):
@@ -7617,7 +7651,9 @@ def _is_noise_knowledge_item(item, metadata):
     noisy_markers = ("table of contents", "contents", "index", "içindekiler", "icindekiler")
     if any(marker in title or marker in body[:500] for marker in noisy_markers):
         return True
-    if len(body) < 120 and not _knowledge_item_entities(item, metadata):
+    if len(body) < MIN_AUTO_REJECT_BODY_LENGTH and not _knowledge_item_entities(item, metadata):
+        return True
+    if len(body) < 80:
         return True
     return False
 
@@ -7629,6 +7665,9 @@ def _has_processing_error_flag(metadata):
         "last_processing_error",
         "last_processing_error_type",
         "parser_error",
+        "parser_warning",
+        "parse_warning",
+        "ocr_warning",
         "processing_failed",
     )
     return any(bool(metadata.get(key)) for key in error_keys)
@@ -7677,6 +7716,68 @@ def _set_item_review_status(item, metadata, status):
     item.status = normalized
     item.metadata_json = json.dumps(metadata, ensure_ascii=False)
     item.updated_at = datetime.utcnow()
+
+
+def _auto_curate_source_document(db, document, *, limit=None, update_document_metadata=True):
+    now = datetime.utcnow().isoformat()
+    document_metadata = _trusted_source_metadata(document)
+    query = (
+        db.query(db_mod.KnowledgeItem)
+        .filter(db_mod.KnowledgeItem.source_document_id == document.id)
+        .order_by(db_mod.KnowledgeItem.id.asc())
+    )
+    if limit:
+        query = query.limit(max(1, int(limit)))
+    published_count = 0
+    rejected_count = 0
+    review_required_count = 0
+    skipped_count = 0
+    processed_count = 0
+    for item in query.all():
+        processed_count += 1
+        metadata = _knowledge_item_metadata(item)
+        status = str(getattr(item, "status", "") or metadata.get("status") or "").strip().lower()
+        if status in {"published", "rejected", "deleted"}:
+            skipped_count += 1
+            continue
+        if _is_noise_knowledge_item(item, metadata):
+            metadata["auto_rejected"] = True
+            metadata["auto_reject_reason"] = "noise_or_index"
+            metadata["auto_rejected_at"] = now
+            _set_item_review_status(item, metadata, "rejected")
+            rejected_count += 1
+            continue
+        safe, reason = _is_source_safe_publish_candidate(item, metadata)
+        if safe:
+            metadata["auto_published"] = True
+            metadata["auto_publish_reason"] = reason
+            metadata["auto_published_at"] = now
+            _set_item_review_status(item, metadata, "published")
+            published_count += 1
+            continue
+        metadata["auto_curate_review_reason"] = reason
+        metadata["auto_curated_at"] = now
+        _set_item_review_status(item, metadata, "review_required")
+        review_required_count += 1
+    if update_document_metadata:
+        document_metadata["auto_publish_last_run_at"] = now
+        document_metadata["auto_publish_stats_json"] = {
+            "processed": processed_count,
+            "published": published_count,
+            "rejected": rejected_count,
+            "review_required": review_required_count,
+            "skipped": skipped_count,
+            "limit": int(limit) if limit else None,
+        }
+        document.metadata_json = json.dumps(document_metadata, ensure_ascii=False, default=str)
+        document.updated_at = datetime.utcnow()
+    return {
+        "processed": processed_count,
+        "published": published_count,
+        "rejected": rejected_count,
+        "review_required": review_required_count,
+        "skipped": skipped_count,
+    }
 
 
 def slugify_article_title(value):
@@ -13802,6 +13903,7 @@ async def admin_documents(
             "auto_published": 0,
             "sensitive": 0,
             "noise": 0,
+            "problematic": 0,
         }
         for document_id in document_ids
     }
@@ -13837,6 +13939,14 @@ async def admin_documents(
                 source_item_stats[key]["sensitive"] += 1
             if _safe_noise_score(metadata) >= 0.7 or metadata.get("is_toc") is True or metadata.get("is_index") is True:
                 source_item_stats[key]["noise"] += 1
+            if _has_processing_error_flag(metadata) or metadata.get("auto_curate_review_reason") in {
+                "sensitive",
+                "low_confidence",
+                "metadata_error",
+                "body_too_short",
+                "unsafe_unknown_title",
+            }:
+                source_item_stats[key]["problematic"] += 1
             if metadata.get("auto_published") is True:
                 source_item_stats[key]["auto_published"] += 1
     rows = []
@@ -14048,6 +14158,8 @@ def _create_document_chunk_item(db, document, chunk, *, index, admin_user):
     coverage_entities = chunk.get("coverage_entities") or []
     page_number = chunk.get("source_page_start") or chunk.get("page")
     entity_name = chunk.get("entity") or chunk.get("primary_entity") or (coverage_entities[0] if coverage_entities else "")
+    body_text = str(chunk.get("text") or "").strip()
+    confidence_level = "medium" if len(body_text) >= MIN_SAFE_PUBLISH_BODY_LENGTH else "low"
     title_metadata = {
         "category": chunk.get("category"),
         "topic": chunk.get("topic"),
@@ -14065,7 +14177,7 @@ def _create_document_chunk_item(db, document, chunk, *, index, admin_user):
     return knowledge_service.create_knowledge_item(
         db,
         title=chunk_title,
-        body_text=str(chunk.get("text") or "").strip(),
+        body_text=body_text,
         language="tr",
         item_type=str(chunk.get("category") or "reference"),
         summary_text=str(chunk.get("topic") or "").strip() or chunk_title,
@@ -14083,14 +14195,19 @@ def _create_document_chunk_item(db, document, chunk, *, index, admin_user):
             "is_toc": bool(chunk.get("is_toc")),
             "is_index": bool(chunk.get("is_index")),
             "noise_score": chunk.get("noise_score"),
+            "confidence_level": chunk.get("confidence_level") or confidence_level,
+            "sensitivity_level": chunk.get("sensitivity_level") or "low",
+            "review_required": True,
+            "status": "review_required",
         },
         created_by_user_id=getattr(admin_user, "id", None),
+        status="review_required",
     )
 
 
 def _process_source_document(db, document, *, admin_user=None, reprocess=False):
     config = _document_processing_config()
-    metadata = _json_loads_safe(document.metadata_json, {}) or {}
+    metadata = _trusted_source_metadata(document)
     attempted_at = datetime.utcnow()
     document_id = document.id
     if reprocess:
@@ -14100,7 +14217,7 @@ def _process_source_document(db, document, *, admin_user=None, reprocess=False):
         document.page_count = None
         document.block_count = 0
         document.parser_used = None
-        metadata = {"processing_status": "uploaded"}
+        metadata = _trusted_source_metadata(document, {"processing_status": "uploaded"})
 
     file_path = Path(str(document.file_path or ""))
     file_state = _document_file_state(file_path)
@@ -14357,6 +14474,7 @@ def _process_source_document(db, document, *, admin_user=None, reprocess=False):
 
     total_chunk_count = _document_chunk_count(document)
     metadata["chunk_count"] = total_chunk_count
+    curate_stats = _auto_curate_source_document(db, document, update_document_metadata=False)
     has_more_pages = bool(diagnostics.get("has_more_pages"))
     if has_more_pages:
         final_status = "processing"
@@ -14383,6 +14501,11 @@ def _process_source_document(db, document, *, admin_user=None, reprocess=False):
         file_state=file_state,
         process_attempted_at=attempted_at,
     )
+    metadata = _json_loads_safe(document.metadata_json, {}) or {}
+    metadata = _trusted_source_metadata(document, metadata)
+    metadata["auto_publish_last_run_at"] = datetime.utcnow().isoformat()
+    metadata["auto_publish_stats_json"] = curate_stats
+    document.metadata_json = json.dumps(metadata, ensure_ascii=False, default=str)
     db.commit()
     logger.info(
         "DOCUMENT_PROCESS_END document_id=%s status=%s chunk_count=%s cursor=%s",
@@ -14396,6 +14519,7 @@ def _process_source_document(db, document, *, admin_user=None, reprocess=False):
         "notice": notice,
         "created_chunks": created_count,
         "has_more_pages": has_more_pages,
+        "auto_curate": curate_stats,
     }
 
 
@@ -14435,6 +14559,7 @@ async def admin_documents_upload(
             created_by_user_id=getattr(admin_user, "id", None),
             uploaded_at=datetime.utcnow(),
         )
+        source_document.metadata_json = json.dumps(_trusted_source_metadata(source_document), ensure_ascii=False)
         db.add(source_document)
         db.commit()
     except OperationalError as exc:
@@ -14528,8 +14653,8 @@ async def admin_document_trust(
     document_id: int,
     db: Session = Depends(get_db),
     csrf_token: str = Form(default=""),
-    trust_level: str = Form(default="medium"),
-    review_policy: str = Form(default="manual"),
+    trust_level: str = Form(default="trusted"),
+    review_policy: str = Form(default="auto_publish_safe"),
     source_domain: str = Form(default="mixed"),
     auto_publish_safe_chunks: str = Form(default=""),
 ):
@@ -14545,8 +14670,8 @@ async def admin_document_trust(
         or ""
     )
     metadata = _source_document_metadata(document)
-    metadata["trust_level"] = trust_level if trust_level in SOURCE_TRUST_LEVELS else "medium"
-    metadata["review_policy"] = review_policy if review_policy in SOURCE_REVIEW_POLICIES else "manual"
+    metadata["trust_level"] = trust_level if trust_level in SOURCE_TRUST_LEVELS else "trusted"
+    metadata["review_policy"] = review_policy if review_policy in SOURCE_REVIEW_POLICIES else "auto_publish_safe"
     metadata["source_domain"] = source_domain if source_domain in SOURCE_DOMAINS else "mixed"
     metadata["auto_publish_safe_chunks"] = str(auto_publish_safe_chunks or "").lower() in {"1", "true", "on", "yes"}
     metadata["approved_by_admin_at"] = datetime.utcnow().isoformat()
@@ -14554,6 +14679,63 @@ async def admin_document_trust(
     document.metadata_json = json.dumps(metadata, ensure_ascii=False)
     db.commit()
     return RedirectResponse(url="/admin/documents?notice=document_trust_updated", status_code=303)
+
+
+@app.post("/admin/documents/{document_id}/auto-curate")
+@admin_required
+async def admin_document_auto_curate(
+    request: Request,
+    document_id: int,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(default=""),
+    limit: int | None = None,
+):
+    await validate_csrf_token(request, csrf_token)
+    document = db.query(db_mod.SourceDocument).filter(db_mod.SourceDocument.id == document_id).first()
+    if not document:
+        return RedirectResponse(url="/admin/documents?notice=document_not_found", status_code=303)
+    stats = _auto_curate_source_document(db, document, limit=limit)
+    db.commit()
+    return RedirectResponse(
+        url=(
+            "/admin/documents?notice="
+            f"document_auto_curated:{stats['published']}:{stats['rejected']}:{stats['review_required']}:{stats['processed']}"
+        ),
+        status_code=303,
+    )
+
+
+@app.post("/admin/knowledge/auto-curate-all")
+@admin_required
+async def admin_knowledge_auto_curate_all(
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(default=""),
+    limit: int = 500,
+):
+    await validate_csrf_token(request, csrf_token)
+    capped_limit = max(1, min(int(limit or 500), 500))
+    documents = (
+        db.query(db_mod.SourceDocument)
+        .order_by(db_mod.SourceDocument.updated_at.desc())
+        .limit(capped_limit)
+        .all()
+    )
+    totals = {"processed": 0, "published": 0, "rejected": 0, "review_required": 0, "skipped": 0}
+    for document in documents:
+        stats = _auto_curate_source_document(db, document, limit=capped_limit)
+        for key in totals:
+            totals[key] += int(stats.get(key) or 0)
+        db.commit()
+        if totals["processed"] >= capped_limit:
+            break
+    return RedirectResponse(
+        url=(
+            "/admin/documents?notice="
+            f"knowledge_auto_curated:{totals['published']}:{totals['rejected']}:{totals['review_required']}:{totals['processed']}"
+        ),
+        status_code=303,
+    )
 
 
 @app.post("/admin/documents/{document_id}/publish-safe")
